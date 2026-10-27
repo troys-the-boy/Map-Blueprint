@@ -184,6 +184,7 @@ Every value is optional. Missing or out-of-range values fall back to the default
 | `items` (extra), `hiddenItems` | 2, 2 | 0–10 |
 | `retries` | 8 | 0–20 |
 | `generatorVersion` | (set by the app) | which generator produced the map |
+| `seedPinned` | absent | `true` when the seed is pinned in the app (New seed and Variations leave it alone); not used by the generator |
 
 The same map, settings and seed always produce exactly the same result. If the generators change in a way that alters results, `GENERATOR_VERSION` in `src/core/generate.ts` is bumped.
 

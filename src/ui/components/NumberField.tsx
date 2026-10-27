@@ -17,6 +17,7 @@ interface Props {
   whole?: boolean;
   title?: string;
   "aria-label"?: string;
+  disabled?: boolean;
 }
 
 export function NumberField({ value, min, max, onChange, whole = true, title, ...rest }: Props) {
@@ -55,6 +56,7 @@ export function NumberField({ value, min, max, onChange, whole = true, title, ..
       value={text}
       title={title}
       aria-label={rest["aria-label"]}
+      disabled={rest.disabled}
       onFocus={(e) => {
         setEditing(true);
         e.target.select();

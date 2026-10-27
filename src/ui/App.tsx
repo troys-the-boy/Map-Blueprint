@@ -13,6 +13,7 @@ import type { SideTab } from "./components/SidePanel";
 import { ExportDialog } from "./components/ExportDialog";
 import { Toolbar } from "./components/Toolbar";
 import { EditBar } from "./components/EditBar";
+import { VariationsDialog } from "./components/VariationsDialog";
 import { Icon } from "./components/icons";
 import { openProject, saveProject } from "./files";
 import { screenLabel } from "./renderer";
@@ -190,6 +191,7 @@ export function App() {
       {dialog === "newMap" && <NewMapDialog onClose={() => setDialog(null)} />}
       {dialog === "settings" && <SettingsDialog onClose={() => setDialog(null)} />}
       {dialog === "export" && <ExportDialog onClose={() => setDialog(null)} />}
+      <VariationsDialog />
     </div>
   );
 }

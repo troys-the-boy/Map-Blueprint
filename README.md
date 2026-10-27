@@ -163,7 +163,10 @@ Zones are saved with the map and kept every time you generate. Locked cells alwa
 
 1. Create a map with **Type: Route** (for example the **M (vertical)** preset, 30×60).
 2. Press **Generate**: the ✨ button in the tool strip, the **G** key, or the big button on the **Generate** tab of the right-hand panel. On iPad, tap the colour square in the tool strip to open the panel.
-3. Don't like it? Press **New seed**. The same seed always gives exactly the same map, so note the seeds you like.
+3. Don't like it? Press **New seed**. The same seed always gives exactly the same map.
+   - **Variations: compare 6 seeds** generates the map with six new seeds side by side (your locked cells, placed things and zones are kept in all of them). Tap the one you like; Undo goes back. **Show 6 more** makes another batch.
+   - **Recent** lists the seeds you generated this session: tap one to go back to it.
+   - The **padlock** beside the seed pins it, so New seed, Variations and Recent can't change it by accident.
 4. Open the setting groups on the **Generate** tab to change the map:
    - **Basic:** biome, path winding, path width.
    - **Entrances:** which edges, where, and how wide.
@@ -361,7 +364,6 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 ## Known limitations
 
 - **Routes only.** Generate works for routes. Towns, forests and caves arrive in Milestone 5, and until then those map types stay blank.
-- **The variations grid** comes in the last part of Milestone 3.
 - **Mountains follow the map's own biome.** A biome zone changes the ground, trees, grass and detail in its area, but elevation (alpine terraces) still follows the map's main biome.
 - **Generate works around drawn features but doesn't route through them.** A path you draw is kept, but the generated main path may run elsewhere; join them with another stroke if you want one route.
 - **Regenerated gaps are often forest.** Away from the path, the generator mostly grows trees, so a gap filled with generated terrain may come back as forest. Use Fill with… or the pencil if you want open ground there.

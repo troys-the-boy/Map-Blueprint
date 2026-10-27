@@ -12,6 +12,7 @@ import type { Biome, Edge, Opening, OpeningKind } from "../../core/model";
 import { MAX_SEED } from "../../core/rng";
 import { useStore } from "../store";
 import { NumberField } from "./NumberField";
+import { Icon } from "./icons";
 
 const BIOME_LABELS: Record<Biome, string> = {
   temperate_rainforest: "Temperate rainforest",
@@ -25,12 +26,6 @@ const BIOME_LABELS: Record<Biome, string> = {
 const LAYOUT_LABELS: Record<Layout, string> = { land: "Land", coastal: "Coastal", river: "River", water: "Open water" };
 
 const HM_LABELS: Record<string, string> = { cut: "Cut", flash: "Flash", rock_smash: "Rock Smash", strength: "Strength", surf: "Surf", dive: "Dive", waterfall: "Waterfall" };
-
-function randomSeed() {
-  const a = new Uint32Array(1);
-  crypto.getRandomValues(a);
-  return a[0];
-}
 
 export function GeneratePanel() {
   const s = useStore();
@@ -106,22 +101,49 @@ export function GeneratePanel() {
         </button>
         {!s.selection && <p className="hint">To regenerate just part of the map, select it first with the Select tool (V).</p>}
         <div className="field-row">
-          <label className="field grow" title="The seed decides every random choice. Same seed + same settings = the same map.">
+          <label className="field grow" title={s.seedPinned ? "The seed is pinned: unpin it to change it." : "The seed decides every random choice. Same seed + same settings = the same map."}>
             <span>Seed</span>
-            <NumberField min={0} max={MAX_SEED} value={map.seed} onChange={(v) => s.setSeed(v)} />
+            <NumberField min={0} max={MAX_SEED} value={map.seed} disabled={s.seedPinned} onChange={(v) => s.setSeed(v)} />
           </label>
           <button
-            className="secondary"
-            title="Pick a new random seed and generate"
-            disabled={!supported || s.generating}
-            onClick={() => {
-              s.setSeed(randomSeed());
-              void s.generate();
-            }}
+            className={`icon-button pin ${s.seedPinned ? "active" : ""}`}
+            title={s.seedPinned ? "Unpin the seed" : "Pin the seed, so New seed and Variations can't change it by accident"}
+            aria-label={s.seedPinned ? "Unpin the seed" : "Pin the seed"}
+            aria-pressed={s.seedPinned}
+            onClick={() => s.togglePinSeed()}
           >
+            <Icon name={s.seedPinned ? "lock" : "unlock"} size={18} />
+          </button>
+          <button className="secondary" title="Pick a new random seed and generate" disabled={!supported || s.generating || s.seedPinned} onClick={() => void s.rerollSeed()}>
             New seed
           </button>
         </div>
+        <button
+          className="secondary wide"
+          title="Generate this map with 6 new seeds side by side, and pick the one you like. Your locked cells, placed things and zones are kept in all of them."
+          disabled={!supported || s.generating || s.variationsBusy || s.seedPinned}
+          onClick={() => void s.makeVariations()}
+        >
+          {s.variationsBusy ? "Making variations…" : "Variations: compare 6 seeds"}
+        </button>
+        {s.recentSeeds.length > 1 && (
+          <div className="recent-seeds" title="Seeds you generated this session. Tap one to go back to it.">
+            <span className="hint">Recent:</span>
+            {s.recentSeeds.map((seed) => (
+              <button
+                key={seed}
+                className={`chip ${seed === map.seed ? "active" : ""}`}
+                disabled={s.generating || s.seedPinned || seed === map.seed}
+                onClick={() => {
+                  s.setSeed(seed);
+                  void s.generate();
+                }}
+              >
+                {seed}
+              </button>
+            ))}
+          </div>
+        )}
         {last && (
           <p className={`hint ${last.ok ? "" : "bad"}`}>
             {last.ok ? "Generated" : "Generated, but some checks failed"}

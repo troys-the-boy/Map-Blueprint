@@ -75,6 +75,7 @@ export interface Floating {
 
 /** Everything Generate can change on a map, for undoing it. */
 interface MapSnapshot {
+  seed: number;
   terrain: Uint8Array;
   elevation: Uint8Array;
   locks: Uint8Array;
@@ -95,6 +96,7 @@ function cloneZones(zones: Zone[]): Zone[] {
 
 function snapshot(map: MapBlueprint): MapSnapshot {
   return {
+    seed: map.seed,
     terrain: map.layers.terrain.data.slice(),
     elevation: map.layers.elevation.data.slice(),
     locks: map.layers.locks.data.slice(),
@@ -106,6 +108,7 @@ function snapshot(map: MapBlueprint): MapSnapshot {
 }
 
 function restore(map: MapBlueprint, snap: MapSnapshot) {
+  map.seed = snap.seed;
   map.layers.terrain.data.set(snap.terrain);
   map.layers.elevation.data.set(snap.elevation);
   map.layers.locks.data.set(snap.locks);
@@ -175,6 +178,12 @@ class EditorStore {
   selectedThing: string | null = null;
   /** What Generate changes (see GenerateMode). */
   generateMode: GenerateMode = "keep";
+  /** Seeds generated this session, newest first, per map (to go back to one). */
+  seedHistory = new Map<string, number[]>();
+  /** A batch of variations: the same map generated with different seeds, to pick from. */
+  variations: { mapId: string; mapVersion: number; items: Array<{ seed: number; result: GenerateResult }> } | null = null;
+  /** True while variations are being made. */
+  variationsBusy = false;
   prefs: Prefs = loadPrefs();
   /** True when there are changes not yet saved to a file. */
   dirty = false;
@@ -273,7 +282,7 @@ class EditorStore {
     }
     this.dropFloating();
     const whole = !area && this.generateMode === "whole";
-    const input = area ? areaInput(map, area, randomSeed()) : whole ? wholeMapInput(map) : map;
+    const input = area ? areaInput(map, area, randomSeed()) : this.fullInput(map);
     // Joining the undo step before only makes sense if nothing else happened meanwhile.
     const stepBefore = this.undoStacks.get(map.id)?.at(-1);
     this.generating = true;
@@ -306,9 +315,111 @@ class EditorStore {
     this.selectedThing = null;
     this.pushUndo({ type: "snapshot", mapId: target.id, before, after: snapshot(target), edits: edit ? [edit] : [] }, joinUndo);
     this.lastGenerate = { mapId: target.id, attempts: result.attempts, ok: result.ok };
+    if (!area) this.rememberSeed(target);
     this.markDirty();
     this.changed();
     this.cellsChanged(target.id, null);
+  }
+
+  /** What a whole-map Generate works from: the map, or with every lock cleared in "whole" mode. */
+  private fullInput(map: MapBlueprint, seed = map.seed): MapBlueprint {
+    const input = this.generateMode === "whole" ? wholeMapInput(map) : map;
+    return seed === map.seed ? input : { ...input, seed };
+  }
+
+  private rememberSeed(map: MapBlueprint) {
+    const list = (this.seedHistory.get(map.id) ?? []).filter((s) => s !== map.seed);
+    list.unshift(map.seed);
+    this.seedHistory.set(map.id, list.slice(0, 8));
+  }
+
+  /** Seeds generated for the open map this session, newest first. */
+  get recentSeeds(): number[] {
+    return this.seedHistory.get(this.currentMapId ?? "") ?? [];
+  }
+
+  /** A pinned seed can't be changed by New seed or the variations (until unpinned). */
+  get seedPinned(): boolean {
+    return this.currentMap?.params.seedPinned === true;
+  }
+
+  togglePinSeed() {
+    const map = this.currentMap;
+    if (!map) return;
+    const params = { ...map.params };
+    if (params.seedPinned === true) delete params.seedPinned;
+    else params.seedPinned = true;
+    map.params = params;
+    this.markDirty();
+    this.changed();
+  }
+
+  /** Pick a new random seed and generate (unless the seed is pinned). */
+  async rerollSeed() {
+    const map = this.currentMap;
+    if (!map || this.seedPinned || this.generating) return;
+    map.seed = randomSeed();
+    this.changed();
+    await this.generate();
+  }
+
+  /**
+   * Make `count` variations: the map generated with new random seeds (keeping
+   * locked cells, things you placed and zones, as Generate does). They run one
+   * after another in the background and appear as they finish.
+   */
+  async makeVariations(count = 6) {
+    const map = this.currentMap;
+    if (!map || !canGenerate(map) || this.variationsBusy) return;
+    this.dropFloating();
+    this.variations = { mapId: map.id, mapVersion: this.mapVersion, items: [] };
+    this.variationsBusy = true;
+    this.changed();
+    try {
+      for (let k = 0; k < count; k++) {
+        const seed = randomSeed();
+        const result = await runGenerate(this.fullInput(map, seed), this.region.settings.engineLimits);
+        // Stop if the batch was closed or replaced meanwhile.
+        if (this.variations?.mapId !== map.id) return;
+        this.variations.items.push({ seed, result });
+        this.changed();
+      }
+    } catch (err) {
+      this.setNotice({ kind: "error", text: "Making variations failed: " + (err instanceof Error ? err.message : String(err)) });
+    } finally {
+      this.variationsBusy = false;
+      this.changed();
+    }
+  }
+
+  /** True if the map was changed after the variations were made (they'd undo those changes). */
+  get variationsStale(): boolean {
+    return !!this.variations && this.variations.mapVersion !== this.mapVersion;
+  }
+
+  /** Use one of the variations: its seed becomes the map's seed (one undo step). */
+  useVariation(index: number) {
+    const map = this.currentMap;
+    const v = this.variations;
+    const item = v?.items[index];
+    if (!map || !v || !item || v.mapId !== map.id) return;
+    const before = snapshot(map);
+    map.seed = item.seed;
+    applyResult(map, item.result);
+    if (this.generateMode === "whole") map.layers.locks.data.fill(0);
+    this.selectedThing = null;
+    this.pushUndo({ type: "snapshot", mapId: map.id, before, after: snapshot(map) });
+    this.lastGenerate = { mapId: map.id, attempts: item.result.attempts, ok: item.result.ok };
+    this.rememberSeed(map);
+    this.variations = null;
+    this.markDirty();
+    this.changed();
+    this.cellsChanged(map.id, null);
+  }
+
+  closeVariations() {
+    this.variations = null;
+    this.changed();
   }
 
   /** Change generator settings for the open map. */
@@ -336,7 +447,7 @@ class EditorStore {
 
   setSeed(seed: number) {
     const map = this.currentMap;
-    if (!map) return;
+    if (!map || this.seedPinned) return;
     map.seed = seed >>> 0;
     this.markDirty();
     this.changed();
@@ -453,6 +564,7 @@ class EditorStore {
     this.smartPoints = null;
     this.zonePaint = null;
     this.activeZoneId = null;
+    this.variations = null;
     this.selectedThing = null;
     this.thingDrag = null;
   }
