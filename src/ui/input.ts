@@ -138,7 +138,7 @@ export class CanvasInput {
       }
       this.mode = "paint";
       this.pressTool = this.store.tool;
-      if (this.pressTool === "select") this.store.selectDown(cell[0], cell[1]);
+      if (this.pressTool === "select" || this.pressTool === "lasso") this.store.selectDown(cell[0], cell[1]);
       else if (this.pressTool === "things") this.store.thingsDown(cell[0], cell[1]);
       else this.store.beginStroke(cell[0], cell[1]);
       this.setHover(cell);
@@ -161,7 +161,7 @@ export class CanvasInput {
     }
     const cell = this.renderer.cellAt(x, y);
     if (e.pointerType !== "touch" || this.mode === "paint") this.setHover(cell);
-    if (this.mode === "paint" && p && this.pressTool === "select") this.store.selectMove(cell[0], cell[1]);
+    if (this.mode === "paint" && p && (this.pressTool === "select" || this.pressTool === "lasso")) this.store.selectMove(cell[0], cell[1]);
     else if (this.mode === "paint" && p && this.pressTool === "things") this.store.thingsMove(cell[0], cell[1]);
     else if (this.mode === "paint" && p) {
       // Use coalesced events for smooth Pencil lines when the browser provides them.
@@ -200,7 +200,7 @@ export class CanvasInput {
 
   /** Finish a press with the current tool (a cancelled paint stroke is undone). */
   private endPress(cancelled: boolean) {
-    if (this.pressTool === "select") this.store.selectUp();
+    if (this.pressTool === "select" || this.pressTool === "lasso") this.store.selectUp();
     else if (this.pressTool === "things") this.store.thingsUp();
     else if (cancelled) this.store.cancelStroke();
     else this.store.endStroke();

@@ -6,11 +6,11 @@
 // the canvas listens for cell changes through onCells().
 
 import { useSyncExternalStore } from "react";
-import type { CellRect, Edit, Entity, EntityKind, MapBlueprint, NewMapOptions, Opening, Region, Zone } from "../core/model";
+import type { AreaEdit, Edit, Entity, EntityKind, MapBlueprint, NewMapOptions, Opening, Region, Zone } from "../core/model";
 import type { GenerateResult } from "../core/generate";
 import { applyAreaResult, applyResult, areaInput, canGenerate, wholeMapInput } from "../core/generate";
-import type { Clip } from "../core/selection";
-import { clearArea, clipToMap, copyArea, inRect, moveArea, pasteClip, rectFromCorners } from "../core/selection";
+import type { Area, Clip } from "../core/selection";
+import { areaCellList, areaCells, clearArea, clipToMap, copyArea, inArea, lassoArea, moveArea, pasteClip, rectFromCorners } from "../core/selection";
 import type { Direction } from "../core/terrain";
 import { entityAt, newThing, setFacing, setSight, sightOf, turnClockwise } from "../core/things";
 import { hmsFor, readRouteParams } from "../core/generators/params";
@@ -29,10 +29,11 @@ export const APP_VERSION = "0.1.0";
 
 /**
  * "elevation" is the elevation brush: it paints elevation levels, leaving terrain alone.
- * "lock" is the lock brush. "select" draws a rectangle to copy, move or delete.
+ * "lock" is the lock brush. "select" draws a rectangle to copy, move or delete;
+ * "lasso" draws any shape for the same.
  * "things" places, drags, turns and removes trainers, items and so on.
  */
-export type Tool = "pencil" | "erase" | "pan" | "pick" | "elevation" | "lock" | "select" | "things";
+export type Tool = "pencil" | "erase" | "pan" | "pick" | "elevation" | "lock" | "select" | "lasso" | "things";
 
 /** What generating changes: "keep" leaves locked cells alone; "whole" replaces everything. */
 export type GenerateMode = "keep" | "whole";
@@ -43,7 +44,7 @@ export interface Floating {
   x: number;
   y: number;
   /** Where it was lifted from, for a move; null for a paste. */
-  source: CellRect | null;
+  source: Area | null;
 }
 
 /** Everything Generate can change on a map, for undoing it. */
@@ -123,7 +124,9 @@ class EditorStore {
   /** Whether the lock brush locks or unlocks. */
   lockMode: "lock" | "unlock" = "lock";
   /** The selected rectangle (Select tool), if any. */
-  selection: CellRect | null = null;
+  selection: Area | null = null;
+  /** The line being drawn with the Lasso, in cell coordinates. */
+  lassoPoints: Array<[number, number]> | null = null;
   /** The last copied area. */
   clipboard: Clip | null = null;
   /** An area being moved or pasted, not yet put down. */
@@ -221,7 +224,7 @@ class EditorStore {
    * everything is replaced and all locks are cleared. With `area`, only that rectangle
    * is made again, with a fresh random seed so each try looks different.
    */
-  async generate(area: CellRect | null = null, joinUndo = false) {
+  async generate(area: Area | null = null, joinUndo = false) {
     const map = this.currentMap;
     if (!map || this.generating || this.isStroking) return;
     if (!canGenerate(map)) {
@@ -254,7 +257,7 @@ class EditorStore {
     let edit: Edit | undefined;
     if (area) {
       applyAreaResult(target, area, result);
-      edit = { type: "area", action: "regenerate", area, toX: null, toY: null };
+      edit = areaEdit(target, "regenerate", area);
       target.edits.push(edit);
     } else {
       applyResult(target, result);
@@ -333,8 +336,8 @@ class EditorStore {
 
   setTool(tool: Tool) {
     if (tool === "pick" && this.tool !== "pick") this.toolBeforePick = this.tool;
-    // Leaving the Select tool puts down anything still being placed.
-    if (tool !== "select") this.dropFloating();
+    // Leaving the selection tools puts down anything still being placed.
+    if (tool !== "select" && tool !== "lasso") this.dropFloating();
     if (tool !== "things") this.selectedThing = null;
     this.tool = tool;
     this.showElevationFor(tool);
@@ -406,6 +409,7 @@ class EditorStore {
     this.floating = null;
     this.grab = null;
     this.selectAnchor = null;
+    this.lassoPoints = null;
     this.selectedThing = null;
     this.thingDrag = null;
   }
@@ -546,21 +550,26 @@ class EditorStore {
   /** Where in the floating area the pointer grabbed it, while dragging it. */
   private grab: [number, number] | null = null;
   /** Where the clipboard was copied from (for the edit record). */
-  private clipboardFrom: CellRect | null = null;
+  private clipboardFrom: Area | null = null;
 
-  /** Pointer down with the Select tool: grab the selection to move it, or start a new rectangle. */
+  /** True for the two tools that make selections. */
+  get selecting() {
+    return this.tool === "select" || this.tool === "lasso";
+  }
+
+  /** Pointer down with the Select or Lasso tool: grab the selection to move it, or start a new one. */
   selectDown(x: number, y: number) {
     const map = this.currentMap;
     if (!map) return;
     const f = this.floating;
-    if (f && inRect({ x: f.x, y: f.y, w: f.clip.w, h: f.clip.h }, x, y)) {
+    if (f && inArea({ x: f.x, y: f.y, w: f.clip.w, h: f.clip.h, mask: f.clip.mask }, x, y)) {
       this.grab = [x - f.x, y - f.y];
       return;
     }
     // Tapping away from a paste puts it down where it is.
     if (f) this.dropFloating();
     const sel = this.selection;
-    if (sel && inRect(sel, x, y)) {
+    if (sel && inArea(sel, x, y)) {
       this.floating = { clip: copyArea(map, sel), x: sel.x, y: sel.y, source: sel };
       this.grab = [x - sel.x, y - sel.y];
       this.changed();
@@ -568,6 +577,12 @@ class EditorStore {
     }
     const cx = Math.max(0, Math.min(map.width - 1, x));
     const cy = Math.max(0, Math.min(map.height - 1, y));
+    if (this.tool === "lasso") {
+      this.lassoPoints = [[cx + 0.5, cy + 0.5]];
+      this.selection = null;
+      this.changed();
+      return;
+    }
     this.selectAnchor = [cx, cy];
     this.selection = { x: cx, y: cy, w: 1, h: 1 };
     this.changed();
@@ -587,6 +602,17 @@ class EditorStore {
       }
       return;
     }
+    const pts = this.lassoPoints;
+    if (pts) {
+      const last = pts[pts.length - 1];
+      const px = Math.max(0, Math.min(map.width - 1, x)) + 0.5;
+      const py = Math.max(0, Math.min(map.height - 1, y)) + 0.5;
+      if (last[0] !== px || last[1] !== py) {
+        pts.push([px, py]);
+        this.changed();
+      }
+      return;
+    }
     if (this.selectAnchor) {
       const r = clipToMap(map, rectFromCorners(this.selectAnchor[0], this.selectAnchor[1], x, y));
       if (r && (r.x !== this.selection?.x || r.y !== this.selection.y || r.w !== this.selection.w || r.h !== this.selection.h)) {
@@ -598,6 +624,13 @@ class EditorStore {
 
   selectUp() {
     this.selectAnchor = null;
+    const map = this.currentMap;
+    if (this.lassoPoints && map) {
+      // Close the lasso: everything inside the line is selected.
+      this.selection = lassoArea(map, this.lassoPoints);
+      this.lassoPoints = null;
+      this.changed();
+    }
     const moving = this.grab !== null && this.floating?.source;
     this.grab = null;
     // A move is put down as soon as it's let go; a paste waits for Place (or a tap elsewhere).
@@ -623,7 +656,7 @@ class EditorStore {
       this.changed();
       return;
     }
-    const edit: Edit = { type: "area", action: f.source ? "move" : "paste", area: f.source ?? this.clipboardFrom ?? area, toX: area.x, toY: area.y };
+    const edit = areaEdit(map, f.source ? "move" : "paste", f.source ?? this.clipboardFrom ?? area, area.x, area.y);
     map.edits.push(edit);
     this.selection = area;
     this.pushUndo({ type: "snapshot", mapId: map.id, before, after: snapshot(map), edits: [edit] });
@@ -638,10 +671,10 @@ class EditorStore {
    * terrain (unless the "Fill gaps with" choice is plain ground). Cells that are
    * locked, such as the moved area if it overlaps, are kept. One Undo undoes both.
    */
-  private fillGap(area: CellRect) {
+  private fillGap(area: Area) {
     const map = this.currentMap;
     if (!map || this.prefs.gapFill !== "regenerate" || !canGenerate(map)) return;
-    void this.generate({ ...area }, true);
+    void this.generate(area, true);
   }
 
   setGapFill(fill: "ground" | "regenerate") {
@@ -666,7 +699,7 @@ class EditorStore {
     const map = this.currentMap;
     if (!map || !this.selection) return;
     this.clipboard = copyArea(map, this.selection);
-    this.clipboardFrom = { ...this.selection };
+    this.clipboardFrom = this.selection;
     this.changed();
   }
 
@@ -675,7 +708,7 @@ class EditorStore {
     this.deleteSelection();
   }
 
-  /** Clear the selected area to plain ground (locked) and remove the things in it. */
+  /** Clear the selected area to plain ground and remove the things in it. */
   deleteSelection() {
     const map = this.currentMap;
     const area = this.selection;
@@ -683,7 +716,7 @@ class EditorStore {
     this.dropFloating();
     const before = snapshot(map);
     clearArea(map, area);
-    const edit: Edit = { type: "area", action: "delete", area: { ...area }, toX: null, toY: null };
+    const edit = areaEdit(map, "delete", area);
     map.edits.push(edit);
     this.pushUndo({ type: "snapshot", mapId: map.id, before, after: snapshot(map), edits: [edit] });
     this.markDirty();
@@ -698,7 +731,7 @@ class EditorStore {
     const clip = this.clipboard;
     if (!map || !clip) return;
     this.dropFloating();
-    if (this.tool !== "select") this.setTool("select");
+    if (!this.selecting) this.setTool("select");
     const x = at ? at[0] - Math.floor(clip.w / 2) : (this.selection?.x ?? 0);
     const y = at ? at[1] - Math.floor(clip.h / 2) : (this.selection?.y ?? 0);
     this.floating = { clip, x, y, source: null };
@@ -708,7 +741,43 @@ class EditorStore {
 
   /** Make the selected area again with the generator (a new look each time). */
   regenerateSelection() {
-    if (this.selection) void this.generate({ ...this.selection });
+    if (this.selection) void this.generate(this.selection);
+  }
+
+  /**
+   * Change every cell of the selection at once: fill it with one terrain (locked,
+   * like painting, if "Lock what I paint" is on), set its elevation, or lock or
+   * unlock it. Things in it stay where they are.
+   */
+  changeSelection(change: { fill: number } | { elevation: number } | { lock: boolean }) {
+    const map = this.currentMap;
+    const area = this.selection;
+    if (!map || !area) return;
+    this.dropFloating();
+    const before = snapshot(map);
+    const cells = areaCells(map, area);
+    let edit: AreaEdit;
+    if ("fill" in change) {
+      const lock = this.prefs.lockWhenPainting ? 1 : null;
+      for (const i of cells) {
+        map.layers.terrain.data[i] = change.fill;
+        if (lock !== null) map.layers.locks.data[i] = lock;
+      }
+      edit = areaEdit(map, "fill", area, null, null, TERRAIN_TYPES[change.fill].id);
+    } else if ("elevation" in change) {
+      for (const i of cells) map.layers.elevation.data[i] = change.elevation;
+      edit = areaEdit(map, "elevation", area, null, null, ELEVATION_LEVELS[change.elevation]);
+      this.showElevationFor("elevation");
+    } else {
+      for (const i of cells) map.layers.locks.data[i] = change.lock ? 1 : 0;
+      edit = areaEdit(map, change.lock ? "lock" : "unlock", area);
+      if (!this.prefs.overlays.locks) this.setOverlay("locks", true);
+    }
+    map.edits.push(edit);
+    this.pushUndo({ type: "snapshot", mapId: map.id, before, after: snapshot(map), edits: [edit] });
+    this.markDirty();
+    this.changed();
+    this.cellsChanged(map.id, cells);
   }
 
   // ----- Things tool -------------------------------------------------------
@@ -979,4 +1048,12 @@ function randomSeed(): number {
   const a = new Uint32Array(1);
   crypto.getRandomValues(a);
   return a[0];
+}
+
+/** The record of a selection action: its rectangle, plus the exact cells for a lasso shape. */
+function areaEdit(map: MapBlueprint, action: AreaEdit["action"], area: Area, toX: number | null = null, toY: number | null = null, value?: string): AreaEdit {
+  const edit: AreaEdit = { type: "area", action, area: { x: area.x, y: area.y, w: area.w, h: area.h }, toX, toY };
+  if (area.mask) edit.cells = areaCellList(map, area);
+  if (value !== undefined) edit.value = value;
+  return edit;
 }

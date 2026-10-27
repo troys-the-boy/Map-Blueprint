@@ -7,8 +7,9 @@
 // example a painted wall across the only way through), the best attempt is
 // returned along with the validation errors that explain why.
 
-import type { CellRect, Entity, MapBlueprint, Opening, Zone } from "./model";
-import { inRect } from "./selection";
+import type { Entity, MapBlueprint, Opening, Zone } from "./model";
+import type { Area } from "./selection";
+import { inArea } from "./selection";
 import { cloneThing } from "./things";
 import { Rng, deriveSeed } from "./rng";
 import { IS_WATER, T } from "./grid";
@@ -199,15 +200,15 @@ export function applyResult(map: MapBlueprint, result: GenerateResult): void {
 // ---------------------------------------------------------------------------
 
 /** A copy of a map with every cell and thing outside `area` locked, for regenerating just that area. */
-export function areaInput(map: MapBlueprint, area: CellRect, seed: number): MapBlueprint {
+export function areaInput(map: MapBlueprint, area: Area, seed: number): MapBlueprint {
   const locks = map.layers.locks.data.slice();
   for (let y = 0; y < map.height; y++)
-    for (let x = 0; x < map.width; x++) if (!inRect(area, x, y)) locks[y * map.width + x] = 1;
+    for (let x = 0; x < map.width; x++) if (!inArea(area, x, y)) locks[y * map.width + x] = 1;
   return {
     ...map,
     seed: seed >>> 0,
     layers: { ...map.layers, locks: { ...map.layers.locks, data: locks } },
-    entities: map.entities.map((e) => (inRect(area, e.x, e.y) ? { ...e } : { ...e, locked: true })),
+    entities: map.entities.map((e) => (inArea(area, e.x, e.y) ? { ...e } : { ...e, locked: true })),
   };
 }
 
@@ -216,24 +217,25 @@ export function areaInput(map: MapBlueprint, area: CellRect, seed: number): MapB
  * area change; things outside it stay as they were, and only new things inside it
  * are added. HM-area zones that overlapped the area are replaced by the new ones.
  */
-export function applyAreaResult(map: MapBlueprint, area: CellRect, result: GenerateResult): void {
+export function applyAreaResult(map: MapBlueprint, area: Area, result: GenerateResult): void {
   for (let y = area.y; y < area.y + area.h; y++)
     for (let x = area.x; x < area.x + area.w; x++) {
+      if (!inArea(area, x, y)) continue;
       const i = y * map.width + x;
       map.layers.terrain.data[i] = result.terrain[i];
       map.layers.elevation.data[i] = result.elevation[i];
     }
   const touches = (z: Zone) => {
-    for (let y = area.y; y < area.y + area.h; y++) for (let x = area.x; x < area.x + area.w; x++) if (z.mask.data[y * map.width + x]) return true;
+    for (let y = area.y; y < area.y + area.h; y++) for (let x = area.x; x < area.x + area.w; x++) if (inArea(area, x, y) && z.mask.data[y * map.width + x]) return true;
     return false;
   };
-  const inside = (z: Zone) => z.mask.data.every((v, i) => !v || inRect(area, i % map.width, Math.floor(i / map.width)));
+  const inside = (z: Zone) => z.mask.data.every((v, i) => !v || inArea(area, i % map.width, Math.floor(i / map.width)));
   map.layers.zones = [
     ...map.layers.zones.filter((z) => z.data.generated !== true || !touches(z)),
     ...result.zones.filter((z) => z.data.generated === true && inside(z) && !map.layers.zones.some((k) => k.id === z.id)),
   ];
-  const keep = map.entities.filter((e) => !inRect(area, e.x, e.y) || e.locked);
-  const added = result.entities.filter((e) => inRect(area, e.x, e.y) && !e.locked && !keep.some((k) => k.x === e.x && k.y === e.y));
+  const keep = map.entities.filter((e) => !inArea(area, e.x, e.y) || e.locked);
+  const added = result.entities.filter((e) => inArea(area, e.x, e.y) && !e.locked && !keep.some((k) => k.x === e.x && k.y === e.y));
   map.entities = [...keep, ...added];
   // New IDs must not clash with any kept thing, hand-placed or not.
   const used = new Set(keep.map((e) => e.id));

@@ -40,6 +40,7 @@ export function MapCanvas({ onHover }: { onHover: (cell: [number, number] | null
     const brushFor = () => (store.tool === "pencil" || store.tool === "erase" || store.tool === "elevation" || store.tool === "lock" ? store.brush : 1);
     renderer.brush = brushFor();
     let heatFor = -1;
+    let lassoLength = 0;
     let focusSeq = store.focus?.seq ?? 0;
     const sync = () => {
       let redraw = false;
@@ -66,8 +67,12 @@ export function MapCanvas({ onHover }: { onHover: (cell: [number, number] | null
         renderer.selectedThing !== store.selectedThing ||
         renderer.floating?.clip !== floating?.clip ||
         renderer.floating?.x !== floating?.x ||
-        renderer.floating?.y !== floating?.y
+        renderer.floating?.y !== floating?.y ||
+        renderer.lassoPoints !== store.lassoPoints ||
+        (store.lassoPoints?.length ?? 0) !== lassoLength
       ) {
+        lassoLength = store.lassoPoints?.length ?? 0;
+        renderer.lassoPoints = store.lassoPoints;
         renderer.selection = store.selection;
         renderer.selectedThing = store.selectedThing;
         renderer.floating = floating;

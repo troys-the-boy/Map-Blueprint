@@ -15,10 +15,16 @@ const TOOLS: Array<{ tool: Tool; icon: string; label: string; key: string; tip: 
   { tool: "pencil", icon: "pencil", label: "Pencil", key: "B", tip: "Pencil (B): paint the selected terrain. Painted cells are locked so Generate keeps them." },
   { tool: "erase", icon: "erase", label: "Eraser", key: "E", tip: "Eraser (E): set cells back to plain ground and unlock them." },
   { tool: "elevation", icon: "elevation", label: "Elevation brush", key: "L", tip: "Elevation brush (L): paint the elevation numbers you'll set in Porymap's collision tab. Terrain stays as it is." },
-  { tool: "select", icon: "select", label: "Select", key: "V", tip: "Select (V): drag a rectangle. Drag inside it to move it (with the things in it). Copy, cut, paste, delete or regenerate it from the bar at the top." },
+  { tool: "select", icon: "select", label: "Select", key: "V", tip: "Select (V): drag a rectangle. Drag inside it to move it (with the things in it). Copy, cut, paste, delete, fill, lock or regenerate it from the bar at the top." },
+  { tool: "lasso", icon: "lasso", label: "Lasso", key: "Q", tip: "Lasso (Q): draw around any shape to select it. Then use it like a rectangle selection: drag inside to move it, or use the bar at the top." },
   { tool: "things", icon: "things", label: "Things", key: "T", tip: "Things (T): tap to place the chosen thing (trainer, item…). Drag a thing to move it; tap a picked trainer to turn it." },
-  { tool: "lock", icon: "lock", label: "Lock brush", key: "K", tip: "Lock brush (K): lock cells so Generate keeps them, or unlock them so Generate can change them. Terrain stays as it is." },
-  { tool: "pan", icon: "pan", label: "Move view", key: "H", tip: "Move view (H): drag to pan. You can also hold Space and drag, or drag with two fingers." },
+];
+
+const PAN = { tool: "pan" as Tool, icon: "pan", label: "Move view", key: "H", tip: "Move view (H): drag to pan. You can also hold Space and drag, or drag with two fingers." };
+
+const LOCKS: Array<{ mode: "lock" | "unlock"; label: string; tip: string }> = [
+  { mode: "lock", label: "Lock brush", tip: "Lock brush (K): lock cells so Generate keeps them. Terrain stays as it is." },
+  { mode: "unlock", label: "Unlock brush", tip: "Unlock brush (U): unlock cells so Generate can change them. Terrain stays as it is." },
 ];
 
 export function Toolbar({ onShowTab }: { onShowTab: (tab: SideTab) => void }) {
@@ -42,6 +48,17 @@ export function Toolbar({ onShowTab }: { onShowTab: (tab: SideTab) => void }) {
           <Icon name={t.icon} />
         </button>
       ))}
+      {LOCKS.map((l) => {
+        const active = s.tool === "lock" && s.lockMode === l.mode;
+        return (
+          <button key={l.mode} className={`tool ${active ? "active" : ""}`} title={l.tip} aria-label={l.label} aria-pressed={active} onClick={() => s.setLockMode(l.mode)}>
+            <Icon name={l.mode} />
+          </button>
+        );
+      })}
+      <button className={`tool ${s.tool === "pan" ? "active" : ""}`} title={PAN.tip} aria-label={PAN.label} aria-pressed={s.tool === "pan"} onClick={() => s.setTool("pan")}>
+        <Icon name="pan" />
+      </button>
       <button
         className={`tool ${s.tool === "pick" ? "active" : ""}`}
         title="Pick (I, or Alt+click): the next tap copies a cell's terrain into the pencil (or its elevation into the elevation brush). This is the on-screen modifier for touch."
@@ -67,17 +84,6 @@ export function Toolbar({ onShowTab }: { onShowTab: (tab: SideTab) => void }) {
               {ENTITY_PREFIX[s.thingKind]}
             </span>
           )}
-        </button>
-      ) : s.tool === "lock" ? (
-        <button
-          className="tool swatch-button"
-          title={s.lockMode === "lock" ? "Locking cells. Tap to switch to unlocking." : "Unlocking cells. Tap to switch to locking."}
-          aria-label={s.lockMode === "lock" ? "Switch to unlocking" : "Switch to locking"}
-          onClick={() => s.setLockMode(s.lockMode === "lock" ? "unlock" : "lock")}
-        >
-          <span className="swatch big">
-            <Icon name={s.lockMode === "lock" ? "lock" : "unlock"} size={20} />
-          </span>
         </button>
       ) : s.tool === "elevation" ? (
         <button className="tool swatch-button" title={`Elevation ${hexDigit(elevationValue)}. Tap to choose another.`} aria-label={`Choose elevation (current: ${hexDigit(elevationValue)})`} onClick={() => onShowTab("terrain")}>

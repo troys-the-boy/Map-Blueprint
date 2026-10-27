@@ -48,8 +48,8 @@ Double-click **`start.command`**. If macOS refuses to open it:
 | Paint | Left-drag with the Pencil tool (**B**) | Apple Pencil, or one finger (see below) |
 | Erase to plain ground | Eraser tool (**E**) | Eraser tool |
 | Paint elevation | Elevation brush (**L**) | Elevation brush in the tool strip |
-| Lock / unlock cells | Lock brush (**K**) | Lock brush; tap its swatch to switch lock/unlock |
-| Select an area | Select tool (**V**), drag a rectangle | Select tool, drag with the Pencil |
+| Lock / unlock cells | Lock brush (**K**) / Unlock brush (**U**) | The two padlock buttons in the tool strip |
+| Select an area | Select tool (**V**), drag a rectangle; or Lasso (**Q**), draw round any shape | Select or Lasso tool, with the Pencil |
 | Move it | Drag inside the selection | Drag inside the selection |
 | Copy / cut / paste / delete it | **Ctrl+C** / **Ctrl+X** / **Ctrl+V** / **Delete**; **Enter** places a paste, **Esc** cancels | Buttons in the bar at the top |
 | Place a trainer, item… | Things tool (**T**), click | Things tool, tap |
@@ -77,14 +77,15 @@ Double-click **`start.command`**. If macOS refuses to open it:
 
 **Elevation brush.** Pick a number in the Paint tab's **Elevation brush** list (or press **L**) and paint. It changes only the elevation, never the terrain, and turns the Elevation view on so you can see what you're doing. Stairs always show 0: paint them with the **Stairs** terrain.
 
-**Locked cells:** everything you paint, move or paste is *locked* (marked with a small yellow corner when **Show → Locked cells** is on). Generate never changes locked cells. Turn this off for painting with **Lock what I paint**. The **Lock brush** (**K**) locks or unlocks cells by hand without changing them.
+**Locked cells:** everything you paint, move or paste is *locked* (marked with a small yellow corner when **Show → Locked cells** is on). Generate never changes locked cells. Turn this off for painting with **Lock what I paint**. The **Lock brush** (**K**) and **Unlock brush** (**U**), side by side in the tool strip, lock or unlock cells by hand without changing them.
 
 ## Editing (Milestone 3)
 
-**Select, move, copy (Select tool, V).** Drag a rectangle. Then:
+**Select, move, copy (Select tool, V, or Lasso, Q).** With Select, drag a rectangle. With the Lasso, draw round any shape: everything inside the line (and under it) is selected when you let go. Then:
 
 - **Move:** drag inside the selection. Trainers, items and other things in it move too.
 - **Copy / Cut / Paste / Delete:** use the bar at the top of the map (or Ctrl+C, Ctrl+X, Ctrl+V, Delete). A paste appears in the middle of the view: drag it where you want it, then **Place** (or Enter). **Cancel** (or Esc) throws it away.
+- **Change it all at once:** **Fill with…** sets every selected cell to one terrain, like a paint bucket (locked, if **Lock what I paint** is on). **Elevation…** sets their elevation. The padlock buttons lock or unlock them.
 - **Regenerate area:** makes only the selected area again with the generator. Everything outside it stays exactly as it is. Each try looks different; Undo goes back.
 - **Gaps** (in the same bar) decides what fills the hole a move, cut or delete leaves behind: **Generated terrain** (the default) fills it to match the surroundings, and one Undo takes back both the move and the fill; **Plain ground** leaves it empty. Either way the gap is unlocked, so Generate or Regenerate area can change it later.
 
@@ -311,7 +312,7 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 
 - **Routes only.** Generate works for routes. Towns, forests and caves arrive in Milestone 5, and until then those map types stay blank.
 - **No stroke tools yet.** Painting is still the square-brush pencil. Stroke tools (paths, streams, tree walls…), zones and the variations grid come in the next parts of Milestone 3.
-- **Rectangle selections only.** There's no freehand lasso yet.
+- **Regenerated gaps are often forest.** Away from the path, the generator mostly grows trees, so a gap filled with generated terrain may come back as forest. Use Fill with… or the pencil if you want open ground there.
 - **Moving across elevation** isn't smoothed: an area moved onto raised ground keeps its own elevation, so check the Elevation view (and the Check tab) afterwards.
 - **Basic entities only.** Generate places trainers, items, hidden items, Cut trees, Rock Smash rocks and a sign. Their field values are suggestions to check in Porymap. Other kinds, editing entities, and encounter tables come in Milestone 4.
 - **No intentional unavoidable trainers.** Generated trainers can always be avoided. Marking an unavoidable battle as intended comes with the properties panel in Milestone 4.

@@ -7,8 +7,9 @@
 // large maps (e.g. 40×170) smooth on an iPad.
 
 import { SCREEN_HEIGHT_METATILES, SCREEN_WIDTH_METATILES, PLAYER_SCREEN_X, PLAYER_SCREEN_Y } from "../core/constants";
-import type { CellRect, MapBlueprint } from "../core/model";
-import type { Clip } from "../core/selection";
+import type { MapBlueprint } from "../core/model";
+import type { Area, Clip } from "../core/selection";
+import { inArea } from "../core/selection";
 import { TERRAIN_TYPES, getPalette } from "../core/terrain";
 import { PORYMAP_BLOCKED_TEXT, PORYMAP_ELEVATION_COLORS, PORYMAP_PASSABLE_TEXT, cellElevationValue, hexDigit, isImpassable } from "../core/porymap";
 import { trainerSight } from "../core/entities";
@@ -82,8 +83,10 @@ export class MapRenderer {
   elevationOpacity = DEFAULT_PREFS.elevationOpacity;
   /** Width of the outline drawn around the hovered cell: the brush size when painting, else 1. */
   brush = 1;
-  /** The Select tool's rectangle. */
-  selection: CellRect | null = null;
+  /** The selected area (a rectangle, or a lasso shape). */
+  selection: Area | null = null;
+  /** The line being drawn with the Lasso. */
+  lassoPoints: Array<[number, number]> | null = null;
   /** An area being moved or pasted, drawn where it would land. */
   floating: { clip: Clip; x: number; y: number } | null = null;
   /** ID of the thing picked with the Things tool. */
@@ -394,15 +397,31 @@ export class MapRenderer {
     }
 
     // An area being moved or pasted: its cells and things where they'd land.
-    const dashed = (r: CellRect) => {
-      const args = [offsetX + r.x * scale + 0.5, offsetY + r.y * scale + 0.5, r.w * scale - 1, r.h * scale - 1] as const;
+    // An outline round an area: black under white dashes, so it shows on any colour.
+    // A lasso shape is outlined along every edge between a selected and an unselected cell.
+    const dashed = (a: Area) => {
+      ctx.beginPath();
+      if (!a.mask) {
+        ctx.rect(offsetX + a.x * scale + 0.5, offsetY + a.y * scale + 0.5, a.w * scale - 1, a.h * scale - 1);
+      } else {
+        for (let y = a.y; y < a.y + a.h; y++)
+          for (let x = a.x; x < a.x + a.w; x++) {
+            if (!inArea(a, x, y)) continue;
+            const sx = offsetX + x * scale;
+            const sy = offsetY + y * scale;
+            if (!inArea(a, x, y - 1)) (ctx.moveTo(sx, sy), ctx.lineTo(sx + scale, sy));
+            if (!inArea(a, x, y + 1)) (ctx.moveTo(sx, sy + scale), ctx.lineTo(sx + scale, sy + scale));
+            if (!inArea(a, x - 1, y)) (ctx.moveTo(sx, sy), ctx.lineTo(sx, sy + scale));
+            if (!inArea(a, x + 1, y)) (ctx.moveTo(sx + scale, sy), ctx.lineTo(sx + scale, sy + scale));
+          }
+      }
       ctx.lineWidth = 2;
       ctx.setLineDash([]);
       ctx.strokeStyle = "rgba(0,0,0,0.85)";
-      ctx.strokeRect(...args);
+      ctx.stroke();
       ctx.setLineDash([6, 4]);
       ctx.strokeStyle = "#ffffff";
-      ctx.strokeRect(...args);
+      ctx.stroke();
       ctx.setLineDash([]);
     };
     if (this.floating) {
@@ -410,13 +429,27 @@ export class MapRenderer {
       ctx.globalAlpha = 0.9;
       for (let cy = 0; cy < clip.h; cy++)
         for (let cx = 0; cx < clip.w; cx++) {
+          if (clip.mask && !clip.mask[cy * clip.w + cx]) continue;
           ctx.fillStyle = this.colors[clip.terrain[cy * clip.w + cx]] ?? "#ff00ff";
           ctx.fillRect(offsetX + (x + cx) * scale, offsetY + (y + cy) * scale, scale, scale);
         }
       ctx.globalAlpha = 1;
       for (const e of clip.entities) marker(x + e.x, y + e.y, ENTITY_COLORS[e.kind], e.id);
-      dashed({ x, y, w: clip.w, h: clip.h });
+      dashed({ x, y, w: clip.w, h: clip.h, mask: clip.mask });
     } else if (this.selection) dashed(this.selection);
+
+    // The lasso line being drawn.
+    if (this.lassoPoints && this.lassoPoints.length > 1) {
+      ctx.beginPath();
+      this.lassoPoints.forEach(([px, py], k) => (k ? ctx.lineTo(offsetX + px * scale, offsetY + py * scale) : ctx.moveTo(offsetX + px * scale, offsetY + py * scale)));
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(0,0,0,0.85)";
+      ctx.stroke();
+      ctx.setLineDash([6, 4]);
+      ctx.strokeStyle = "#ffd666";
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
     // Validation markers.
     if (this.overlays.issues) {

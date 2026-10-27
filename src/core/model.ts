@@ -199,15 +199,20 @@ export interface CellRect {
 /**
  * A selection action. move: the area moved to (toX, toY). paste: a copied area put
  * down at (toX, toY) ("area" is where it was copied from). delete: the area cleared to
- * plain ground. regenerate: the area made again by the generator. The cells
+ * plain ground. regenerate: the area made again by the generator. fill, elevation,
+ * lock, unlock: every cell set to one terrain or elevation, or locked/unlocked. The cells
  * themselves are in the map's layers; this is the record of what was done.
  */
 export interface AreaEdit {
   type: "area";
-  action: "move" | "paste" | "delete" | "regenerate";
+  action: "move" | "paste" | "delete" | "regenerate" | "fill" | "elevation" | "lock" | "unlock";
   area: CellRect;
+  /** For a lasso shape: the selected cells, as a flat [x0, y0, x1, y1, …] list. Absent = the whole rectangle. */
+  cells?: number[];
   toX: number | null;
   toY: number | null;
+  /** fill: the terrain id; elevation: the level name. */
+  value?: string;
 }
 /** A change to one thing on the map, made with the Things tool. */
 export interface EntityEdit {

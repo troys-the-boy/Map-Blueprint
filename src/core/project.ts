@@ -284,11 +284,13 @@ const lockEditCheck = object({
 
 const areaEditCheck = object({
   type: literal("area"),
-  action: oneOf(["move", "paste", "delete", "regenerate"] as const),
+  action: oneOf(["move", "paste", "delete", "regenerate", "fill", "elevation", "lock", "unlock"] as const),
   area: object({ x: coord, y: coord, w: num(1, FILE_LIMITS.maxMapSide), h: num(1, FILE_LIMITS.maxMapSide) }),
+  cells: intArray(0, FILE_LIMITS.maxMapSide - 1, FILE_LIMITS.maxCellsPerEdit),
   toX: nullable(coord),
   toY: nullable(coord),
-});
+  value: str(64),
+}, ["cells", "value"]);
 
 const entityEditCheck = object({
   type: literal("entity"),
@@ -524,6 +526,12 @@ function loadMap(saved: ReturnType<typeof savedMapCheck>, path: string): MapBlue
     if (e.type === "area") {
       if (e.area.x + e.area.w > width || e.area.y + e.area.h > height) throw new FileFormatError(`${path}.edits[${i}].area`, "the area runs past the edge of the map");
       if (e.toX !== null) inside(e.toX, e.toY ?? 0, `${path}.edits[${i}]`);
+      if (e.cells) {
+        if (e.cells.length % 2 !== 0) throw new FileFormatError(`${path}.edits[${i}].cells`, "expected pairs of x, y numbers");
+        for (let k = 0; k < e.cells.length; k += 2) inside(e.cells[k], e.cells[k + 1], `${path}.edits[${i}].cells`);
+      }
+      if (e.action === "fill" && (e.value === undefined || terrainIndex(e.value) < 0)) throw new FileFormatError(`${path}.edits[${i}].value`, `unknown terrain type "${e.value}"`);
+      if (e.action === "elevation" && !ELEVATION_LEVELS.includes(e.value as (typeof ELEVATION_LEVELS)[number])) throw new FileFormatError(`${path}.edits[${i}].value`, `unknown elevation level "${e.value}"`);
       return;
     }
     if (e.type === "entity") return inside(e.x, e.y, `${path}.edits[${i}]`);

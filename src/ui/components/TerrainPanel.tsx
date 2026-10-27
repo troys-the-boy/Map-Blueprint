@@ -32,7 +32,7 @@ const PASSABILITY_TEXT: Record<string, string> = {
 };
 
 /** Plain names for the elevation levels, shown beside their Porymap numbers. */
-const LEVEL_LABELS: Record<string, string> = {
+export const LEVEL_LABELS: Record<string, string> = {
   water: "Water (Surf)",
   ground: "Ground",
   raised1: "Raised",

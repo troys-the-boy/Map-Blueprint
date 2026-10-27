@@ -8,7 +8,7 @@ import type { Edit } from "../src/core/model";
 import { addNewMap, newRegion } from "../src/core/model";
 import { emptyDiff, paintLock, replayStroke } from "../src/core/paint";
 import { CURRENT_SCHEMA_VERSION, parseProject, serializeProject } from "../src/core/project";
-import { clearArea, copyArea, moveArea, pasteClip, rectFromCorners } from "../src/core/selection";
+import { clearArea, copyArea, inArea, lassoArea, moveArea, pasteClip, rectFromCorners } from "../src/core/selection";
 import { entityAt, facingOf, newThing, nextEntityId, setSight, sightOf, turnClockwise } from "../src/core/things";
 import { trainerSight } from "../src/core/entities";
 
@@ -188,5 +188,55 @@ describe("file format v5", () => {
     const { region } = blank();
     const v4 = serializeProject(region, "test").replace('"schemaVersion": 5', '"schemaVersion": 4');
     expect(parseProject(v4).maps).toHaveLength(1);
+  });
+});
+
+describe("lasso selections", () => {
+  it("select the cells inside the drawn line, plus the line itself", () => {
+    const { map } = blank(12, 12);
+    // A diamond around (5, 5).
+    const area = lassoArea(map, [[5.5, 1.5], [9.5, 5.5], [5.5, 9.5], [1.5, 5.5]])!;
+    expect(area).toMatchObject({ x: 1, y: 1, w: 9, h: 9 });
+    expect(inArea(area, 5, 5)).toBe(true);
+    expect(inArea(area, 5, 1)).toBe(true);
+    expect(inArea(area, 1, 1)).toBe(false);
+    expect(inArea(area, 9, 9)).toBe(false);
+  });
+
+  it("moving a shape only touches its own cells, and leaves the corners of its rectangle alone", () => {
+    const { map } = blank(12, 12);
+    map.layers.terrain.data.fill(T.tree);
+    map.layers.terrain.data[2 * 12 + 2] = T.waterDeep; // a corner, outside the shape
+    const area = lassoArea(map, [[3.5, 0.5], [6.5, 3.5], [3.5, 6.5], [0.5, 3.5]])!;
+    expect(inArea(area, 0, 0)).toBe(false);
+    moveArea(map, area, 5, 5);
+    // A corner of the rectangle that wasn't selected keeps its terrain and stays unlocked.
+    expect(map.layers.terrain.data[0]).toBe(T.tree);
+    expect(map.layers.locks.data[0]).toBe(0);
+    // The centre of the shape was cleared, and its copy landed at the new place.
+    expect(map.layers.terrain.data[3 * 12 + 3]).toBe(T.ground);
+    expect(map.layers.locks.data[(5 + 3) * 12 + 5 + 3]).toBe(1);
+  });
+
+  it("regenerating a shape changes nothing outside it", () => {
+    const { map } = blank(30, 60);
+    applyResult(map, generateRoute(map));
+    const before = map.layers.terrain.data.slice();
+    const area = lassoArea(map, [[15, 20], [27, 30], [15, 40], [3, 30]])!;
+    applyAreaResult(map, area, generateRoute(areaInput(map, area, 4242)));
+    for (let i = 0; i < before.length; i++) if (!inArea(area, i % 30, Math.floor(i / 30))) expect(map.layers.terrain.data[i]).toBe(before[i]);
+  });
+
+  it("area edits with a shape and a fill value save and open", () => {
+    const { region, map } = blank();
+    const edits: Edit[] = [
+      { type: "area", action: "fill", area: { x: 0, y: 0, w: 2, h: 2 }, cells: [0, 0, 1, 1], toX: null, toY: null, value: "tree" },
+      { type: "area", action: "elevation", area: { x: 0, y: 0, w: 1, h: 1 }, toX: null, toY: null, value: "raised2" },
+      { type: "area", action: "unlock", area: { x: 0, y: 0, w: 3, h: 3 }, toX: null, toY: null },
+    ];
+    map.edits.push(...edits);
+    expect(parseProject(serializeProject(region, "test")).maps[0].edits).toEqual(edits);
+    map.edits.push({ type: "area", action: "fill", area: { x: 0, y: 0, w: 1, h: 1 }, toX: null, toY: null, value: "lava" });
+    expect(() => parseProject(serializeProject(region, "test"))).toThrow(/lava/);
   });
 });

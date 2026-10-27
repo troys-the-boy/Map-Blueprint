@@ -204,7 +204,7 @@ function useKeyboardShortcuts(openNewMap: () => void) {
       if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT") return;
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
-      const selecting = store.tool === "select";
+      const selecting = store.selecting;
       const centre = () => {
         const r = canvasRef.renderer;
         return r ? r.cellAt(r.size.width / 2, r.size.height / 2) : null;
@@ -225,8 +225,10 @@ function useKeyboardShortcuts(openNewMap: () => void) {
       else if (key === "e") store.setTool("erase");
       else if (key === "l") store.setTool("elevation");
       else if (key === "v") store.setTool("select");
+      else if (key === "q") store.setTool("lasso");
+      else if (key === "u") store.setLockMode("unlock");
       else if (key === "t") store.setTool("things");
-      else if (key === "k") store.setTool("lock");
+      else if (key === "k") store.setLockMode("lock");
       else if (key === "h") store.setTool("pan");
       else if (key === "i") store.setTool("pick");
       else if (key === "n") openNewMap();

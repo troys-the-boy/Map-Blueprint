@@ -7,6 +7,9 @@ import { Icon } from "./icons";
 import { canvasRef } from "./MapCanvas";
 import { THING_LABELS, MAX_SIGHT, facingOf, sightOf } from "../../core/things";
 import type { Direction } from "../../core/terrain";
+import { ELEVATION_LEVELS, TERRAIN_TYPES } from "../../core/terrain";
+import { LEVEL_VALUE, hexDigit } from "../../core/porymap";
+import { LEVEL_LABELS } from "./TerrainPanel";
 
 const FACINGS: Array<{ dir: Direction | "all"; label: string; tip: string }> = [
   { dir: "n", label: "↑", tip: "Face up (north)" },
@@ -25,7 +28,7 @@ function viewCentre(): [number, number] | null {
 
 export function EditBar() {
   const s = useStore();
-  if (s.tool === "select") return <SelectBar />;
+  if (s.selecting) return <SelectBar />;
   if (s.tool === "things" && s.selectedEntity) return <ThingBar />;
   return null;
 }
@@ -48,7 +51,7 @@ function SelectBar() {
   }
   return (
     <div className="edit-bar" role="toolbar" aria-label="Selection">
-      <span className="edit-bar-label">{sel ? `${sel.w}×${sel.h} at ${sel.x}, ${sel.y}` : "Drag to select an area"}</span>
+      <span className="edit-bar-label">{sel ? (sel.mask ? `Shape, ${sel.mask.reduce((a, b) => a + b, 0)} cells` : `${sel.w}×${sel.h} at ${sel.x}, ${sel.y}`) : s.tool === "lasso" ? "Draw round an area" : "Drag to select an area"}</span>
       <button className="icon-button" title="Copy (Ctrl+C)" aria-label="Copy" disabled={!sel} onClick={() => s.copySelection()}>
         <Icon name="copy" />
       </button>
@@ -61,6 +64,42 @@ function SelectBar() {
       <button className="icon-button" title="Clear the area and remove the things in it; it is filled as chosen under Gaps (Delete)" aria-label="Delete" disabled={!sel} onClick={() => s.deleteSelection()}>
         <Icon name="trash" />
       </button>
+      <span className="edit-bar-group" role="group" aria-label="Change the selection">
+        <select
+          value=""
+          disabled={!sel}
+          title="Fill every selected cell with one terrain, like a paint bucket. The cells are locked if Lock what I paint is on."
+          aria-label="Fill the selection with a terrain"
+          onChange={(e) => e.target.value !== "" && s.changeSelection({ fill: Number(e.target.value) })}
+        >
+          <option value="">Fill with…</option>
+          {TERRAIN_TYPES.map((t, i) => (
+            <option key={t.id} value={i}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value=""
+          disabled={!sel}
+          title="Set the elevation of every selected cell (the number you'll set in Porymap). Terrain stays as it is."
+          aria-label="Set the elevation of the selection"
+          onChange={(e) => e.target.value !== "" && s.changeSelection({ elevation: Number(e.target.value) })}
+        >
+          <option value="">Elevation…</option>
+          {ELEVATION_LEVELS.map((level, i) => (
+            <option key={level} value={i}>
+              {hexDigit(LEVEL_VALUE[i])} · {LEVEL_LABELS[level]}
+            </option>
+          ))}
+        </select>
+        <button className="icon-button" title="Lock every selected cell, so Generate keeps it" aria-label="Lock the selection" disabled={!sel} onClick={() => s.changeSelection({ lock: true })}>
+          <Icon name="lock" />
+        </button>
+        <button className="icon-button" title="Unlock every selected cell, so Generate can change it" aria-label="Unlock the selection" disabled={!sel} onClick={() => s.changeSelection({ lock: false })}>
+          <Icon name="unlock" />
+        </button>
+      </span>
       <label className="edit-bar-group" title="What fills the gap a move, cut or delete leaves behind. Generated terrain matches the surroundings (Undo once goes back to before the move); plain ground stays empty and unlocked, so you can regenerate it later.">
         <span className="edit-bar-value">Gaps:</span>
         <select value={s.prefs.gapFill} onChange={(e) => s.setGapFill(e.target.value as "ground" | "regenerate")} aria-label="Fill the gap left behind with">

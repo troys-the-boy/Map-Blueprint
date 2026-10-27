@@ -219,11 +219,14 @@ Edits are user actions, recorded in order. Strokes (`stroke`, `elevation`, `lock
   "cells": [x0, y0, …] }             // lock brush: locks or unlocks; terrain and elevation unchanged
 { "type": "area", "action": "move", "area": { "x": 2, "y": 10, "w": 5, "h": 4 },
   "toX": 9, "toY": 20 }              // action: move | paste (area = where it was copied from) | delete | regenerate
+                                     //   | fill | elevation | lock | unlock
+{ "type": "area", "action": "fill", "area": { "x": 0, "y": 0, "w": 2, "h": 2 },
+  "cells": [0, 0, 1, 1], "toX": null, "toY": null, "value": "tree" }
 { "type": "entity", "action": "turn", "id": "T4", "kind": "trainer",
   "x": 5, "y": 15 }                  // action: place | move | turn | sight | delete; x, y = where it ends up
 ```
 
-`toX`/`toY` are `null` for delete and regenerate. A move or delete leaves plain, unlocked ground behind; when the app fills that gap with generated terrain, a `regenerate` edit for the same area follows.
+`cells` (optional) lists the exact cells of a lasso shape, as `[x0, y0, x1, y1, …]`; without it the whole rectangle `area` was used. `value` (optional) is the terrain id for `fill` or the elevation level for `elevation`. `toX`/`toY` are `null` except for move and paste. A move or delete leaves plain, unlocked ground behind; when the app fills that gap with generated terrain, a `regenerate` edit for the same area follows.
 
 Replaying the strokes in order on a fresh map gives exactly the same cells.
 
