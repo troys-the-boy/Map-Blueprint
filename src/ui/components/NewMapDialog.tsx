@@ -6,6 +6,7 @@ import type { Biome, MapType } from "../../core/model";
 import { MAX_SEED } from "../../core/rng";
 import { SIZE_PRESETS, checkMapSize, describeSizeCheck } from "../../core/sizeRule";
 import { useStore } from "../store";
+import { NumberField } from "./NumberField";
 
 const TYPE_LABELS: Record<MapType, string> = {
   route: "Route",
@@ -104,12 +105,12 @@ export function NewMapDialog({ onClose }: { onClose: () => void }) {
           <div className="field-row">
             <label className="field" title="Width in metatiles (16×16 px cells).">
               <span>Width</span>
-              <input type="number" inputMode="numeric" min={1} max={512} value={width} onChange={(e) => setWidth(Math.floor(Number(e.target.value) || 0))} />
+              <NumberField min={1} max={512} value={width} onChange={setWidth} />
             </label>
             <span className="times">×</span>
             <label className="field" title="Height in metatiles (16×16 px cells).">
               <span>Height</span>
-              <input type="number" inputMode="numeric" min={1} max={512} value={height} onChange={(e) => setHeight(Math.floor(Number(e.target.value) || 0))} />
+              <NumberField min={1} max={512} value={height} onChange={setHeight} />
             </label>
           </div>
           <div className={`budget ${size.ok ? "" : "over"}`} title="pokeemerald needs (width + 15) × (height + 14) to be at most 10,240 for a map to load.">
@@ -134,14 +135,7 @@ export function NewMapDialog({ onClose }: { onClose: () => void }) {
           <div className="field-row">
             <label className="field grow" title="The seed decides every random choice. The same seed always gives the same map.">
               <span>Seed</span>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                max={MAX_SEED}
-                value={seed}
-                onChange={(e) => setSeed(Math.max(0, Math.min(MAX_SEED, Math.floor(Number(e.target.value) || 0))))}
-              />
+              <NumberField min={0} max={MAX_SEED} value={seed} onChange={setSeed} />
             </label>
             <button type="button" className="secondary" title="Pick a new random seed" onClick={() => setSeed(randomSeed())}>
               Reroll

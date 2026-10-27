@@ -10,6 +10,7 @@ import { BIOMES, EDGES } from "../../core/model";
 import type { Biome, Edge, Opening } from "../../core/model";
 import { MAX_SEED } from "../../core/rng";
 import { useStore } from "../store";
+import { NumberField } from "./NumberField";
 
 const BIOME_LABELS: Record<Biome, string> = {
   temperate_rainforest: "Temperate rainforest",
@@ -54,7 +55,7 @@ export function GeneratePanel() {
     return (
       <label className="field inline" title={tip}>
         <span>{label}</span>
-        <input type="number" inputMode="numeric" min={min} max={max} value={value} onChange={(e) => set({ [key]: Math.min(max, Math.max(min, Math.round(Number(e.target.value) || 0))) })} />
+        <NumberField min={min} max={max} value={value} onChange={(v) => set({ [key]: v })} />
       </label>
     );
   };
@@ -80,7 +81,7 @@ export function GeneratePanel() {
         <div className="field-row">
           <label className="field grow" title="The seed decides every random choice. Same seed + same settings = the same map.">
             <span>Seed</span>
-            <input type="number" inputMode="numeric" min={0} max={MAX_SEED} value={map.seed} onChange={(e) => s.setSeed(Math.max(0, Math.min(MAX_SEED, Math.floor(Number(e.target.value) || 0))))} />
+            <NumberField min={0} max={MAX_SEED} value={map.seed} onChange={(v) => s.setSeed(v)} />
           </label>
           <button
             className="secondary"
@@ -133,11 +134,11 @@ export function GeneratePanel() {
             </select>
             <label title={`First cell along the edge (${o.edge === "north" || o.edge === "south" ? "x" : "y"})`}>
               at
-              <input type="number" inputMode="numeric" min={0} max={edgeLength(o.edge) - o.width} value={o.start} onChange={(e) => setOpening(k, { start: Math.max(0, Math.min(edgeLength(o.edge) - o.width, Math.round(Number(e.target.value) || 0))) })} />
+              <NumberField min={0} max={edgeLength(o.edge) - o.width} value={o.start} onChange={(v) => setOpening(k, { start: v })} />
             </label>
             <label title="How many cells wide">
               wide
-              <input type="number" inputMode="numeric" min={1} max={8} value={o.width} onChange={(e) => setOpening(k, { width: Math.max(1, Math.min(8, edgeLength(o.edge) - o.start, Math.round(Number(e.target.value) || 1))) })} />
+              <NumberField min={1} max={Math.min(8, edgeLength(o.edge) - o.start)} value={o.width} onChange={(v) => setOpening(k, { width: v })} />
             </label>
             <button className="icon-button" title="Remove this entrance" aria-label="Remove entrance" onClick={() => s.setOpenings(map.openings.filter((_, i) => i !== k))}>
               ✕
