@@ -1,14 +1,15 @@
-// The right-hand panel with tabs: Paint (terrain + overlays), Zones, Generate, Check.
+// The right-hand panel with tabs: Paint (terrain + overlays), Zones, Generate, Properties, Check.
 // On narrow screens it slides in as a drawer.
 
 import { CheckPanel } from "./CheckPanel";
 import { GeneratePanel } from "./GeneratePanel";
+import { PropertiesPanel } from "./PropertiesPanel";
 import { TerrainPanel } from "./TerrainPanel";
 import { ZonesPanel } from "./ZonesPanel";
 import { Icon } from "./icons";
 import { useStore } from "../store";
 
-export type SideTab = "terrain" | "zones" | "generate" | "check";
+export type SideTab = "terrain" | "zones" | "generate" | "props" | "check";
 
 export function SidePanel({ tab, onTab, onClose }: { tab: SideTab; onTab: (t: SideTab) => void; onClose?: () => void }) {
   const s = useStore();
@@ -18,6 +19,7 @@ export function SidePanel({ tab, onTab, onClose }: { tab: SideTab; onTab: (t: Si
     { id: "terrain", label: "Paint", tip: "Terrain to paint with, and what to show on the map" },
     { id: "zones", label: "Zones", tip: "Plan areas before generating: biomes, water, edges, keep-clear ground" },
     { id: "generate", label: "Generate", tip: "Generate this map from a seed and settings" },
+    { id: "props", label: "Details", tip: "Porymap fields of the picked thing, and the map's header, layout and connections" },
     { id: "check", label: "Check", tip: "Problems found on this map" },
   ];
   return (
@@ -40,6 +42,7 @@ export function SidePanel({ tab, onTab, onClose }: { tab: SideTab; onTab: (t: Si
       {tab === "terrain" && <TerrainPanel onPicked={onClose} />}
       {tab === "zones" && <ZonesPanel />}
       {tab === "generate" && <GeneratePanel />}
+      {tab === "props" && <PropertiesPanel />}
       {tab === "check" && <CheckPanel />}
     </aside>
   );

@@ -6,7 +6,7 @@
 // the canvas listens for cell changes through onCells().
 
 import { useSyncExternalStore } from "react";
-import type { AreaEdit, Edit, Entity, EntityKind, MapBlueprint, NewMapOptions, Opening, Region, Zone } from "../core/model";
+import type { AreaEdit, Edit, Entity, MapBlueprint, NewMapOptions, Opening, Region, Zone } from "../core/model";
 import type { GenerateResult } from "../core/generate";
 import { applyAreaResult, applyResult, areaInput, canGenerate, wholeMapInput } from "../core/generate";
 import type { Area, Clip } from "../core/selection";
@@ -30,7 +30,8 @@ import {
 import type { Direction } from "../core/terrain";
 import type { Anchor } from "../core/resize";
 import { resizeMap } from "../core/resize";
-import { entityAt, newThing, setFacing, setSight, sightOf, turnClockwise } from "../core/things";
+import { findThing, isWarp, newThing, newWarp, removeThing, setFacing, setSight, sightOf, thingAt, turnClockwise } from "../core/things";
+import type { PlaceKind, Thing } from "../core/things";
 import type { SmartKind } from "../core/strokes";
 import type { ZoneKind } from "../core/zones";
 import { edgeBand, newZone, zoneLabel } from "../core/zones";
@@ -82,9 +83,13 @@ interface MapSnapshot {
   elevation: Uint8Array;
   locks: Uint8Array;
   entities: Entity[];
+  warps: MapBlueprint["warps"];
   openings: Opening[];
   zones: Zone[];
   params: MapBlueprint["params"];
+  header: MapBlueprint["header"];
+  layout: MapBlueprint["layout"];
+  connections: MapBlueprint["connections"];
 }
 
 /** Everything a resize changes, sizes included. */
@@ -112,9 +117,13 @@ function snapshot(map: MapBlueprint): MapSnapshot {
     elevation: map.layers.elevation.data.slice(),
     locks: map.layers.locks.data.slice(),
     entities: structuredClone(map.entities),
+    warps: structuredClone(map.warps),
     openings: structuredClone(map.openings),
     zones: cloneZones(map.layers.zones),
     params: { ...map.params },
+    header: { ...map.header },
+    layout: structuredClone(map.layout),
+    connections: structuredClone(map.connections),
   };
 }
 
@@ -124,9 +133,13 @@ function restore(map: MapBlueprint, snap: MapSnapshot) {
   map.layers.elevation.data.set(snap.elevation);
   map.layers.locks.data.set(snap.locks);
   map.entities = structuredClone(snap.entities);
+  map.warps = structuredClone(snap.warps);
   map.openings = structuredClone(snap.openings);
   map.layers.zones = cloneZones(snap.zones);
   map.params = { ...snap.params };
+  map.header = { ...snap.header };
+  map.layout = structuredClone(snap.layout);
+  map.connections = structuredClone(snap.connections);
 }
 
 interface Stroke {
@@ -170,7 +183,7 @@ class EditorStore {
   /** The smart stroke being drawn: the cells the pointer has passed, [x0, y0, x1, y1, …]. */
   smartPoints: number[] | null = null;
   /** What the Things tool places, or "remove" to take things away. */
-  thingKind: EntityKind | "remove" = "trainer";
+  thingKind: PlaceKind | "remove" = "trainer";
   /** Whether the lock brush locks or unlocks. */
   lockMode: "lock" | "unlock" = "lock";
   /** The selected rectangle (Select tool), if any. */
@@ -262,7 +275,7 @@ class EditorStore {
     this.validateTimer = null;
     const map = this.currentMap;
     this.issues = map
-      ? validateMap(map, { limits: this.region.settings.engineLimits, availableHms: hmsFor(readRouteParams(map.params), map.biome) })
+      ? validateMap(map, { limits: this.region.settings.engineLimits, availableHms: hmsFor(readRouteParams(map.params), map.biome), otherMaps: this.region.maps })
       : [];
     this.changed();
   }
@@ -527,7 +540,7 @@ class EditorStore {
   }
 
   /** Choose what the Things tool places (or "remove"), and switch to it. */
-  setThingKind(kind: EntityKind | "remove") {
+  setThingKind(kind: PlaceKind | "remove") {
     this.thingKind = kind;
     this.setTool("things");
   }
@@ -1220,17 +1233,23 @@ class EditorStore {
     return this.currentMap?.entities.find((e) => e.id === this.selectedThing) ?? null;
   }
 
+  /** The picked thing or warp. */
+  get pickedThing(): Thing | null {
+    const map = this.currentMap;
+    return map && this.selectedThing ? (findThing(map, this.selectedThing) ?? null) : null;
+  }
+
   /** Pointer down with the Things tool: pick up a thing, place a new one, or remove one. */
   thingsDown(x: number, y: number) {
     const map = this.currentMap;
     if (!map || x < 0 || y < 0 || x >= map.width || y >= map.height) return;
-    const hit = entityAt(map, x, y);
+    const hit = thingAt(map, x, y);
     if (this.thingKind === "remove") {
       if (!hit) return;
       const before = snapshot(map);
-      map.entities = map.entities.filter((e) => e !== hit);
+      removeThing(map, hit);
       if (this.selectedThing === hit.id) this.selectedThing = null;
-      this.finishThing(map, before, { type: "entity", action: "delete", id: hit.id, kind: hit.kind, x, y });
+      this.finishThing(map, before, { type: "entity", action: "delete", id: hit.id, kind: isWarp(hit) ? "warp" : hit.kind, x, y });
       return;
     }
     if (hit) {
@@ -1240,6 +1259,15 @@ class EditorStore {
       return;
     }
     const before = snapshot(map);
+    if (this.thingKind === "warp") {
+      // Generate always keeps warps. Their cell isn't locked, so Generate can make it
+      // path or a cave entrance; lock it yourself to keep a door you painted on a building.
+      const w = newWarp(map, x, y);
+      map.warps.push(w);
+      this.selectedThing = w.id;
+      this.finishThing(map, before, { type: "entity", action: "place", id: w.id, kind: "warp", x, y });
+      return;
+    }
     const e = newThing(map, this.thingKind, x, y);
     map.entities.push(e);
     map.layers.locks.data[y * map.width + x] = 1;
@@ -1252,8 +1280,8 @@ class EditorStore {
     const map = this.currentMap;
     const d = this.thingDrag;
     if (!map || !d) return;
-    const e = map.entities.find((k) => k.id === d.id);
-    if (!e || x < 0 || y < 0 || x >= map.width || y >= map.height || (e.x === x && e.y === y) || entityAt(map, x, y)) return;
+    const e = findThing(map, d.id);
+    if (!e || x < 0 || y < 0 || x >= map.width || y >= map.height || (e.x === x && e.y === y) || thingAt(map, x, y)) return;
     e.x = x;
     e.y = y;
     d.moved = true;
@@ -1266,14 +1294,16 @@ class EditorStore {
     const d = this.thingDrag;
     this.thingDrag = null;
     if (!map || !d) return;
-    const e = map.entities.find((k) => k.id === d.id);
+    const e = findThing(map, d.id);
     if (!e) return;
     if (d.moved) {
-      e.locked = true;
       e.elevation = ELEVATION_LEVELS[map.layers.elevation.data[e.y * map.width + e.x]];
-      map.layers.locks.data[e.y * map.width + e.x] = 1;
-      this.finishThing(map, d.before, { type: "entity", action: "move", id: e.id, kind: e.kind, x: e.x, y: e.y });
-    } else if (d.wasSelected && e.kind === "trainer") {
+      if (!isWarp(e)) {
+        e.locked = true;
+        map.layers.locks.data[e.y * map.width + e.x] = 1;
+      }
+      this.finishThing(map, d.before, { type: "entity", action: "move", id: e.id, kind: isWarp(e) ? "warp" : e.kind, x: e.x, y: e.y });
+    } else if (d.wasSelected && !isWarp(e) && e.kind === "trainer") {
       turnClockwise(e);
       e.locked = true;
       this.finishThing(map, d.before, { type: "entity", action: "turn", id: e.id, kind: e.kind, x: e.x, y: e.y });
@@ -1315,12 +1345,58 @@ class EditorStore {
 
   deleteThing() {
     const map = this.currentMap;
-    const e = this.selectedEntity;
+    const e = this.pickedThing;
     if (!map || !e) return;
     const before = snapshot(map);
-    map.entities = map.entities.filter((k) => k !== e);
+    removeThing(map, e);
     this.selectedThing = null;
-    this.finishThing(map, before, { type: "entity", action: "delete", id: e.id, kind: e.kind, x: e.x, y: e.y });
+    this.finishThing(map, before, { type: "entity", action: "delete", id: e.id, kind: isWarp(e) ? "warp" : e.kind, x: e.x, y: e.y });
+  }
+
+  /**
+   * Change the picked thing's details in the Details tab. Typing in one field
+   * makes one undo step. Generate keeps an edited thing where it is.
+   */
+  editThing(field: string, change: (t: Thing) => void) {
+    const map = this.currentMap;
+    const t = this.pickedThing;
+    if (!map || !t) return;
+    const before = snapshot(map);
+    change(t);
+    if (!isWarp(t)) t.locked = true;
+    this.propertyStep(map, before, "thing:" + t.id + ":" + field);
+  }
+
+  /** Change the map's header, layout or connections in the Details tab (one undo step per field). */
+  editMap(field: string, change: (map: MapBlueprint) => void) {
+    const map = this.currentMap;
+    if (!map) return;
+    const before = snapshot(map);
+    change(map);
+    this.propertyStep(map, before, "map:" + field);
+  }
+
+  /** Mark a check warning about a thing as OK (it's on purpose), or take that back. */
+  acceptWarning(id: string, code: string, ok: boolean) {
+    const map = this.currentMap;
+    const e = map?.entities.find((k) => k.id === id);
+    if (!map || !e) return;
+    const before = snapshot(map);
+    const list = (e.accepted ?? []).filter((c) => c !== code);
+    if (ok) list.push(code);
+    if (list.length) e.accepted = list;
+    else delete e.accepted;
+    this.propertyStep(map, before);
+  }
+
+  private propertyStep(map: MapBlueprint, before: MapSnapshot, tag?: string) {
+    const undo = this.undoStacks.get(map.id);
+    const prev = undo?.[undo.length - 1];
+    const join = !!tag && prev?.type === "snapshot" && prev.tag === tag;
+    this.pushUndo({ type: "snapshot", mapId: map.id, before, after: snapshot(map), tag }, join);
+    this.markDirty();
+    this.changed();
+    this.cellsChanged(map.id, []);
   }
 
   private finishThing(map: MapBlueprint, before: MapSnapshot, edit: Edit & { type: "entity" }) {

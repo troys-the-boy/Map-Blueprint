@@ -4,7 +4,7 @@ This document defines the tool's file formats. The terrain vocabulary and the ti
 
 | File | Identifier (`format`) | Version field | Current |
 | --- | --- | --- | --- |
-| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 6 |
+| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 7 |
 | Terrain vocabulary (`profiles/terrain.json`) | `gen3-terrain-vocabulary` | `formatVersion` | 1 |
 | Terrain palette (`profiles/palettes/*.json`) | `gen3-terrain-palette` | `formatVersion` | 1 |
 | Tileset profile (`profiles/tilesets/*.json`) | `gen3-tileset-profile` | `formatVersion` | 1 (draft) |
@@ -32,6 +32,7 @@ When the format changes, `schemaVersion` goes up and a migration in `src/core/pr
 | 4 | 2 (second revision) | New terrain types `snow`, `snow_grass`, `ice`, `snowdrift`; elevation levels `raised3`, `raised4`; elevation-brush edits (`"type": "elevation"`). Version-3 files need no changes. |
 | 5 | 3 (part A) | Entities may have `"locked": true` (placed or moved by hand; Generate keeps them). New edit types `lock`, `area` and `entity`. Version-4 files need no changes. |
 | 6 | 3 (part B) | New edit type `smart` (smart strokes). Version-5 files need no changes. |
+| 7 | 4 (part B) | Entities may have `"accepted"` (warnings marked OK). Entity edits may have `"kind": "warp"`. New kinds placed by hand (berry tree, trigger, secret base, heal location, warp). Version-6 files need no changes. |
 
 ```jsonc
 {
@@ -141,6 +142,22 @@ Vanilla Emerald's map.json has **no** `floor_number`. That field comes from poke
 
 `locked` (optional, from version 5) is `true` for a thing placed, moved or turned by hand. Generate keeps locked things where they are and gives generated things IDs that don't clash with them. Left out = `false`.
 
+`accepted` (optional, from version 7) lists check warnings the user marked OK for this thing, by code. Only `"unavoidable-trainer"` is used so far. Left out = none.
+
+Field names follow pokeemerald's `map.json` (checked against Route104, Route111 and Route119). Fields per kind placed by hand:
+
+| Kind | Fields |
+| --- | --- |
+| `trainer`, `npc` | `graphics_id`, `movement_type`, `movement_range_x`, `movement_range_y`, `trainer_type`, `trainer_sight_or_berry_tree_id`, `script`, `flag` |
+| `berry_tree` | as above, with `MOVEMENT_TYPE_BERRY_TREE_GROWTH`, `script` `BerryTreeScript`, and the `BERRY_TREE_*` id in `trainer_sight_or_berry_tree_id` |
+| `item_ball` | `graphics_id`, `movement_type`, `script`, `flag`, plus `item` and `tier` (planning notes) |
+| `hidden_item` | `item`, `flag`, `tier` |
+| `sign` | `player_facing_dir`, `script`, `text` (suggested sign text, a planning note) |
+| `trigger` | `type` (`trigger` or `weather`), `var`, `var_value`, `script` (trigger) or `weather` (`COORD_EVENT_WEATHER_*`) |
+| `secret_base` | `secret_base_id` |
+| `heal_location` | `id` (`HEAL_LOCATION_*`), `map`, `note`: these go in `src/data/heal_locations.json`, not `map.json` |
+| `cut_tree`, `smash_rock`, `strength_boulder` | `graphics_id`, `movement_type`, `script`, `flag` |
+
 Warps are kept separately in `warps`, as they are in Porymap.
 
 #### Openings
@@ -240,6 +257,7 @@ Edits are user actions, recorded in order. Strokes (`stroke`, `elevation`, `lock
   "cells": [0, 0, 1, 1], "toX": null, "toY": null, "value": "tree" }
 { "type": "entity", "action": "turn", "id": "T4", "kind": "trainer",
   "x": 5, "y": 15 }                  // action: place | move | turn | sight | delete; x, y = where it ends up
+                                     //   kind is a thing kind, or "warp" (from version 7)
 ```
 
 A smart stroke records what was drawn; replaying it (`applySmartStroke` in `src/core/strokes.ts`) on the same map gives the same cells:

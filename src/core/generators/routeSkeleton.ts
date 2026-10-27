@@ -4,7 +4,8 @@
 // 2. Lay the main path from the first entrance to each other one. The path is a
 //    cheapest route over a noisy cost field, through a few random waypoints, so
 //    the "winding" setting controls how much it wanders.
-// 3. Add side branches that end in dead ends.
+// 3. Lead a path to every warp placed by hand (a door, a cave mouth…).
+// 4. Add side branches that end in dead ends.
 
 import type { Opening } from "../model";
 import { T, cheapestPath, distanceField } from "../grid";
@@ -126,7 +127,36 @@ export function buildRouteSkeleton(ctx: GenContext): void {
     ctx.stamp(c, width, T.path, Role.MainPath, (j) => canPave(ctx, j, c === j));
   });
 
+  connectWarps(ctx, cost);
   buildBranches(ctx, cost, margin);
+}
+
+/**
+ * A path from the main path to each warp. The player walks onto a cave mouth or
+ * ladder, and into a door from the cell in front, so the path runs right up to
+ * the warp's cell. A warp you placed sits on a locked cell, which keeps its
+ * terrain (a building's door, say); in "whole map" mode its cell becomes path,
+ * or a cave entrance for a cave mouth.
+ */
+function connectWarps(ctx: GenContext, cost: (i: number) => number) {
+  const line = ctx.mainLine;
+  if (!line.length) return;
+  for (const w of ctx.input.warps) {
+    if (!ctx.inside(w.x, w.y)) continue;
+    const target = ctx.idx(w.x, w.y);
+    // Start from the nearest point of the path.
+    const from = line.reduce((best, c) => {
+      const [cx, cy] = ctx.xy(c);
+      const [bx, by] = ctx.xy(best);
+      return Math.abs(cx - w.x) + Math.abs(cy - w.y) < Math.abs(bx - w.x) + Math.abs(by - w.y) ? c : best;
+    }, line[0]);
+    // The warp's own cell can always be stepped into, whatever its terrain.
+    const leg = cheapestPath(ctx.width, ctx.height, from, target, (i) => (i === target ? 1 : cost(i)));
+    if (!leg) continue; // Validation reports a warp that can't be reached.
+    for (const c of leg.slice(0, -1)) ctx.stamp(c, ctx.params.pathWidthMin, T.path, Role.Branch, (j) => j !== target && ctx.role[j] !== Role.MainPath && canPave(ctx, j, c === j));
+    ctx.set(target, w.kind === "cave_mouth" ? T.caveEntrance : T.path, Role.Opening);
+    ctx.keepClear.add(target);
+  }
 }
 
 function buildBranches(ctx: GenContext, cost: (i: number) => number, margin: number) {

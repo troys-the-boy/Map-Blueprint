@@ -4,12 +4,11 @@
 import { useStore } from "../store";
 import { ELEVATION_LEVELS, TERRAIN_TYPES, getPalette } from "../../core/terrain";
 import { ELEVATION_VALUES, LEVEL_VALUE, PORYMAP_ELEVATION_COLORS, hexDigit } from "../../core/porymap";
-import { ENTITY_PREFIX } from "../../core/entities";
 import { ENTITY_COLORS } from "../../core/exporters/blueprint";
-import type { EntityKind } from "../../core/model";
 import type { Overlays } from "../prefs";
 import { HEAT_COLORS } from "../renderer";
-import { PLACEABLE_KINDS, THING_LABELS } from "../../core/things";
+import { PLACEABLE_KINDS, THING_LABELS, placePrefix } from "../../core/things";
+import type { PlaceKind } from "../../core/things";
 import { SMART_KINDS, SMART_LABELS, SMART_TERRAIN } from "../../core/strokes";
 import type { SmartKind } from "../../core/strokes";
 import { Icon } from "./icons";
@@ -45,7 +44,7 @@ export const LEVEL_LABELS: Record<string, string> = {
 };
 
 /** Tooltips for the things the Things tool can place. */
-const THING_TIPS: Partial<Record<EntityKind, string>> = {
+const THING_TIPS: Record<PlaceKind, string> = {
   trainer: "Trainer: faces down with a sight line of 3. Tap it again (or use the bar at the top) to turn it.",
   item_ball: "Item ball (a Poké Ball you pick up).",
   hidden_item: "Hidden item (found with the Itemfinder, or by pressing A).",
@@ -54,16 +53,12 @@ const THING_TIPS: Partial<Record<EntityKind, string>> = {
   cut_tree: "Cut tree: blocks the way until the player uses Cut.",
   smash_rock: "Rock: blocks the way until the player uses Rock Smash.",
   strength_boulder: "Boulder: pushed with Strength.",
+  berry_tree: "Berry tree: a patch of soft soil where berries grow.",
+  warp: "Warp: a door, cave mouth, ladder or stairs leading to another map. Set where it goes in the Details tab. Generate leads a path to it.",
+  trigger: "Trigger: an invisible tile that runs a script (or changes the weather) when the player steps on it.",
+  secret_base: "Secret base spot: a tree, bush or cave wall where the player can make a Secret Base.",
+  heal_location: "Heal location: where the player wakes up after a whiteout and lands after Fly (towns with a Pokémon Center).",
 };
-
-/** Things on the map the Things tool can't place yet (Milestone 4), and what their markers mean. */
-const LEGEND: Array<{ kind: EntityKind | "warp"; label: string }> = [
-  { kind: "berry_tree", label: "Berry tree" },
-  { kind: "trigger", label: "Trigger (script tile)" },
-  { kind: "secret_base", label: "Secret base" },
-  { kind: "heal_location", label: "Heal location" },
-  { kind: "warp", label: "Warp (door, cave)" },
-];
 
 const OVERLAYS: Array<{ key: keyof Overlays; label: string; tip: string }> = [
   { key: "grid", label: "Grid", tip: "Cell grid. Lighter lines every 5 cells, brighter every 10." },
@@ -226,7 +221,7 @@ export function TerrainPanel({ onPicked }: { onPicked?: () => void }) {
                 }}
               >
                 <span className="swatch marker" style={{ background: ENTITY_COLORS[kind] }}>
-                  {ENTITY_PREFIX[kind]}
+                  {placePrefix(kind)}
                 </span>
                 <span className="terrain-label">{THING_LABELS[kind]}</span>
               </button>
@@ -248,14 +243,6 @@ export function TerrainPanel({ onPicked }: { onPicked?: () => void }) {
           </button>
         </div>
         <ul className="heat-key legend" aria-label="Other map markers">
-          {LEGEND.map((l) => (
-            <li key={l.kind}>
-              <span className="swatch marker" style={{ background: ENTITY_COLORS[l.kind] }}>
-                {l.kind === "warp" ? "W" : ENTITY_PREFIX[l.kind]}
-              </span>
-              {l.label}
-            </li>
-          ))}
           <li>
             <span className="swatch marker" style={{ background: "rgba(208, 69, 58, 0.45)" }} />
             Trainer can see

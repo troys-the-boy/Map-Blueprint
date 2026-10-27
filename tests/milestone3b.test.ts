@@ -112,11 +112,11 @@ describe("smart strokes", () => {
     expect(Array.from(map.layers.terrain.data)).toEqual(Array.from(before));
   });
 
-  it("smart-stroke edits save and open (file format 6)", () => {
+  it("smart-stroke edits save and open (file format 6 and later)", () => {
     const { region, map } = blank();
     const e = stroke("ledge", [1, 1, 5, 1], 1, "s");
     map.edits.push(e);
-    expect(CURRENT_SCHEMA_VERSION).toBe(6);
+    expect(CURRENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(6);
     expect(parseProject(serializeProject(region, "test")).maps[0].edits).toEqual([e]);
   });
 });

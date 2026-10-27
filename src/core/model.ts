@@ -77,6 +77,8 @@ export interface Entity {
   fields: Record<string, string | number | boolean>;
   /** Placed or moved by hand: Generate keeps it where it is. Absent = false. */
   locked?: boolean;
+  /** Check warnings the user marked OK for this thing (e.g. "unavoidable-trainer"). Absent = none. */
+  accepted?: string[];
 }
 
 export const WARP_KINDS = ["door", "cave_mouth", "ladder", "stairs", "other"] as const;
@@ -219,7 +221,8 @@ export interface EntityEdit {
   type: "entity";
   action: "place" | "move" | "turn" | "sight" | "delete";
   id: string;
-  kind: EntityKind;
+  /** The kind of thing, or "warp". */
+  kind: EntityKind | "warp";
   /** Where it is after the change (where it was, for delete). */
   x: number;
   y: number;

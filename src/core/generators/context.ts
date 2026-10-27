@@ -6,7 +6,7 @@
 
 import type { Rng } from "../rng";
 import { ValueNoise } from "../noise";
-import type { Biome, Entity, Opening, Zone } from "../model";
+import type { Biome, Entity, Opening, Warp, Zone } from "../model";
 import { BIOMES } from "../model";
 import type { Layout, RouteParams } from "./params";
 import type { Travel } from "./travel";
@@ -57,6 +57,8 @@ export interface GenInput {
   elevation: Uint8Array;
   locks: Uint8Array;
   openings: Opening[];
+  /** Warps placed by hand (doors, cave mouths…): the path must lead to each one. */
+  warps: Warp[];
   biome: Biome;
   /** The user's zones (not the generator's own). */
   zones: Zone[];

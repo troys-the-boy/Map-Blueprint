@@ -122,13 +122,21 @@ Then:
 
 Everything moved or pasted is locked, so Generate keeps it.
 
-**Things (Things tool, T).** In the Paint tab under **Things on the map**, pick a trainer, item, hidden item, person, sign, Cut tree, Rock Smash rock or Strength boulder, then tap the map to place it. With the Things tool:
+**Things (Things tool, T).** In the Paint tab under **Things on the map**, pick what to place, then tap the map: a trainer, item, hidden item, person, sign, Cut tree, Rock Smash rock, Strength boulder, berry tree, **warp** (door, cave mouth, ladder or stairs), trigger (a script tile, or one that changes the weather), Secret Base spot, or heal location (Fly spot). With the Things tool:
 
 - **Drag** a thing to move it. A trainer's sight line follows as you drag.
 - **Tap** a thing to pick it. A bar at the top shows its ID. For a trainer, the arrows set which way it faces (✣ = looks around), and − / + change how far it sees. Tapping a picked trainer again turns it a quarter turn.
 - **Remove** a thing with the bin button, the Delete key, or **Remove things** in the Paint tab (then tap things to remove them).
 
-Things you place, move or turn are kept when you Generate, and generated things get IDs that never clash with yours. Their Porymap fields are suggestions for now; the full properties panel comes in Milestone 4.
+Things you place, move, turn or edit are kept when you Generate, and generated things get IDs that never clash with yours.
+
+**Details tab (Milestone 4).** Pick a thing with the Things tool, then open the **Details** tab to see and change every Porymap field: its sprite (graphics_id), movement type, trainer type, sight range, script, flag, item, and so on. The boxes suggest vanilla pokeemerald names as you type, but you can type anything. Each change is one Undo step.
+
+- **Warps:** pick the kind, where it leads (dest_map: one of your maps or any MAP_* name) and which warp it arrives at there (dest_warp_id). Warps are numbered W0, W1… in the order placed, as in Porymap. Generate keeps every warp and leads a path to it; a warp's cell becomes path (or a cave entrance for a cave mouth) unless you locked it, so a door on a building you painted and locked stays as drawn.
+- **Battles you can't avoid:** the Check tab warns when a trainer watches the only way through. If that's on purpose, pick the trainer and tick **This battle can't be avoided, on purpose** in Details; the warning goes away.
+- **With nothing picked**, Details shows the map's own settings: the map.json **header** (map constant, music, map section, weather, map type, bike/escape/running, name popup, battle scene, floor), the **layout** (2×2 border block and tilesets), and **connections** (which map joins each edge, and its offset).
+
+**New checks.** A warp the player can't reach is an error; a warp that doesn't lead anywhere yet is a warning. When a warp leads to another map in this project, that map's warp must lead back to it (an error otherwise).
 
 **What Generate changes** (Generate tab):
 

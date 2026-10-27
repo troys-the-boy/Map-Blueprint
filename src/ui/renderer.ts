@@ -430,7 +430,7 @@ export class MapRenderer {
     map.warps.forEach((w, k) => marker(w.x, w.y, ENTITY_COLORS.warp, `W${k}`));
 
     // The picked thing: a bright ring.
-    const picked = this.selectedThing ? map.entities.find((e) => e.id === this.selectedThing) : null;
+    const picked = this.selectedThing ? (map.entities.find((e) => e.id === this.selectedThing) ?? map.warps.find((w) => w.id === this.selectedThing)) : null;
     if (picked) {
       ctx.strokeStyle = "#ffd666";
       ctx.lineWidth = Math.max(2, scale / 6);

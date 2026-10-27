@@ -237,10 +237,10 @@ legend { color: var(--muted); font-size: 13px; padding: 0 4px; }
 
 /* ---- side panel tabs (Milestone 2) ---- */
 
-.terrain-dock { width: 300px; }
+.terrain-dock { width: 336px; }
 .panel-head { gap: 6px; position: sticky; top: 0; background: var(--panel); z-index: 2; padding-top: 2px; }
-.tabs { display: flex; gap: 2px; flex: 1; }
-.tab { flex: 1; padding: 0 6px; font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; border-radius: 8px 8px 0 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.tabs { display: flex; gap: 2px; flex: 1; min-width: 0; }
+.tab { flex: 1 1 auto; min-width: 0; padding: 0 4px; font-size: 14px; white-space: nowrap; color: var(--muted); border-bottom: 2px solid transparent; border-radius: 8px 8px 0 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .tab.active { color: var(--text); border-bottom-color: var(--accent); background: var(--panel-2); }
 .count { font-size: 11px; font-weight: 700; padding: 0 6px; min-width: 18px; line-height: 18px; text-align: center; border-radius: 9px; color: #111; }
 .count.bad { background: var(--bad); }

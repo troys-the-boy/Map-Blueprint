@@ -4,9 +4,8 @@ import type { Tool } from "../store";
 import { useStore } from "../store";
 import { ELEVATION_LEVELS, getPalette, TERRAIN_TYPES } from "../../core/terrain";
 import { LEVEL_VALUE, PORYMAP_ELEVATION_COLORS, hexDigit } from "../../core/porymap";
-import { ENTITY_PREFIX } from "../../core/entities";
 import { ENTITY_COLORS } from "../../core/exporters/blueprint";
-import { THING_LABELS } from "../../core/things";
+import { THING_LABELS, placePrefix } from "../../core/things";
 import { SMART_LABELS, SMART_TERRAIN } from "../../core/strokes";
 import { zoneColor } from "../zoneColors";
 import { Icon } from "./icons";
@@ -86,7 +85,7 @@ export function Toolbar({ onShowTab }: { onShowTab: (tab: SideTab) => void }) {
             </span>
           ) : (
             <span className="swatch big marker" style={{ background: ENTITY_COLORS[s.thingKind] }}>
-              {ENTITY_PREFIX[s.thingKind]}
+              {placePrefix(s.thingKind)}
             </span>
           )}
         </button>

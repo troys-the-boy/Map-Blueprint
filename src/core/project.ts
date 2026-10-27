@@ -54,7 +54,7 @@ import {
 import { ELEVATION_LEVELS, TERRAIN_TYPES, terrainIndex } from "./terrain";
 
 export const FILE_FORMAT_ID = "gen3-map-blueprint-project";
-export const CURRENT_SCHEMA_VERSION = 6;
+export const CURRENT_SCHEMA_VERSION = 7;
 
 /** Safety limits for opened files. Anything bigger is rejected. */
 export const FILE_LIMITS = {
@@ -232,7 +232,8 @@ const entityCheck: Check<Entity> = object({
   elevation,
   fields,
   locked: bool,
-}, ["locked"]);
+  accepted: arrayOf(str(64, ID), 16),
+}, ["locked", "accepted"]);
 
 const warpCheck: Check<Warp> = object({
   id: str(64, ID),
@@ -296,7 +297,7 @@ const entityEditCheck = object({
   type: literal("entity"),
   action: oneOf(["place", "move", "turn", "sight", "delete"] as const),
   id: str(64, ID),
-  kind: oneOf(ENTITY_KINDS),
+  kind: oneOf([...ENTITY_KINDS, "warp"] as const),
   x: coord,
   y: coord,
 });
@@ -485,6 +486,11 @@ export const MIGRATIONS: Record<number, Migration> = {
   // v5 → v6 (Milestone 3, part B): smart-stroke edit records ("type": "smart").
   // Nothing in a version-5 file needs changing.
   5: (file) => ({ ...file, schemaVersion: 6 }),
+  // v6 → v7 (Milestone 4, part B): more kinds placed by hand (berry trees, triggers,
+  // secret bases, heal locations, warps), Things-tool edits of warps ("kind": "warp"),
+  // and warnings marked OK on a thing ("accepted"). Nothing in a version-6 file
+  // needs changing.
+  6: (file) => ({ ...file, schemaVersion: 7 }),
 };
 
 /** Upgrade an old file step by step to the target version. */

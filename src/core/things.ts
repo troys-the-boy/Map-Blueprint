@@ -1,22 +1,47 @@
 // The Things tool: placing, turning and removing things on a map by hand
 // (trainers, items, signs, HM obstacles…).
 //
-// Field values are the same suggestions the generator uses; Milestone 4 adds a
-// panel to edit every field. Graphics and scripts are vanilla pokeemerald names:
+// Field values are the same suggestions the generator uses, and every one can be
+// edited in the Details tab. Names are vanilla pokeemerald's:
+//   • field names as in data/maps/*/map.json (checked against Route104, Route111
+//     and Route119: object, warp, coord and bg events);
 //   • OBJ_EVENT_GFX_* from include/constants/event_objects.h;
 //   • EventScript_CutTree, EventScript_RockSmash and EventScript_StrengthBoulder
-//     from data/scripts/field_move_scripts.inc;
-//   • MOVEMENT_TYPE_* from include/constants/event_object_movement.h.
+//     from data/scripts/field_move_scripts.inc; BerryTreeScript from Route104;
+//   • MOVEMENT_TYPE_* from include/constants/event_object_movement.h;
+//   • TRAINER_TYPE_* from include/constants/trainer_types.h;
+//   • BG_EVENT_PLAYER_FACING_* from include/constants/event_bg.h;
+//   • heal locations as in src/data/heal_locations.json (id, map, x, y).
+//
+// Warps are kept apart from the other things (map.warps, as Porymap does), but
+// the Things tool places, drags and removes them the same way.
 
 import { ENTITY_PREFIX, FACE_MOVEMENT } from "./entities";
-import type { Entity, EntityKind, MapBlueprint } from "./model";
+import type { Entity, EntityKind, MapBlueprint, Warp } from "./model";
 import { ELEVATION_LEVELS } from "./terrain";
 import type { Direction } from "./terrain";
 
-/** The kinds the Things tool can place, in the order shown in the Paint tab. */
-export const PLACEABLE_KINDS: readonly EntityKind[] = ["trainer", "item_ball", "hidden_item", "npc", "sign", "cut_tree", "smash_rock", "strength_boulder"];
+/** What the Things tool can place: any kind of thing, or a warp. */
+export type PlaceKind = EntityKind | "warp";
 
-export const THING_LABELS: Partial<Record<EntityKind, string>> = {
+/** The kinds the Things tool can place, in the order shown in the Paint tab. */
+export const PLACEABLE_KINDS: readonly PlaceKind[] = [
+  "trainer",
+  "item_ball",
+  "hidden_item",
+  "npc",
+  "sign",
+  "cut_tree",
+  "smash_rock",
+  "strength_boulder",
+  "berry_tree",
+  "warp",
+  "trigger",
+  "secret_base",
+  "heal_location",
+];
+
+export const THING_LABELS: Record<PlaceKind, string> = {
   trainer: "Trainer",
   item_ball: "Item",
   hidden_item: "Hidden item",
@@ -25,7 +50,52 @@ export const THING_LABELS: Partial<Record<EntityKind, string>> = {
   cut_tree: "Cut tree",
   smash_rock: "Rock Smash rock",
   strength_boulder: "Strength boulder",
+  berry_tree: "Berry tree",
+  warp: "Warp (door, cave…)",
+  trigger: "Trigger (script tile)",
+  secret_base: "Secret base spot",
+  heal_location: "Heal location (Fly spot)",
 };
+
+/** The letter on a kind's marker: T, I… and W for warps. */
+export function placePrefix(kind: PlaceKind): string {
+  return kind === "warp" ? "W" : ENTITY_PREFIX[kind];
+}
+
+/** A thing on the map: an object/coord/bg event, or a warp. */
+export type Thing = Entity | Warp;
+
+export function isWarp(t: Thing): t is Warp {
+  return "destMap" in t;
+}
+
+/** The thing or warp standing on a cell, if any. */
+export function thingAt(map: MapBlueprint, x: number, y: number): Thing | undefined {
+  return map.entities.find((e) => e.x === x && e.y === y) ?? map.warps.find((w) => w.x === x && w.y === y);
+}
+
+export function findThing(map: MapBlueprint, id: string): Thing | undefined {
+  return map.entities.find((e) => e.id === id) ?? map.warps.find((w) => w.id === id);
+}
+
+export function removeThing(map: MapBlueprint, t: Thing): void {
+  if (isWarp(t)) map.warps = map.warps.filter((w) => w !== t);
+  else map.entities = map.entities.filter((e) => e !== t);
+}
+
+/** The label shown on the map and in the tables: T1, I2… and W0, W1… for warps (their Porymap number). */
+export function thingTag(map: MapBlueprint, t: Thing): string {
+  return isWarp(t) ? `W${map.warps.indexOf(t)}` : t.id;
+}
+
+export const WARP_LABELS: Record<Warp["kind"], string> = { door: "Door", cave_mouth: "Cave mouth", ladder: "Ladder", stairs: "Stairs", other: "Other" };
+
+/** A new warp at (x, y). Its destination is left for the user to fill in. */
+export function newWarp(map: MapBlueprint, x: number, y: number): Warp {
+  let n = map.warps.length + 1;
+  while (map.warps.some((w) => w.id === `w${n}`)) n++;
+  return { id: `w${n}`, kind: "door", x, y, elevation: ELEVATION_LEVELS[map.layers.elevation.data[y * map.width + x]], destMap: "", destWarpId: 0 };
+}
 
 /** Default sight range for a trainer placed by hand, in cells. */
 export const DEFAULT_SIGHT = 3;
@@ -83,6 +153,16 @@ export function newThing(map: MapBlueprint, kind: EntityKind, x: number, y: numb
     },
     hidden_item: { item: "ITEM_POTION", tier: "common", flag: `FLAG_HIDDEN_ITEM_${flagBase}_${n}` },
     sign: { player_facing_dir: "BG_EVENT_PLAYER_FACING_ANY", script: `${label}_EventScript_Sign${n}`, text: "" },
+    berry_tree: {
+      ...object("OBJ_EVENT_GFX_BERRY_TREE", "MOVEMENT_TYPE_BERRY_TREE_GROWTH", "BerryTreeScript"),
+      movement_range_x: 0,
+      movement_range_y: 0,
+      trainer_type: "TRAINER_TYPE_NONE",
+      trainer_sight_or_berry_tree_id: `BERRY_TREE_${flagBase}_${n}`,
+    },
+    trigger: { type: "trigger", var: `VAR_${flagBase}_STATE`, var_value: "0", script: `${label}_EventScript_Trigger${n}`, weather: "" },
+    secret_base: { secret_base_id: "SECRET_BASE_RED_CAVE1_1" },
+    heal_location: { id: `HEAL_LOCATION_${flagBase}`, map: map.header.id, note: "Goes in src/data/heal_locations.json (id, map, x, y), not map.json" },
     cut_tree: object("OBJ_EVENT_GFX_CUTTABLE_TREE", "MOVEMENT_TYPE_LOOK_AROUND", "EventScript_CutTree"),
     smash_rock: object("OBJ_EVENT_GFX_BREAKABLE_ROCK", "MOVEMENT_TYPE_LOOK_AROUND", "EventScript_RockSmash"),
     strength_boulder: object("OBJ_EVENT_GFX_PUSHABLE_BOULDER", "MOVEMENT_TYPE_LOOK_AROUND", "EventScript_StrengthBoulder"),

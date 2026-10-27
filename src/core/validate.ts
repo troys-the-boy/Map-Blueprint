@@ -24,6 +24,8 @@ export interface Issue {
   message: string;
   /** Cells involved (index y * width + x). The first one is where to jump to. */
   cells: number[];
+  /** The thing the issue is about, if any (so it can be marked OK). */
+  entityId?: string;
 }
 
 export interface ValidateOptions {
@@ -32,6 +34,8 @@ export interface ValidateOptions {
   availableHms?: readonly Hm[];
   /** Dead-end side areas deeper than this many steps should hold a reward. */
   deadEndDepth?: number;
+  /** The project's other maps, to check that warps between maps point at each other. */
+  otherMaps?: readonly MapBlueprint[];
 }
 
 const HM_NAMES: Record<string, string> = { cut: "Cut", rock_smash: "Rock Smash", strength: "Strength", surf: "Surf", waterfall: "Waterfall", dive: "Dive", flash: "Flash" };
@@ -142,6 +146,38 @@ export function validateMap(map: MapBlueprint, opts: ValidateOptions = {}): Issu
     }
   }
 
+  // --- Warps ---------------------------------------------------------------------
+  // The player must be able to walk onto each warp, or up to it (a door is stepped
+  // into from the cell in front), with the HMs they have here.
+  if (allStarts.length && map.warps.length) {
+    const reach = graph.forward(allStarts);
+    const near = (x: number, y: number) =>
+      [[0, 0], ...DIRS.map((d) => [d.dx, d.dy])].some(([dx, dy]) => {
+        const xx = x + dx;
+        const yy = y + dy;
+        return xx >= 0 && yy >= 0 && xx < width && yy < height && reach[yy * width + xx] === 1;
+      });
+    map.warps.forEach((w, k) => {
+      if (!near(w.x, w.y)) err("unreachable-warp", `Warp W${k} at (${w.x}, ${w.y}) can't be reached ${hmList(hms)}.`, [w.y * width + w.x]);
+    });
+  }
+  const others = opts.otherMaps ?? [];
+  const isThis = (dest: string) => dest === map.id || dest === map.header.id;
+  map.warps.forEach((w, k) => {
+    const cell = [w.y * width + w.x];
+    if (!w.destMap) {
+      warn("warp-no-destination", `Warp W${k} at (${w.x}, ${w.y}) doesn't lead anywhere yet: set where it goes in the Details tab.`, cell);
+      return;
+    }
+    // Only warps to another map in this project can be checked both ways.
+    const dest = others.find((m) => m.id !== map.id && (m.id === w.destMap || m.header.id === w.destMap));
+    if (!dest) return;
+    const back = w.destWarpId === null ? undefined : dest.warps[w.destWarpId];
+    if (!back) err("warp-pair", `Warp W${k} leads to warp ${w.destWarpId ?? "?"} on ${dest.name}, which has no such warp.`, cell);
+    else if (!isThis(back.destMap) || back.destWarpId !== k)
+      err("warp-pair", `Warp W${k} leads to W${w.destWarpId} on ${dest.name}, but that warp doesn't lead back here to W${k}.`, cell);
+  });
+
   // --- Trainers the player can't avoid --------------------------------------------
   // (Only meaningful when the entrances connect at all.)
   const connected = !issues.some((i) => i.code === "unreachable-exit");
@@ -154,8 +190,16 @@ export function validateMap(map: MapBlueprint, opts: ValidateOptions = {}): Issu
       for (const c of sight) blocked[c] = T.tree;
       const g = new MoveGraph({ ...view, terrain: blocked }, new Set(hms));
       const reach = g.forward(usable[0].cells);
+      // Marked OK in the Details tab: the battle is meant to be unavoidable.
+      if ((e.accepted ?? []).includes("unavoidable-trainer")) continue;
       if (!usable.slice(1).every((b) => b.cells.some((c) => reach[c])))
-        warn("unavoidable-trainer", `Trainer ${e.id} watches the only way through, so the battle can't be avoided. That's fine if it's on purpose.`, [e.y * width + e.x, ...sight]);
+        issues.push({
+          severity: "warning",
+          code: "unavoidable-trainer",
+          message: `Trainer ${e.id} watches the only way through, so the battle can't be avoided. If that's on purpose, pick the trainer and tick "on purpose" in the Details tab.`,
+          cells: [e.y * width + e.x, ...sight],
+          entityId: e.id,
+        });
     }
   }
 
@@ -248,7 +292,8 @@ export function validateMap(map: MapBlueprint, opts: ValidateOptions = {}): Issu
     // Ledge cells count as connections here, so the far end of a ledge loop isn't mistaken for a dead end.
     const pacingCell = (i: number) => reach[i] === 1 || TERRAIN_TYPES[terrain[i]].passability === "one_way";
     const fromCorridor = distanceField(width, height, corridor, pacingCell);
-    const rewardAt = new Set(map.entities.filter((e) => e.kind !== "sign").map((e) => e.y * width + e.x));
+    // A warp at the end counts too: the side path leads somewhere.
+    const rewardAt = new Set([...map.entities.filter((e) => e.kind !== "sign").map((e) => e.y * width + e.x), ...map.warps.map((w) => w.y * width + w.x)]);
     const side = components(width, height, (i) => pacingCell(i) && fromCorridor[i] > 2);
     const deepest = new Map<number, number>();
     const hasReward = new Set<number>();

@@ -7,7 +7,7 @@ import { useStore } from "../store";
 import type { SelectMode } from "../store";
 import { Icon } from "./icons";
 import { canvasRef } from "./MapCanvas";
-import { THING_LABELS, MAX_SIGHT, facingOf, sightOf } from "../../core/things";
+import { THING_LABELS, MAX_SIGHT, facingOf, isWarp, sightOf, thingTag } from "../../core/things";
 import type { Direction } from "../../core/terrain";
 import { ELEVATION_LEVELS, TERRAIN_TYPES } from "../../core/terrain";
 import { LEVEL_VALUE, hexDigit } from "../../core/porymap";
@@ -37,7 +37,7 @@ function viewCentre(): [number, number] | null {
 export function EditBar() {
   const s = useStore();
   if (s.selecting) return <SelectBar />;
-  if (s.tool === "things" && s.selectedEntity) return <ThingBar />;
+  if (s.tool === "things" && s.pickedThing) return <ThingBar />;
   return null;
 }
 
@@ -176,14 +176,15 @@ function SelectBar() {
 
 function ThingBar() {
   const s = useStore();
-  const e = s.selectedEntity!;
-  const facing = e.kind === "trainer" ? facingOf(e) : null;
+  const e = s.pickedThing!;
+  const map = s.currentMap!;
+  const facing = !isWarp(e) && e.kind === "trainer" ? facingOf(e) : null;
   return (
-    <div className="edit-bar" role="toolbar" aria-label={`${e.id}`}>
-      <span className="edit-bar-label">
-        <b>{e.id}</b> {THING_LABELS[e.kind] ?? e.kind} at {e.x}, {e.y}
+    <div className="edit-bar" role="toolbar" aria-label={thingTag(map, e)}>
+      <span className="edit-bar-label" title="Every field of this thing is in the Details tab.">
+        <b>{thingTag(map, e)}</b> {isWarp(e) ? "Warp" : THING_LABELS[e.kind]} at {e.x}, {e.y}
       </span>
-      {e.kind === "trainer" && (
+      {!isWarp(e) && e.kind === "trainer" && (
         <>
           <span className="edit-bar-group" role="group" aria-label="Facing">
             {FACINGS.map((f) => (

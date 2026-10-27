@@ -48,6 +48,9 @@ export function addPlateaus(ctx: GenContext): void {
         if (ctx.inside(x, y)) nearEntrance[ctx.idx(x, y)] = 1;
       }
   }
+  // Warps placed by hand stay on the ground too, with room round them for the path.
+  for (const w of ctx.input.warps)
+    for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) if (ctx.inside(w.x + dx, w.y + dy)) nearEntrance[ctx.idx(w.x + dx, w.y + dy)] = 1;
   // Separate plateaus keep a cell of ground inside the border; terraces run right up to it.
   const eligibleFrom = (edge: number) => (i: number) =>
     !nearEntrance[i] && ctx.role[i] === Role.None && !ctx.locks[i] && ctx.elevation[i] === LEVEL.ground && ctx.edgeDist(i) >= edge;
