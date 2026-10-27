@@ -18,6 +18,7 @@ import { ValueNoise } from "../noise";
 import type { GenContext } from "./context";
 import { Role } from "./context";
 import type { Layout, RouteParams } from "./params";
+import { travelOf, travelVertical } from "./travel";
 
 /** Layout geometry, in "along" (the long axis) and "cross" (the short axis) coordinates. */
 export interface Geometry {
@@ -35,7 +36,9 @@ export interface Geometry {
 
 export function computeGeometry(width: number, height: number, p: RouteParams, layout: Layout, seed: number): Geometry {
   const rng = new Rng(seed);
-  const vertical = height >= width;
+  // A travel direction sets which way the route runs; otherwise it runs along the map's long side.
+  const travel = travelOf(p.travel);
+  const vertical = travel ? travelVertical(travel) : height >= width;
   const crossLength = vertical ? width : height;
   const alongLength = vertical ? height : width;
   const seaLow = rng.chance(0.5);

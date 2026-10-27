@@ -15,6 +15,7 @@ import type { GenContext } from "./context";
 import { LEVEL, Role } from "./context";
 import { effectiveElevation } from "./params";
 import type { PocketHm } from "./params";
+import { backDir } from "./travel";
 
 /**
  * Ledge rows, like Hoenn's Routes 101–104: a long ledge across the route with a
@@ -30,11 +31,17 @@ import type { PocketHm } from "./params";
  *
  * How many: the Ledges setting, plus more on hillier routes (the Elevation
  * setting), as many as fit along the route.
+ *
+ * With a travel direction (see travel.ts) the ledges jump back toward the start,
+ * so the way forward is the winding path. A route travelled north to south
+ * can't do that (no north-facing ledges): it gets half as many rows, jumping
+ * forward.
  */
 export function addLedgeRows(ctx: GenContext): void {
   if (ctx.layout === "water") return;
   const amount = effectiveElevation(ctx.params, ctx.input.biome);
-  const wanted = ctx.params.ledges + Math.round(amount * 2);
+  let wanted = ctx.params.ledges + Math.round(amount * 2);
+  if (ctx.travel?.from === "north") wanted = Math.ceil(wanted / 2);
   const alongLength = ctx.vertical ? ctx.height : ctx.width;
   // Keep clear of the entrances at the ends, and space the rows out.
   const lines: number[] = [];
@@ -55,7 +62,8 @@ const NO_DETOUR = new Set<number>([Role.Pocket, Role.Sea, Role.Cliff, Role.Stair
 function tryLedgeRow(ctx: GenContext, along: number): boolean {
   const crossLength = ctx.vertical ? ctx.width : ctx.height;
   const bt = ctx.params.borderThickness;
-  const dir: "s" | "e" | "w" = ctx.vertical ? "s" : ctx.rng.chance(0.5) ? "e" : "w";
+  const back = ctx.travel ? backDir(ctx.travel) : null;
+  const dir: "s" | "e" | "w" = ctx.vertical ? "s" : back === "e" || back === "w" ? back : ctx.rng.chance(0.5) ? "e" : "w";
   const jump = DIRS.find((d) => d.dir === dir)!;
   const at = (c: number) => (ctx.vertical ? ctx.idx(c, along) : ctx.idx(along, c));
   // Sort the cells across the route: blocked (trees, rock, water, raised ground) stay
@@ -135,6 +143,8 @@ function tryLedgeRow(ctx: GenContext, along: number): boolean {
   });
   for (const c of route)
     ctx.stamp(c, ctx.params.pathWidthMin, T.path, Role.MainPath, (j) => !lineSet.has(j) && usable(j) && (ctx.role[j] === Role.None || ctx.role[j] === Role.Clearing || ctx.role[j] === Role.MainPath));
+  // When the ledge jumps back toward the start, the way round is the way forward: trainers wait there.
+  if (back === dir) for (const c of route) ctx.ledgeDetours.add(c);
   // Where the path now runs along both sides of a tree in the line, the ledge carries on
   // through it, so the ledge reads as one long step rather than a wall of trees.
   const open = (i: number) => i >= 0 && IS_WALKABLE[ctx.terrain[i]] && ctx.elevation[i] === LEVEL.ground;
@@ -142,6 +152,111 @@ function tryLedgeRow(ctx: GenContext, along: number): boolean {
     if (!inGap(j) && ctx.terrain[i] === T.tree && ctx.role[i] === Role.Corridor && open(side(i, 1)) && open(side(i, -1))) ctx.set(i, ledge, Role.Corridor);
   });
   return true;
+}
+
+/**
+ * A ledge pocket (only with a travel direction): a little room in the trees with
+ * a ledge in and a ledge out, both jumping the same way, and an item inside.
+ *
+ * Trees are planted round it where needed (never cutting anything else off).
+ * The player lands back on the path.
+ *
+ *     ground          ← A: where the player jumps in
+ *     ledge           ← L1
+ *     room (3 wide)   ← they land in the middle; the item is at one side
+ *     ledge           ← L2
+ *     path            ← B: where they land
+ *
+ * The ledges jump back toward the start, so walking forward the player sees the
+ * item over the ledge but can't climb in; on the way back they drop in and out.
+ * On a north-to-south route the ledges face south (forward), so it's a reward on
+ * the way forward instead. Ledges are one-way in Gen 3: a jump moves the player
+ * two cells, from A over the ledge to the room (see GetLedgeJumpDirection and
+ * the jump in src/field_player_avatar.c).
+ */
+export function addLedgePockets(ctx: GenContext): void {
+  if (!ctx.travel || ctx.layout === "water") return;
+  const back = backDir(ctx.travel);
+  const dir = back === "n" ? "s" : ctx.vertical ? "s" : back;
+  const d = DIRS.find((x) => x.dir === dir)!;
+  const c = { dx: d.dy, dy: d.dx };
+  const ledge = dir === "s" ? T.ledgeS : dir === "e" ? T.ledgeE : T.ledgeW;
+  const bt = ctx.params.borderThickness;
+  const starts = ctx.input.openings.filter((o) => o.kind === "walk").flatMap((o) => openingCells(o, ctx.width, ctx.height));
+  const reach = new MoveGraph({ width: ctx.width, height: ctx.height, terrain: ctx.terrain, entities: ctx.entities, elevation: ctx.elevation }, new Set()).forward(starts);
+  const cell = (x: number, y: number) => (ctx.inside(x, y) ? ctx.idx(x, y) : -1);
+  const onRoute = (i: number) => ctx.role[i] === Role.MainPath || ctx.role[i] === Role.Branch;
+  const open = (i: number) => onRoute(i) || ctx.role[i] === Role.None || ctx.role[i] === Role.Clearing;
+  const ends = (i: number) => i >= 0 && reach[i] && !ctx.locks[i] && ctx.isWalkable(i) && !IS_WATER[ctx.terrain[i]] && ctx.elevation[i] === LEVEL.ground && open(i);
+  // Cells the pocket may take over: trees, or open ground off the path (trees are planted round it).
+  const free = (i: number, ring: boolean) =>
+    i >= 0 &&
+    !ctx.locks[i] &&
+    ctx.elevation[i] === LEVEL.ground &&
+    !IS_WATER[ctx.terrain[i]] &&
+    (ctx.role[i] === Role.None || ctx.role[i] === Role.Clearing || (ring && ctx.role[i] === Role.Border && IS_WALL[ctx.terrain[i]])) &&
+    (ring || ctx.edgeDist(i) >= bt);
+  type Site = { a: number; b: number; room: number[]; ledges: number[]; ring: number[]; changes: number };
+  const sites: Site[] = [];
+  for (let a = 0; a < ctx.n; a++) {
+    if (!ends(a)) continue;
+    const [ax, ay] = ctx.xy(a);
+    const along = (k: number, s = 0) => cell(ax + d.dx * k + c.dx * s, ay + d.dy * k + c.dy * s);
+    // Land back on the path, so nothing placed later can wall the landing in.
+    if (!ends(along(4)) || !onRoute(along(4))) continue;
+    const room = [along(2, -1), along(2), along(2, 1)];
+    const ledges = [along(1), along(3)];
+    const ring = [along(1, -1), along(1, 1), along(3, -1), along(3, 1), along(2, -2), along(2, 2)];
+    if (![...room, ...ledges].every((i) => free(i, false)) || !ring.every((i) => free(i, true))) continue;
+    // Prefer spots already in the trees: fewer trees to plant.
+    const changes = [...room, ...ledges, ...ring].filter((i) => !IS_WALL[ctx.terrain[i]]).length;
+    sites.push({ a, b: along(4), room, ledges, ring, changes });
+  }
+  const order = ctx.rng.shuffle(sites).sort((x, y) => x.changes - y.changes);
+  // What must not get worse: where the player can go, which entrances lead to which, and traps
+  // (places reached that have no way back to an entrance).
+  const entrances = ctx.input.openings.filter((o) => o.kind === "walk").map((o) => openingCells(o, ctx.width, ctx.height));
+  const check = () => {
+    const graph = new MoveGraph({ width: ctx.width, height: ctx.height, terrain: ctx.terrain, entities: ctx.entities, elevation: ctx.elevation }, new Set());
+    const fwd = graph.forward(starts);
+    const back = graph.backward(starts);
+    const links = entrances.map((from) => {
+      const r = graph.forward(from);
+      return entrances.map((to) => (to.some((i) => r[i]) ? "1" : "0")).join("");
+    });
+    return { fwd, trapped: (i: number) => fwd[i] === 1 && back[i] === 0, links: links.join(",") };
+  };
+  const was = check();
+  for (const site of order.slice(0, 40)) {
+    const cells = [...site.room, ...site.ledges, ...site.ring];
+    const before = cells.map((i) => [ctx.terrain[i], ctx.role[i]] as const);
+    for (const i of site.ring) if (!IS_WALL[ctx.terrain[i]]) ctx.set(i, T.tree);
+    for (const i of site.ring) if (ctx.role[i] !== Role.Border) ctx.role[i] = Role.Pocket;
+    for (const i of site.room) ctx.set(i, T.ground, Role.Pocket);
+    for (const i of site.ledges) ctx.set(i, ledge, Role.Pocket);
+    // Planting trees mustn't cut anything else off, or trap the player anywhere.
+    const now = check();
+    let ok = now.links === was.links && now.fwd[site.room[1]] === 1;
+    for (let i = 0; i < ctx.n && ok; i++) {
+      if (cells.includes(i)) continue;
+      if ((was.fwd[i] && !now.fwd[i]) || (now.trapped(i) && !was.trapped(i))) ok = false;
+    }
+    for (const i of site.room) if (now.trapped(i)) ok = false;
+    if (ok) {
+      // The item stands to one side: the middle cell is where the player lands and jumps on from.
+      ctx.ledgePockets.push(ctx.rng.pick([site.room[0], site.room[2]]));
+      // Where the player jumps in and lands must stay open ground with nothing standing on it.
+      for (const i of [site.a, site.b, site.room[1]]) {
+        ctx.keepClear.add(i);
+        if (ctx.role[i] === Role.None || ctx.role[i] === Role.Clearing) ctx.role[i] = Role.Pocket;
+      }
+      return;
+    }
+    cells.forEach((i, k) => {
+      ctx.terrain[i] = before[k][0];
+      ctx.role[i] = before[k][1];
+    });
+  }
 }
 
 const POCKET_GATES: Record<PocketHm, { neck: number; kind?: Entity["kind"]; graphics?: string; script?: string }> = {

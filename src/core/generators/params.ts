@@ -7,6 +7,8 @@
 import type { Hm } from "../constants";
 import { HMS } from "../constants";
 import type { Biome } from "../model";
+import type { TravelSetting } from "./travel";
+import { TRAVEL_SETTINGS } from "./travel";
 
 /** "auto" = cliff for alpine routes, forest otherwise. */
 export type BorderStyle = "auto" | "forest" | "cliff";
@@ -21,6 +23,8 @@ export const POCKET_HMS: readonly PocketHm[] = ["cut", "rock_smash", "surf"];
 export interface RouteParams {
   /** Land, coastal (sea along one side), river (a river along the route) or open water (surfing). */
   layout: LayoutSetting;
+  /** Which way the player first travels the route (see travel.ts). "auto" = no direction. */
+  travel: TravelSetting;
   /** How hilly: 0 = flat, 1 = hillsides up to 3 levels high (4 on alpine routes), with cliffs, stairs and ledges. */
   elevation: number;
   /** How much of the route is under snow, 0 … 1. Snow covers the highest ground first. */
@@ -74,6 +78,7 @@ export interface RouteParams {
 
 export const DEFAULT_ROUTE_PARAMS: RouteParams = {
   layout: "auto",
+  travel: "auto",
   elevation: 0.35,
   snow: 0,
   grassShortcut: true,
@@ -154,6 +159,7 @@ export function readRouteParams(params: Record<string, string | number | boolean
   p.grassShortcut = typeof params.grassShortcut === "boolean" ? params.grassShortcut : d.grassShortcut;
   p.surfEntrances = typeof params.surfEntrances === "boolean" ? params.surfEntrances : d.surfEntrances;
   p.layout = (LAYOUTS as readonly unknown[]).includes(params.layout) ? (params.layout as LayoutSetting) : d.layout;
+  p.travel = (TRAVEL_SETTINGS as readonly unknown[]).includes(params.travel) ? (params.travel as TravelSetting) : d.travel;
   p.clearing = typeof params.clearing === "boolean" ? params.clearing : d.clearing;
   p.borderStyle = params.borderStyle === "cliff" || params.borderStyle === "forest" ? params.borderStyle : "auto";
   p.stream = params.stream === "yes" || params.stream === "no" ? params.stream : "auto";
@@ -170,6 +176,7 @@ export function writeRouteParams(p: RouteParams): Record<string, string | number
     grassShortcut: p.grassShortcut,
     surfEntrances: p.surfEntrances,
     layout: p.layout,
+    travel: p.travel,
     clearing: p.clearing,
     borderStyle: p.borderStyle,
     stream: p.stream,

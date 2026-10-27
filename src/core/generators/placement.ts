@@ -7,6 +7,9 @@
 //     With a grass shortcut, trainers favour the stretch of path it bypasses
 //     (taking the path means battles) and at most one watches the grass.
 //   • on open water: swimmers beside the surfing lane, and items on islands.
+// With a travel direction (see travel.ts): the sign is at the start, ledge
+// pockets get an item, trainers face the player coming from the start, wait on
+// the way round ledge rows, and none stand right by the start entrance.
 // All field values are suggestions for Porymap and can be edited later.
 
 import { FACE_MOVEMENT, trainerSight } from "../entities";
@@ -15,6 +18,7 @@ import type { Entity } from "../model";
 import type { Hm } from "../constants";
 import { MoveGraph, openingCells } from "../reach";
 import type { GenContext } from "./context";
+import { backDir, fromStart } from "./travel";
 import { Role } from "./context";
 
 const TRAINER_GRAPHICS = ["YOUNGSTER", "LASS", "BUG_CATCHER", "HIKER", "PICNICKER", "CAMPER", "TWIN", "MANIAC"];
@@ -33,6 +37,7 @@ export function placeEntities(ctx: GenContext): void {
   const flagBase = constantBase(label);
   const taken = new Uint8Array(n);
   for (const e of ctx.entities) taken[ctx.idx(e.x, e.y)] = 1;
+  for (const i of ctx.keepClear) taken[i] = 1;
 
   const water = ctx.layout === "water";
   // On open water the route is the surfing lane, travelled with Surf; elsewhere it's the path, on foot.
@@ -53,9 +58,14 @@ export function placeEntities(ctx: GenContext): void {
     taken[ctx.idx(e.x, e.y)] = 1;
   };
 
-  // --- Sign at the first entrance -----------------------------------------------
+  // --- Sign at the first entrance (the start, with a travel direction) ----------------
+  const travel = ctx.travel;
+  const startDist = (i: number) => {
+    const [x, y] = ctx.xy(i);
+    return travel ? fromStart(travel, x, y, width, height) : 0;
+  };
   if (ctx.openingEnds.length) {
-    const end = ctx.openingEnds[0];
+    const end = travel ? ctx.openingEnds.reduce((a, b) => (startDist(b) < startDist(a) ? b : a)) : ctx.openingEnds[0];
     const [ex, ey] = ctx.xy(end);
     let best = -1;
     let bestScore = Infinity;
@@ -122,6 +132,7 @@ export function placeEntities(ctx: GenContext): void {
     });
   };
   for (const pocket of ctx.pockets) if (!taken[pocket.center]) addItem(pocket.center, "rare");
+  for (const c of ctx.ledgePockets) if (!taken[c]) addItem(c, "uncommon");
   if (p.deadEndRewards)
     for (const d of ctx.deadEnds) if (!taken[d] && IS_WALKABLE[ctx.terrain[d]]) addItem(d, "uncommon");
   let budget = p.items;
@@ -178,6 +189,8 @@ export function placeEntities(ctx: GenContext): void {
   }
   for (let i = 0; i < n; i++) {
     if (!reachNoHm[i] || taken[i] || pathish(i) || ctx.role[i] === Role.Pocket || ctx.role[i] === Role.Stairs || fromOpenings[i] < 6) continue;
+    // Give the player a few steps into the route before the first battle.
+    if (travel && startDist(i) < 10) continue;
     const t = ctx.terrain[i];
     // Swimmers stand on open water; everyone else on walkable land.
     if (water ? !IS_WATER[t] : !IS_WALKABLE[t] || t === T.signTile) continue;
@@ -208,7 +221,16 @@ export function placeEntities(ctx: GenContext): void {
       const first = ctx.idx(x + d.dx * firstPath, y + d.dy * firstPath);
       const watchesGrass = ctx.role[first] === Role.GrassRoute;
       // Prefer trainers a step or two back from the path, on the stretch the grass bypasses.
-      const score = rng.next() + (firstPath === 2 ? 0.5 : firstPath === 1 ? 0.2 : 0) + (bypassed.has(first) ? 1.2 : 0) + (watchesGrass ? 0.6 : 0);
+      let score = rng.next() + (firstPath === 2 ? 0.5 : firstPath === 1 ? 0.2 : 0) + (bypassed.has(first) ? 1.2 : 0) + (watchesGrass ? 0.6 : 0);
+      if (travel) {
+        // Facing back toward the start sees the player coming; facing the end shows them its back.
+        const back = backDir(travel);
+        const ahead = { n: "s", s: "n", e: "w", w: "e" }[back];
+        if (d.dir === back) score += 0.8;
+        else if (d.dir === ahead) score -= 0.8;
+        // The way round a ledge row is the way forward: trainers wait there.
+        if (ctx.ledgeDetours.has(first)) score += 1;
+      }
       spots.push({ i, dir: d, range, score, watchesGrass });
     }
   }

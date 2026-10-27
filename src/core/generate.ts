@@ -24,7 +24,7 @@ import type { Geometry } from "./generators/layout";
 import { addPlateaus, connectStairs } from "./generators/plateaus";
 import { addGrassShortcut, addPathGrass } from "./generators/shortcut";
 import { fillTerrain } from "./generators/terrainFill";
-import { addHmPockets, addLedgeRows } from "./generators/features";
+import { addHmPockets, addLedgePockets, addLedgeRows } from "./generators/features";
 import { cleanup, closeLedgeTraps } from "./generators/cleanup";
 import { placeEntities } from "./generators/placement";
 import { addSnow } from "./generators/snow";
@@ -101,6 +101,7 @@ function runOnce(map: MapBlueprint, input: GenInput, geometry: Geometry, seed: n
   applyMarsh(ctx); // marsh zones: shallow pools, long grass, mud
   addHmPockets(ctx);
   addLedgeRows(ctx); // ledges across the route: wind round one way, jump down the other
+  addLedgePockets(ctx); // with a travel direction: an item reached by jumping in on the way back
   cleanup(ctx);
   addSnow(ctx); // snow from the highest ground down
   closeLedgeTraps(ctx); // no ledge may drop the player somewhere they can't leave

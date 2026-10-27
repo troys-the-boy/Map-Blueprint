@@ -17,11 +17,14 @@
 // The stairs of each terrace sit away from the stairs below, so a climb switches
 // back and forth. Coastal and river routes measure their hills from the shore.
 // Alpine routes count as more mountainous (see effectiveElevation).
+// With a travel direction the hillsides are low near the start and rise toward
+// the end, so the route climbs as the player goes.
 
 import { DIRS, T, components, distanceField } from "../grid";
 import type { GenContext } from "./context";
 import { LEVEL, RAISED, Role } from "./context";
 import { effectiveElevation } from "./params";
+import { backDir, progress } from "./travel";
 
 export function addPlateaus(ctx: GenContext): void {
   const amount = effectiveElevation(ctx.params, ctx.input.biome);
@@ -166,8 +169,10 @@ function addTerraces(ctx: GenContext, amount: number, eligible: (i: number) => b
     // Ends of the route (near the entrances) stay lower.
     const ends = Math.min(along, alongLength - 1 - along) < 6 ? -1 : 0;
     const hills = Math.min(0, (ctx.noise.at(along * 0.07 + 7100 + side * 311, side * 7.3) - cut) * 8);
+    // With a travel direction: about one level lower than usual at the start, one higher at the end.
+    const climb = ctx.travel ? (progress(ctx.travel, x, y, ctx.width, ctx.height) - 0.5) * 2 : 0;
     // The valley floor itself always stays low.
-    height[i] = offset < valley ? 0 : (offset - valley) / step + 1 + bumps + ends + hills;
+    height[i] = offset < valley ? 0 : (offset - valley) / step + 1 + bumps + ends + hills + climb;
   }
 
   // Build level by level. Each terrace is one connected piece of high-enough ground.
@@ -377,9 +382,12 @@ function buildPlateau(ctx: GenContext, cells: number[], level: number, avoid: nu
   }
 
   // Ledges: runs of the south face (sometimes east or west) become one-way drops.
+  // On a route travelled east or west, no drop faces the way forward (they're for coming back).
+  const back = ctx.travel && !ctx.vertical ? backDir(ctx.travel) : null;
   const ledgeFor: Record<string, number> = { s: T.ledgeS, e: T.ledgeE, w: T.ledgeW };
   for (const dir of ["s", "e", "w"] as const) {
     if (dir !== "s" && !ctx.rng.chance(0.7)) continue;
+    if (back && dir !== "s" && dir !== back) continue;
     const face = rim.filter((i) => ctx.terrain[i] === T.rockWall && facing(i)?.dir === dir);
     for (const i of face) {
       const [x, y] = ctx.xy(i);

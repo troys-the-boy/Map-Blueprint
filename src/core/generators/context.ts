@@ -9,6 +9,8 @@ import { ValueNoise } from "../noise";
 import type { Biome, Entity, Opening, Zone } from "../model";
 import { BIOMES } from "../model";
 import type { Layout, RouteParams } from "./params";
+import type { Travel } from "./travel";
+import { travelOf, travelVertical } from "./travel";
 import { IS_WALKABLE, IS_WALL, T } from "../grid";
 import { ELEVATION_LEVELS } from "../terrain";
 
@@ -98,6 +100,14 @@ export class GenContext {
   shortcut: { from: number; to: number } | null = null;
   /** True when the route runs top-to-bottom. */
   readonly vertical: boolean;
+  /** Which way the player first travels the route, or null for no direction (see travel.ts). */
+  readonly travel: Travel | null;
+  /** Cells of the ways round ledge rows that jump back toward the start: the forward path, where trainers wait. */
+  ledgeDetours = new Set<number>();
+  /** Ledge pockets: the cell for their item (reached by jumping in, on the way back). */
+  ledgePockets: number[] = [];
+  /** Cells nothing may be placed on (where the player jumps into and out of a ledge pocket). */
+  keepClear = new Set<number>();
 
   constructor(
     readonly input: GenInput,
@@ -124,6 +134,10 @@ export class GenContext {
     const ns = o.filter((x) => x.edge === "north" || x.edge === "south").length;
     const ew = o.length - ns;
     this.vertical = ns === ew ? this.height >= this.width : ns > ew;
+    const travel = travelOf(input.params.travel);
+    // A direction only counts if it runs the same way as the route, with an entrance at each end.
+    const ends = travel && o.some((x) => x.edge === travel.from) && o.some((x) => x.edge === travel.to);
+    this.travel = travel && ends && travelVertical(travel) === this.vertical ? travel : null;
   }
 
   /** The biome of a cell. */

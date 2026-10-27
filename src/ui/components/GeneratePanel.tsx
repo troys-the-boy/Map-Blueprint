@@ -7,6 +7,8 @@ import { canGenerate } from "../../core/generate";
 import { DEFAULT_ROUTE_PARAMS, PARAM_RANGES, POCKET_HMS, readRouteParams, resolveBorder, resolveLayout, writeRouteParams } from "../../core/generators/params";
 import type { Layout, LayoutSetting } from "../../core/generators/params";
 import type { RouteParams } from "../../core/generators/params";
+import { TRAVEL_LABELS, TRAVEL_SETTINGS, travelOf, travelVertical } from "../../core/generators/travel";
+import type { TravelSetting } from "../../core/generators/travel";
 import { BIOMES, EDGES } from "../../core/model";
 import type { Biome, Edge, Opening, OpeningKind } from "../../core/model";
 import { MAX_SEED } from "../../core/rng";
@@ -41,6 +43,23 @@ export function GeneratePanel() {
     if (next !== layout && map.openings.length) s.setOpenings([]);
   };
   const set = (patch: Partial<Record<keyof RouteParams, string | number | boolean>>) => s.setParams(patch as Record<string, string | number | boolean>);
+  /** Change the travel direction. Entrances go back to automatic if the route now runs the other way. */
+  const changeTravel = (setting: TravelSetting) => {
+    const next = travelOf(setting);
+    set({ travel: setting });
+    if (next && map.openings.length && !map.openings.some((o) => o.edge === next.from || o.edge === next.to)) s.setOpenings([]);
+  };
+  const travel = travelOf(p.travel);
+  const walkEdges = new Set(map.openings.map((o) => o.edge));
+  const travelHint = !travel
+    ? null
+    : map.openings.length && (!walkEdges.has(travel.from) || !walkEdges.has(travel.to))
+      ? `There's no entrance on the ${!walkEdges.has(travel.from) ? travel.from : travel.to} edge, so the direction is ignored. Add one under Entrances, or remove all entrances to have them placed automatically.`
+      : travel.from === "north"
+        ? "Gen 3 has no ledges you can jump north, so going north to south the ledges jump forward instead: fewer ledge rows, and the ledge pocket is a reward on the way forward."
+        : !map.openings.length && travelVertical(travel) !== map.height >= map.width
+          ? `The route will run ${travelVertical(travel) ? "north–south, across the map's short side" : "west–east, across the map's short side"}.`
+          : null;
   const supported = canGenerate(map);
   const last = s.lastGenerate?.mapId === map.id ? s.lastGenerate : null;
   const errors = s.issues.filter((i) => i.severity === "error").length;
@@ -175,6 +194,20 @@ export function GeneratePanel() {
           </select>
         </label>
         {layout === "water" && <p className="hint">Open-water routes are crossed by surfing, so the checks assume the player has Surf.</p>}
+        <label
+          className="field"
+          title="Which way the player first walks this route. Ledges then jump back toward the start (the winding path is the way forward), trainers face the player coming from the start, the hills rise toward the end, the sign stands at the start, and a ledge pocket holds an item you reach on the way back."
+        >
+          <span>Travel direction</span>
+          <select value={p.travel} onChange={(e) => changeTravel(e.target.value as TravelSetting)}>
+            {TRAVEL_SETTINGS.map((t) => (
+              <option key={t} value={t}>
+                {TRAVEL_LABELS[t]}
+              </option>
+            ))}
+          </select>
+        </label>
+        {travelHint && <p className="hint">{travelHint}</p>}
         {num("elevation", "Elevation", "How hilly the route is. Hillsides rise along the sides of the route, with cliffs, stairs up and ledges down: higher values give more of them and more levels (up to 3, or 4 on alpine routes). Also adds ledge rows. 0 = flat.")}
         {num("snow", "Snow", "How much of the route is under snow, highest ground first. 0 = none, 100 = snowed in. Grass becomes snowy grass, ponds freeze into slippery ice, some trees become snowdrifts.")}
         {num("winding", "Path winding", "0 = straight, 100 = wanders a lot.")}

@@ -189,6 +189,18 @@ Zones are saved with the map and kept every time you generate. Locked cells alwa
 - **River:** a river runs the length of the route. The path follows the banks and crosses on bridges, and there are surf entrances on the river at both ends.
 - **Open water:** sea or lake with islands. It's a surfing route with swimmers on the water and items on the islands, and the checks assume the player has Surf.
 
+**Travel direction** (Basic → Travel direction) says which way the player first walks the route: South → North, North → South, West → East or East → West. Players see a route going forward first and come back through it later, so the map is shaped for that:
+
+- **Ledge rows jump back toward the start.** Walking forward, the path winds round each ledge, past the trainers; coming back, you jump down as a shortcut.
+- **A ledge pocket:** a little room in the trees with a ledge in and a ledge out and an item inside. Going forward you can see it over the ledge but can't climb in; on the way back you drop in, grab it and drop out onto the path.
+- **Trainers** mostly face the player coming from the start, wait on the way round ledge rows, and none stand within 10 cells of the start entrance.
+- **Hills** are lower near the start and rise toward the end.
+- **The route sign** stands at the start entrance.
+
+Gen 3 has no ledges you can jump north. So on a **North → South** route the ledges jump forward instead: there are half as many ledge rows, and the ledge pocket is a reward on the way forward.
+
+The route runs the way you pick, even across a map's short side, and automatic entrances go at the start and end edges. With entrances you placed yourself, there must be one on each of those two edges, or the direction is ignored (the panel says so). "Either way" (the default) makes routes exactly as before. Only straight routes for now: bends such as West → South come later.
+
 **Elevation** (Basic → Elevation, 0–100) makes the route hilly, like Hoenn's. Stretches of ground along the sides of the route rise in terraces toward the map edge, each with a cliff face, stairs up, and ledges you jump down. A path leads to every flight of stairs. It works on every route size, even the smallest.
 
 - At 0 the route is flat.

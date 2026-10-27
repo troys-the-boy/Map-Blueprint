@@ -161,6 +161,7 @@ Every value is optional. Missing or out-of-range values fall back to the default
 | Key | Default | Range / values |
 | --- | --- | --- |
 | `layout` | `auto` | `auto` (coastal for the coastal biome, else land), `land`, `coastal`, `river`, `water` |
+| `travel` | `auto` | `auto` (no direction), `south_north`, `north_south`, `west_east`, `east_west`: the start and end edges, as `<from>_<to>` (bends may be added later in the same form) |
 | `elevation` | 0.35 | 0–1 (how much hillside, and how many levels: up to 3, or 4 on alpine routes; alpine routes use 0.3 + 0.7 × the value, so they are always hilly) |
 | `snow` | 0 | 0–1 (share of the route under snow, highest ground first) |
 | `grassShortcut` | true | true / false (the "two ways through" grass route) |
