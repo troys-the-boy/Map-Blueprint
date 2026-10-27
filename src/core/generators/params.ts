@@ -200,5 +200,6 @@ export function resolveBorder(p: RouteParams, biome: Biome): Exclude<BorderStyle
 /** How hilly the route really is. Alpine routes are mountains: any elevation above 0 is lifted well up. */
 export function effectiveElevation(p: RouteParams, biome: Biome): number {
   if (p.elevation <= 0 || biome !== "alpine") return p.elevation;
-  return Math.min(1, 0.3 + p.elevation);
+  // Never past 1, so the whole slider still matters: 0.37 at 10, 1 at 100.
+  return 0.3 + 0.7 * p.elevation;
 }

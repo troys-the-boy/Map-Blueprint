@@ -144,12 +144,13 @@ function addTerraces(ctx: GenContext, amount: number, eligible: (i: number) => b
   const maxLevel = alpine ? (amount > 0.7 ? 4 : amount > 0.45 ? 3 : amount > 0.2 ? 2 : 1) : amount > 0.75 ? 3 : amount > 0.4 ? 2 : 1;
   // Half-width of the valley floor (always room for the path), and the width of each
   // terrace step (a cliff, then a ledge of ground at least 2 wide).
-  const floor = Math.max(3, ctx.params.pathWidthMax + 1);
+  const floor = Math.max(3, ctx.params.pathWidthMax + (amount > 0.7 ? 0 : 1));
   const valley = Math.max(floor, halfOpen * (alpine ? 0.6 - 0.35 * amount : 0.7 - 0.35 * amount));
   const step = Math.max(3, (halfOpen - valley) / maxLevel);
   const centre = (crossLength - 1) / 2;
-  // Away from the mountains, only some stretches of each side are hills.
-  const cut = 0.72 - 0.55 * amount - widen;
+  // Only some stretches of each side are hills: more of them at higher settings.
+  // Alpine mountains run almost the whole route, with a few low gaps at low settings.
+  const cut = (alpine ? 0.5 - 0.6 * amount : 0.85 - 0.75 * amount) - widen;
 
   const height = new Float32Array(ctx.n);
   for (let i = 0; i < ctx.n; i++) {
@@ -163,7 +164,7 @@ function addTerraces(ctx: GenContext, amount: number, eligible: (i: number) => b
     const bumps = (ctx.noise.fractal(x + 6300 + side * 400, y + 6700, 9, 3) - 0.5) * 1.4;
     // Ends of the route (near the entrances) stay lower.
     const ends = Math.min(along, alongLength - 1 - along) < 6 ? -1 : 0;
-    const hills = alpine ? 0 : Math.min(0, (ctx.noise.at(along * 0.07 + 7100 + side * 311, side * 7.3) - cut) * 8);
+    const hills = Math.min(0, (ctx.noise.at(along * 0.07 + 7100 + side * 311, side * 7.3) - cut) * 8);
     // The valley floor itself always stays low.
     height[i] = offset < valley ? 0 : (offset - valley) / step + 1 + bumps + ends + hills;
   }

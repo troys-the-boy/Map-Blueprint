@@ -31,6 +31,13 @@ createRoot(document.getElementById("root")!).render(
 // The hosted (installable) build registers a service worker so it works offline.
 // The standalone single-file build has no service worker and doesn't need one.
 if (import.meta.env.MODE === "web" && "serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  // The page opens from the offline copy, so right after an update it's still the
+  // old version. When the new version has downloaded and taken over, say so.
+  const hadVersion = navigator.serviceWorker.controller !== null;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (hadVersion)
+      store.setNotice({ kind: "info", text: "A new version of the app has downloaded. Reload the page (on iPad: close the app and open it again) to use it. Your work is kept." });
+  });
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("./sw.js").catch(() => {
       // Offline support unavailable; the app still works while online.

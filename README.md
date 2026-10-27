@@ -240,7 +240,7 @@ iPads can't run an HTML file from the Files app, so the iPad uses a hosted copy 
 5. Open the **Actions** tab. If you pushed before turning on Pages, the first "Publish web app" run will have failed (red ✗). Click it, then **Re-run all jobs**. After about two minutes it shows a green tick. Your tool is at `https://YOUR-NAME.github.io/map-blueprint/`, using the same capital letters as your repository name.
 6. **On the iPad:** open that address in **Safari**. Tap **Share → Add to Home Screen**, then open the tool once from the new icon while online. After that it opens with no connection.
 
-Whenever you push new code to GitHub, the hosted copy updates. The iPad picks up the new version the second time you open the app after an update.
+Whenever you push new code to GitHub, the hosted copy updates (give GitHub a minute or two). The app opens from its offline copy, so the first time you open it after an update you still get the old version; once the new one has downloaded, a message says so. Close the app and open it again (on a computer: reload the page) to use it. Your work is kept.
 
 ---
 
