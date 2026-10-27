@@ -21,14 +21,14 @@ import type { Geometry } from "./generators/layout";
 import { addPlateaus, connectStairs } from "./generators/plateaus";
 import { addGrassShortcut, addPathGrass } from "./generators/shortcut";
 import { fillTerrain } from "./generators/terrainFill";
-import { addHmPockets, addLedges } from "./generators/features";
-import { cleanup } from "./generators/cleanup";
+import { addHmPockets, addLedgeRows } from "./generators/features";
+import { cleanup, closeLedgeTraps } from "./generators/cleanup";
 import { placeEntities } from "./generators/placement";
 import { addSnow } from "./generators/snow";
 import { ELEVATION_LEVELS } from "./terrain";
 
 /** Version of the generators. Bumped when the same seed starts giving different maps. */
-export const GENERATOR_VERSION = 3;
+export const GENERATOR_VERSION = 4;
 
 export interface GenerateResult {
   ok: boolean;
@@ -75,9 +75,10 @@ function runOnce(map: MapBlueprint, input: GenInput, geometry: Geometry, seed: n
   addPathGrass(ctx); // grass across the main path
   fillTerrain(ctx); // trees, open ground, ponds, stream, grass
   addHmPockets(ctx);
-  addLedges(ctx); // extra ledge shortcut loops
+  addLedgeRows(ctx); // ledges across the route: wind round one way, jump down the other
   cleanup(ctx);
   addSnow(ctx); // snow from the highest ground down
+  closeLedgeTraps(ctx); // no ledge may drop the player somewhere they can't leave
   placeEntities(ctx);
 
   const elevation = finishElevation(ctx);

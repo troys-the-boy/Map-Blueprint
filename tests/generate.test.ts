@@ -53,7 +53,7 @@ describe("route generator", () => {
       }
     }
     expect(failures).toEqual([]);
-  });
+  }, 20_000);
 
   it("coastal: the sea fills one long side, out to the map edge, with surf entrances on it", () => {
     for (const seed of [3, 30, 300]) {

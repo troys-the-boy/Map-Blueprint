@@ -131,3 +131,37 @@ function widenPinches(ctx: GenContext) {
     }
   }
 }
+
+/**
+ * Close any ledge that drops into a trap: somewhere the player could jump into but
+ * never walk out of (the land below got boxed in by later steps). A cliff ledge
+ * becomes plain cliff; a ledge in a row on flat ground becomes a tree.
+ */
+export function closeLedgeTraps(ctx: GenContext): void {
+  const starts = ctx.input.openings.filter((o) => o.kind === "walk").flatMap((o) => openingCells(o, ctx.width, ctx.height));
+  if (!starts.length) return;
+  for (let pass = 0; pass < 6; pass++) {
+    const graph = new MoveGraph({ width: ctx.width, height: ctx.height, terrain: ctx.terrain, entities: ctx.entities, elevation: ctx.elevation }, new Set());
+    const forward = graph.forward(starts);
+    const back = graph.backward(starts);
+    let changed = false;
+    for (let i = 0; i < ctx.n; i++) {
+      const jump = LEDGE_DIR.get(ctx.terrain[i]);
+      if (!jump) continue;
+      const [x, y] = ctx.xy(i);
+      if (!ctx.inside(x + jump.dx, y + jump.dy)) continue;
+      const land = ctx.idx(x + jump.dx, y + jump.dy);
+      if (forward[land] && !back[land] && !ctx.locks[i]) {
+        ctx.set(i, ctx.role[i] === Role.Cliff ? T.rockWall : T.tree);
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+}
+
+const LEDGE_DIR = new Map<number, { dx: number; dy: number }>([
+  [T.ledgeS, { dx: 0, dy: 1 }],
+  [T.ledgeE, { dx: 1, dy: 0 }],
+  [T.ledgeW, { dx: -1, dy: 0 }],
+]);

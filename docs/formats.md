@@ -157,7 +157,7 @@ Every value is optional. Missing or out-of-range values fall back to the default
 | Key | Default | Range / values |
 | --- | --- | --- |
 | `layout` | `auto` | `auto` (coastal for the coastal biome, else land), `land`, `coastal`, `river`, `water` |
-| `elevation` | 0.35 | 0–1 (how many and how big the plateaus are; alpine routes treat any value above 0 as at least 0.3 higher) |
+| `elevation` | 0.35 | 0–1 (how much hillside, and how many levels: up to 3, or 4 on alpine routes; alpine routes treat any value above 0 as 0.3 higher) |
 | `snow` | 0 | 0–1 (share of the route under snow, highest ground first) |
 | `grassShortcut` | true | true / false (the "two ways through" grass route) |
 | `pathGrass` | 0.5 | 0–1 (grass stretches across the main path) |
@@ -167,7 +167,7 @@ Every value is optional. Missing or out-of-range values fall back to the default
 | `branches` | 2 | 0–6 |
 | `branchLength` | 0.5 | 0–1 |
 | `deadEndRewards` | true | true / false |
-| `ledges` | 1 | 0–4 |
+| `ledges` | 1 | 0–4 (ledge rows across the route; the generator adds up to 2 more on hilly routes) |
 | `grass`, `water`, `treeDensity` | 0.65, 0.25, 0.55 | 0–1 |
 | `borderThickness` | 2 | 1–4 |
 | `borderStyle` | `auto` | `auto` (cliff on alpine routes, forest otherwise), `forest`, `cliff` |

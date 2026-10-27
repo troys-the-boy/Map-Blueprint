@@ -17,7 +17,7 @@ export const Role = {
   Border: 1,
   MainPath: 2,
   Branch: 3,
-  Corridor: 4, // ledge shortcut
+  Corridor: 4, // a ledge row: the ledges, and the trees and rocks in line with them
   Pocket: 5, // HM-gated area (and the wall ring around it)
   Opening: 6, // the gap through the border at an entrance
   Bridge: 7,

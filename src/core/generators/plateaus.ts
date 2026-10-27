@@ -5,17 +5,18 @@
 // ledges, so the player can jump back down. The interior is ordinary ground,
 // grass and trees, one level up.
 //
-// Most routes get separate plateaus dotted along the route. At high elevation
-// settings a smaller plateau can stack on a big one (2 raised levels, 3 at the
-// very top of the setting).
+// Every route with Elevation above 0 gets hillsides: stretches of ground along
+// the sides of the route rise in terraces toward the map edge, leaving a valley
+// floor for the path. They fit even the narrowest route size. Higher settings
+// give longer stretches and more levels (up to 3); wide routes also get
+// free-standing plateaus out in the middle.
 //
-// Alpine routes are mountains instead: the route runs up a valley, and the
-// ground on either side rises in terraces toward the map edges, up to 4 levels
-// (Porymap elevations 4–7). The stairs of each terrace sit away from the stairs
-// below, so a climb switches back and forth.
+// Alpine routes are mountains: the ground on both sides rises the whole length
+// of the route, up to 4 levels (Porymap elevations 4–7).
 //
-// The "Elevation" setting controls how many plateaus there are, how big and how
-// tall. Alpine routes count as more mountainous (see effectiveElevation).
+// The stairs of each terrace sit away from the stairs below, so a climb switches
+// back and forth. Coastal and river routes measure their hills from the shore.
+// Alpine routes count as more mountainous (see effectiveElevation).
 
 import { DIRS, T, components, distanceField } from "../grid";
 import type { GenContext } from "./context";
@@ -48,8 +49,10 @@ export function addPlateaus(ctx: GenContext): void {
   const eligibleFrom = (edge: number) => (i: number) =>
     !nearEntrance[i] && ctx.role[i] === Role.None && !ctx.locks[i] && ctx.elevation[i] === LEVEL.ground && ctx.edgeDist(i) >= edge;
   const bt = ctx.params.borderThickness;
-  if (alpine) addTerraces(ctx, amount, eligibleFrom(bt));
-  else addSeparatePlateaus(ctx, amount, eligibleFrom(bt + 1));
+  // If no stretch of hillside came out (small maps, low settings), widen the hilly stretches and try again.
+  for (let more = 0; more < 3; more++) if (addTerraces(ctx, amount, eligibleFrom(bt), alpine, more * 0.2) > 0) break;
+  // Wide routes also get free-standing plateaus out in the middle.
+  if (!alpine && crossLength >= 34) addSeparatePlateaus(ctx, amount, eligibleFrom(bt + 1));
 }
 
 /** Where a level may be built on top of the level below: away from its stairs, and two cells from
@@ -113,22 +116,40 @@ function addSeparatePlateaus(ctx: GenContext, amount: number, eligible: (i: numb
 }
 
 /**
- * Alpine terraces. A height is worked out for every cell: zero along a valley
- * down the middle of the route, rising toward the map edges, with noise so the
- * valley wanders and the mountainsides are uneven. Each whole step of height is
- * one more level. Every terrace is built like a plateau (cliff rim, stairs,
- * ledges), with each level inside the one below.
+ * Hillsides and terraces. A height is worked out for every cell: zero along a
+ * valley down the middle of the route, rising toward the map edges, with noise
+ * so the valley wanders and the hillsides are uneven. Each whole step of height
+ * is one more level. Every terrace is built like a plateau (cliff rim, stairs,
+ * ledges), with each level inside the one below, leaning against the border.
+ *
+ * Alpine routes rise along their whole length, up to 4 levels. Other routes get
+ * hills along stretches of each side (more and higher with the Elevation
+ * setting, up to 3 levels), so they work on narrow routes too.
  */
-function addTerraces(ctx: GenContext, amount: number, eligible: (i: number) => boolean) {
+function addTerraces(ctx: GenContext, amount: number, eligible: (i: number) => boolean, alpine: boolean, widen = 0): number {
   const bt = ctx.params.borderThickness;
   const crossLength = ctx.vertical ? ctx.width : ctx.height;
   const alongLength = ctx.vertical ? ctx.height : ctx.width;
-  const halfOpen = (crossLength - 2 * bt) / 2;
-  const maxLevel = amount > 0.7 ? 4 : amount > 0.45 ? 3 : amount > 0.2 ? 2 : 1;
-  // Half-width of the valley floor, and the width of each terrace step.
-  const valley = Math.max(4.5, halfOpen * (0.6 - 0.35 * amount));
-  const step = Math.max(3.5, (halfOpen - valley + 1) / maxLevel);
+  // On coastal and river routes the low ground runs along the water, so hills are
+  // measured from the shore, and only the land counts as room for them.
+  const sea: number[] = [];
+  for (let i = 0; i < ctx.n; i++) if (ctx.role[i] === Role.Sea) sea.push(i);
+  const fromSea = sea.length ? distanceField(ctx.width, ctx.height, sea) : null;
+  let halfOpen = (crossLength - 2 * bt) / 2;
+  if (fromSea) {
+    let land = 0;
+    for (let i = 0; i < ctx.n; i++) if (ctx.role[i] !== Role.Sea && ctx.edgeDist(i) >= bt) land++;
+    halfOpen = land / alongLength / (ctx.layout === "river" ? 2 : 1);
+  }
+  const maxLevel = alpine ? (amount > 0.7 ? 4 : amount > 0.45 ? 3 : amount > 0.2 ? 2 : 1) : amount > 0.75 ? 3 : amount > 0.4 ? 2 : 1;
+  // Half-width of the valley floor (always room for the path), and the width of each
+  // terrace step (a cliff, then a ledge of ground at least 2 wide).
+  const floor = Math.max(3, ctx.params.pathWidthMax + 1);
+  const valley = Math.max(floor, halfOpen * (alpine ? 0.6 - 0.35 * amount : 0.7 - 0.35 * amount));
+  const step = Math.max(3, (halfOpen - valley) / maxLevel);
   const centre = (crossLength - 1) / 2;
+  // Away from the mountains, only some stretches of each side are hills.
+  const cut = 0.72 - 0.55 * amount - widen;
 
   const height = new Float32Array(ctx.n);
   for (let i = 0; i < ctx.n; i++) {
@@ -138,15 +159,18 @@ function addTerraces(ctx: GenContext, amount: number, eligible: (i: number) => b
     const side = across < centre ? 0 : 1;
     // The valley wanders, and each side rises at its own pace.
     const wander = (ctx.noise.at(along * 0.05 + 6100, 0.5) - 0.5) * valley;
-    const offset = Math.abs(across - centre - wander);
+    const offset = fromSea ? fromSea[i] - 1 : Math.abs(across - centre - wander);
     const bumps = (ctx.noise.fractal(x + 6300 + side * 400, y + 6700, 9, 3) - 0.5) * 1.4;
     // Ends of the route (near the entrances) stay lower.
     const ends = Math.min(along, alongLength - 1 - along) < 6 ? -1 : 0;
-    height[i] = (offset - valley) / step + bumps + ends;
+    const hills = alpine ? 0 : Math.min(0, (ctx.noise.at(along * 0.07 + 7100 + side * 311, side * 7.3) - cut) * 8);
+    // The valley floor itself always stays low.
+    height[i] = offset < valley ? 0 : (offset - valley) / step + 1 + bumps + ends + hills;
   }
 
   // Build level by level. Each terrace is one connected piece of high-enough ground.
   let stairsBelow: number[] = [];
+  let terraces = 0;
   for (let level = 1; level <= maxLevel; level++) {
     const ok = level === 1 ? eligible : onTopOf(ctx, RAISED[level - 2]);
     const high = new Uint8Array(ctx.n);
@@ -159,11 +183,15 @@ function addTerraces(ctx: GenContext, amount: number, eligible: (i: number) => b
       if (piece.length < 30) continue;
       const cells = tidy(ctx, piece, ok, false);
       const stairs = cells ? buildPlateau(ctx, cells, RAISED[level - 1], stairsBelow, true) : null;
-      if (stairs) built.push(...stairs);
+      if (stairs) {
+        built.push(...stairs);
+        terraces++;
+      }
     }
     if (!built.length) break;
     stairsBelow = built;
   }
+  return terraces;
 }
 
 /** How many eligible cells in a row run across the route through a cell. */
@@ -349,7 +377,7 @@ function buildPlateau(ctx: GenContext, cells: number[], level: number, avoid: nu
   // Ledges: runs of the south face (sometimes east or west) become one-way drops.
   const ledgeFor: Record<string, number> = { s: T.ledgeS, e: T.ledgeE, w: T.ledgeW };
   for (const dir of ["s", "e", "w"] as const) {
-    if (dir !== "s" && !ctx.rng.chance(0.35)) continue;
+    if (dir !== "s" && !ctx.rng.chance(0.7)) continue;
     const face = rim.filter((i) => ctx.terrain[i] === T.rockWall && facing(i)?.dir === dir);
     for (const i of face) {
       const [x, y] = ctx.xy(i);

@@ -21,7 +21,7 @@ export const POCKET_HMS: readonly PocketHm[] = ["cut", "rock_smash", "surf"];
 export interface RouteParams {
   /** Land, coastal (sea along one side), river (a river along the route) or open water (surfing). */
   layout: LayoutSetting;
-  /** How hilly: 0 = flat, 1 = several raised plateaus with cliffs, stairs and ledges. */
+  /** How hilly: 0 = flat, 1 = hillsides up to 3 levels high (4 on alpine routes), with cliffs, stairs and ledges. */
   elevation: number;
   /** How much of the route is under snow, 0 … 1. Snow covers the highest ground first. */
   snow: number;
@@ -42,7 +42,7 @@ export interface RouteParams {
   branchLength: number;
   /** Put an item at the end of each dead end. */
   deadEndRewards: boolean;
-  /** Ledge shortcuts (one-way loops back to the main path). */
+  /** Ledge rows on flat ground: the path winds round one end; the other way, players jump down. Hillier routes get more. */
   ledges: number;
   /** Share of open ground that becomes grass, 0 … 1. */
   grass: number;

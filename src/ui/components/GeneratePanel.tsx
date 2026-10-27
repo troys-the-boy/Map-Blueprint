@@ -137,7 +137,7 @@ export function GeneratePanel() {
           </select>
         </label>
         {layout === "water" && <p className="hint">Open-water routes are crossed by surfing, so the checks assume the player has Surf.</p>}
-        {num("elevation", "Elevation", "How hilly the route is: raised plateaus with cliffs, stairs up and ledges down. 0 = flat. Alpine routes are mountains: terraces climb from a valley toward the map edges, up to 4 levels on wide maps.")}
+        {num("elevation", "Elevation", "How hilly the route is. Hillsides rise along the sides of the route, with cliffs, stairs up and ledges down: higher values give more of them and more levels (up to 3, or 4 on alpine routes). Also adds ledge rows. 0 = flat.")}
         {num("snow", "Snow", "How much of the route is under snow, highest ground first. 0 = none, 100 = snowed in. Grass becomes snowy grass, ponds freeze into slippery ice, some trees become snowdrifts.")}
         {num("winding", "Path winding", "0 = straight, 100 = wanders a lot.")}
         {num("pathWidthMin", "Narrowest path", "Narrowest the main path gets, in cells.")}
@@ -244,7 +244,7 @@ export function GeneratePanel() {
           <input type="checkbox" checked={p.deadEndRewards} onChange={(e) => set({ deadEndRewards: e.target.checked })} />
           Items at dead ends
         </label>
-        {num("ledges", "Ledge shortcuts", "One-way loops: jump a ledge to rejoin the main path further on.")}
+        {num("ledges", "Ledge rows", "Ledges across the route on flat ground. Going one way, the path winds round the end of the ledge; coming back, you jump down as a shortcut. Elevation adds more.")}
         {num("hmPockets", "HM-gated areas", "Small optional areas with an item, sealed behind an HM.")}
         <fieldset className="checks" title="Which HMs can seal those areas.">
           <legend>Sealed by</legend>

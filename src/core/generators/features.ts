@@ -1,131 +1,146 @@
 // Stage 4: features.
 //
-//   • Ledge shortcuts: a second corridor between two points of the main path,
-//     with a ledge across it, so it's a one-way loop. Players can always walk
-//     back along the main path, so a ledge never traps anyone.
+//   • Ledge rows: a long ledge across the route with a gap at one end. The path
+//     winds round through the gap; going the other way, the player jumps down as
+//     a shortcut. The gap means a ledge never traps anyone.
 //   • HM pockets: a small room off the path through the trees, sealed by a Cut
 //     tree, a Rock Smash rock, or a strip of deep water (Surf). Each gets an item
 //     (added in the placement stage) and an "HM-gated area" zone.
 
-import { DIRS, IS_WALKABLE, IS_WALL, T, cheapestPath } from "../grid";
+import { DIRS, IS_WALKABLE, IS_WALL, IS_WATER, T, cheapestPath } from "../grid";
 import { makeGrid } from "../model";
 import { MoveGraph, openingCells } from "../reach";
 import type { Entity } from "../model";
 import type { GenContext } from "./context";
-import { Role } from "./context";
+import { LEVEL, Role } from "./context";
+import { effectiveElevation } from "./params";
 import type { PocketHm } from "./params";
 
-export function addLedges(ctx: GenContext): void {
-  const line = ctx.mainLine;
-  if (line.length < 16 || ctx.layout === "water") return;
-  for (let l = 0; l < ctx.params.ledges; l++) {
-    for (let attempt = 0; attempt < 20; attempt++) {
-      if (tryLedge(ctx, line)) break;
-    }
+/**
+ * Ledge rows, like Hoenn's Routes 101–104: a long ledge across the route with a
+ * gap at one end. Walking "up" the route, the path winds along the ledge to the
+ * gap and back; coming the other way, the player just jumps down, a shortcut.
+ *
+ * The ledge sits on flat ground (elevation 3 on both sides in Porymap): it's a
+ * one-way step, not a change of level. In pokeemerald a jump comes from the
+ * ledge's metatile behaviour (MB_JUMP_SOUTH/EAST/WEST, read by
+ * GetLedgeJumpDirection in src/field_player_avatar.c), not from elevation.
+ * On vertical routes the ledges face south; on horizontal routes they face east
+ * or west.
+ *
+ * How many: the Ledges setting, plus more on hillier routes (the Elevation
+ * setting), as many as fit along the route.
+ */
+export function addLedgeRows(ctx: GenContext): void {
+  if (ctx.layout === "water") return;
+  const amount = effectiveElevation(ctx.params, ctx.input.biome);
+  const wanted = ctx.params.ledges + Math.round(amount * 2);
+  const alongLength = ctx.vertical ? ctx.height : ctx.width;
+  // Keep clear of the entrances at the ends, and space the rows out.
+  const lines: number[] = [];
+  for (let a = 9; a < alongLength - 9; a++) lines.push(a);
+  const used: number[] = [];
+  for (const a of ctx.rng.shuffle(lines)) {
+    if (used.length >= wanted) break;
+    if (used.some((u) => Math.abs(u - a) < 7)) continue;
+    if (tryLedgeRow(ctx, a)) used.push(a);
   }
 }
 
-function tryLedge(ctx: GenContext, line: number[]): boolean {
-  const rng = ctx.rng;
-  const i = rng.int(Math.floor(line.length * 0.1), Math.floor(line.length * 0.6));
-  const j = Math.min(line.length - 1, i + rng.int(10, 24));
-  let a = line[i];
-  let b = line[j];
-  let [ax, ay] = ctx.xy(a);
-  let [bx, by] = ctx.xy(b);
-  // Ledges jump south, east or west (never north). Work out which way this loop runs.
-  let dir: "s" | "e" | "w";
-  if (ctx.vertical) {
-    if (Math.abs(by - ay) < 5) return false;
-    if (by < ay) {
-      [a, b] = [b, a];
-      [ax, ay, bx, by] = [bx, by, ax, ay];
-    }
-    dir = "s";
-  } else {
-    if (Math.abs(bx - ax) < 5) return false;
-    dir = bx > ax ? "e" : "w";
+/** Roles a ledge row may not cross: they must fall in the gap instead. */
+const KEEP_OPEN = new Set<number>([Role.Opening, Role.Stairs, Role.Bridge, Role.Pocket, Role.Branch, Role.Corridor]);
+/** Roles a detour may not pass through. */
+const NO_DETOUR = new Set<number>([Role.Pocket, Role.Sea, Role.Cliff, Role.Stairs, Role.Corridor, Role.Opening]);
+
+function tryLedgeRow(ctx: GenContext, along: number): boolean {
+  const crossLength = ctx.vertical ? ctx.width : ctx.height;
+  const bt = ctx.params.borderThickness;
+  const dir: "s" | "e" | "w" = ctx.vertical ? "s" : ctx.rng.chance(0.5) ? "e" : "w";
+  const jump = DIRS.find((d) => d.dir === dir)!;
+  const at = (c: number) => (ctx.vertical ? ctx.idx(c, along) : ctx.idx(along, c));
+  // Sort the cells across the route: blocked (trees, rock, water, raised ground) stay
+  // as they are; open ground becomes ledge; a few kinds of cell must stay open.
+  const cells: number[] = [];
+  const kind: Array<"blocked" | "ledge" | "open"> = [];
+  for (let c = bt; c < crossLength - bt; c++) {
+    const i = at(c);
+    cells.push(i);
+    if (ctx.locks[i]) return false;
+    const t = ctx.terrain[i];
+    if (KEEP_OPEN.has(ctx.role[i])) kind.push("open");
+    else if (ctx.elevation[i] !== LEVEL.ground || IS_WALL[t] || IS_WATER[t] || !IS_WALKABLE[t]) kind.push("blocked");
+    else kind.push("ledge");
   }
-  const forbidden = (c: number) => {
-    if (ctx.locks[c] || ctx.edgeDist(c) < ctx.params.borderThickness + 1) return true;
-    const r = ctx.role[c];
-    return (
-      r === Role.Pocket ||
-      r === Role.Opening ||
-      r === Role.Bridge ||
-      r === Role.Water ||
-      r === Role.Corridor ||
-      r === Role.Sea ||
-      r === Role.Beach ||
-      r === Role.Cliff ||
-      r === Role.Stairs ||
-      r === Role.GrassRoute ||
-      ctx.terrain[c] === T.waterDeep
-    );
+  // Both sides of the ledge must be flat ground the player can use.
+  const side = (i: number, s: number) => {
+    const [x, y] = ctx.xy(i);
+    const xx = x + s * jump.dx;
+    const yy = y + s * jump.dy;
+    return ctx.inside(xx, yy) ? ctx.idx(xx, yy) : -1;
   };
-  const corridor = cheapestPath(ctx.width, ctx.height, a, b, (c) => {
-    // The corridor is carved 2 wide, so check the whole 2×2 footprint.
-    const [x, y] = ctx.xy(c);
-    if (x + 1 >= ctx.width || y + 1 >= ctx.height) return Infinity;
-    const foot = [c, c + 1, c + ctx.width, c + ctx.width + 1];
-    const onPath = foot.some((f) => ctx.role[f] === Role.MainPath || ctx.role[f] === Role.Branch);
-    if (foot.some((f) => forbidden(f) && !(ctx.role[f] === Role.MainPath || ctx.role[f] === Role.Branch))) return Infinity;
-    if (foot.some((f) => ctx.elevation[f] !== ctx.elevation[a])) return Infinity;
-    if (onPath) return 40;
-    return IS_WALKABLE[ctx.terrain[c]] ? 3 : 1;
+  const crossings = cells.map((i, k) => (ctx.role[i] === Role.MainPath ? k : -1)).filter((k) => k >= 0);
+  if (!crossings.length) return false;
+  const p = Math.round(crossings.reduce((s, k) => s + k, 0) / crossings.length);
+
+  // The gap: as wide as the narrowest path, covering every cell that must stay open,
+  // and as far as possible from where the main path crosses (that's the detour).
+  const mustOpen = kind.map((k, j) => (k === "open" ? j : -1)).filter((j) => j >= 0);
+  // Wider where it has to take in something else that crosses here (often the grass shortcut).
+  const spread = mustOpen.length ? mustOpen[mustOpen.length - 1] - mustOpen[0] + 1 : 0;
+  if (spread > 6) return false;
+  const g = Math.max(2, ctx.params.pathWidthMin, spread);
+  const canGap = (j: number) => {
+    const i = cells[j];
+    return kind[j] === "open" || (ctx.elevation[i] === LEVEL.ground && !IS_WATER[ctx.terrain[i]] && (kind[j] === "ledge" || ctx.terrain[i] === T.tree));
+  };
+  // How far round the path winds varies from row to row.
+  const target = ctx.rng.range(6, 11);
+  const gapDist = (s: number) => Math.abs(s + (g - 1) / 2 - p);
+  let best = -1;
+  for (let s = 0; s + g <= cells.length; s++) {
+    if (mustOpen.some((j) => j < s || j >= s + g)) continue;
+    let ok = true;
+    for (let j = s; j < s + g && ok; j++) ok = canGap(j);
+    if (!ok || gapDist(s) < 5) continue;
+    if (best < 0 || Math.abs(gapDist(s) - target) < Math.abs(gapDist(best) - target)) best = s;
+  }
+  if (best < 0) return false;
+  const inGap = (j: number) => j >= best && j < best + g;
+  const lineSet = new Set(cells);
+  const gapSet = new Set(cells.filter((_, j) => inGap(j)));
+
+  // The detour: from the foot of the ledge where the path meets it, round through the
+  // gap, back to the path above. Plan it before changing anything.
+  const below = side(cells[p], 1);
+  const above = side(cells[p], -1);
+  if (below < 0 || above < 0) return false;
+  const usable = (i: number) => ctx.elevation[i] === LEVEL.ground && !ctx.locks[i] && ctx.edgeDist(i) >= bt && !NO_DETOUR.has(ctx.role[i]) && !IS_WATER[ctx.terrain[i]];
+  if (!usable(below) || !usable(above) || !IS_WALKABLE[ctx.terrain[below]] || !IS_WALKABLE[ctx.terrain[above]]) return false;
+  const route = cheapestPath(ctx.width, ctx.height, below, above, (i) => {
+    if (gapSet.has(i)) return 1;
+    if (lineSet.has(i) || !usable(i)) return Infinity;
+    return IS_WALKABLE[ctx.terrain[i]] ? 1 : ctx.terrain[i] === T.tree ? 4 : Infinity;
   });
-  if (!corridor || corridor.length < 8) return false;
-  // It must be a genuinely separate route, mostly through trees.
-  const fresh = corridor.filter((c) => ctx.role[c] !== Role.MainPath && ctx.role[c] !== Role.Branch).length;
-  if (fresh < corridor.length * 0.6) return false;
+  // A real shortcut: the way round is clearly longer than the jump.
+  if (!route || route.length < 10) return false;
 
-  // Find a stretch in the middle where the corridor runs in the ledge direction.
-  const step = DIRS.find((d) => d.dir === dir)!;
-  let ledgeAt = -1;
-  for (let k = Math.floor(corridor.length / 3); k < Math.floor((corridor.length * 2) / 3); k++) {
-    const [x0, y0] = ctx.xy(corridor[k - 1]);
-    const [x1, y1] = ctx.xy(corridor[k]);
-    const [x2, y2] = ctx.xy(corridor[k + 1]);
-    if (x1 - x0 === step.dx && y1 - y0 === step.dy && x2 - x1 === step.dx && y2 - y1 === step.dy) {
-      ledgeAt = k;
-      break;
-    }
-  }
-  if (ledgeAt < 0) return false;
-
-  // Carve the corridor (2 wide), then lay the ledge across it.
-  for (const c of corridor)
-    ctx.stamp(c, 2, T.path, Role.Corridor, (j) => {
-      const r = ctx.role[j];
-      return !forbidden(j) && r !== Role.MainPath && r !== Role.Branch && ctx.edgeDist(j) >= ctx.params.borderThickness;
-    });
-  const [lx, ly] = ctx.xy(corridor[ledgeAt]);
-  const across = ctx.vertical ? [1, 0] : [0, 1];
-  const row: number[] = [];
-  for (const sign of [-1, 1]) {
-    for (let k = sign === -1 ? 0 : 1; ; k++) {
-      const x = lx + sign * k * across[0];
-      const y = ly + sign * k * across[1];
-      if (!ctx.inside(x, y)) break;
-      const c = ctx.idx(x, y);
-      if (ctx.role[c] !== Role.Corridor) break;
-      row.push(c);
-    }
-  }
-  if (row.some((c) => ctx.locks[c])) return false;
+  // Lay the ledge, keep the gap open, and pave the way round.
   const ledge = dir === "s" ? T.ledgeS : dir === "e" ? T.ledgeE : T.ledgeW;
-  for (const c of row) ctx.set(c, ledge, Role.Corridor);
-  // Close the ends of the ledge with trees so it can't be walked around.
-  for (const end of [row[row.length - 1], row[0]]) {
-    const [ex, ey] = ctx.xy(end);
-    for (const sign of [-1, 1]) {
-      const x = ex + sign * across[0];
-      const y = ey + sign * across[1];
-      if (!ctx.inside(x, y)) continue;
-      const c = ctx.idx(x, y);
-      if (ctx.role[c] === Role.None || ctx.role[c] === Role.Clearing) ctx.set(c, T.tree, Role.Corridor);
-    }
-  }
+  cells.forEach((i, j) => {
+    if (inGap(j)) {
+      if (kind[j] !== "open") ctx.set(i, T.path, Role.MainPath);
+    } else if (kind[j] === "ledge") ctx.set(i, ledge, Role.Corridor);
+    // Trees and rocks in the line stay put (cleanup mustn't open a way through).
+    else if (ctx.role[i] === Role.None || ctx.role[i] === Role.Clearing) ctx.role[i] = Role.Corridor;
+  });
+  for (const c of route)
+    ctx.stamp(c, ctx.params.pathWidthMin, T.path, Role.MainPath, (j) => !lineSet.has(j) && usable(j) && (ctx.role[j] === Role.None || ctx.role[j] === Role.Clearing || ctx.role[j] === Role.MainPath));
+  // Where the path now runs along both sides of a tree in the line, the ledge carries on
+  // through it, so the ledge reads as one long step rather than a wall of trees.
+  const open = (i: number) => i >= 0 && IS_WALKABLE[ctx.terrain[i]] && ctx.elevation[i] === LEVEL.ground;
+  cells.forEach((i, j) => {
+    if (!inGap(j) && ctx.terrain[i] === T.tree && ctx.role[i] === Role.Corridor && open(side(i, 1)) && open(side(i, -1))) ctx.set(i, ledge, Role.Corridor);
+  });
   return true;
 }
 

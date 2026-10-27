@@ -87,7 +87,7 @@ Double-click **`start.command`**. If macOS refuses to open it:
    - **Terrain:** grass, water, tree cover, border (Auto = cliffs on alpine routes), stream, clearing.
 
    Sliders run from 0 to 100.
-   - **Structure:** side branches, ledge shortcuts, HM-gated areas.
+   - **Structure:** side branches, ledge rows, HM-gated areas.
    - **Gameplay:** trainers, items, hidden items, and which HMs the player has by now.
 
    Then Generate again. Every setting has a tooltip.
@@ -101,9 +101,16 @@ Double-click **`start.command`**. If macOS refuses to open it:
 - **River:** a river runs the length of the route. The path follows the banks and crosses on bridges, and there are surf entrances on the river at both ends.
 - **Open water:** sea or lake with islands. It's a surfing route with swimmers on the water and items on the islands, and the checks assume the player has Surf.
 
-**Elevation** (Basic → Elevation, 0–100) adds raised plateaus like Hoenn's. Each has a cliff face, stairs up, and ledges you jump down, and a path leads to every flight of stairs. At 0 the route is flat. Higher values give more and bigger plateaus, sometimes a second level on top.
+**Elevation** (Basic → Elevation, 0–100) makes the route hilly, like Hoenn's. Stretches of ground along the sides of the route rise in terraces toward the map edge, each with a cliff face, stairs up, and ledges you jump down. A path leads to every flight of stairs. It works on every route size, even the smallest.
 
-**Alpine routes are mountains.** The route runs up a valley and the ground on both sides climbs in terraces toward the map edges: up to 4 levels (Porymap 4–7) on wide maps, 2–3 on a 30–40 wide route. Each terrace has its own stairs, set away from the stairs below so the climb switches back. Alpine routes also get cliff borders, mostly bare rock with small clumps of conifers, narrow passes, and boulder fields. Any Elevation above 0 counts as quite hilly on alpine routes.
+- At 0 the route is flat.
+- Higher values give longer stretches of hillside and more levels: up to 3 (Porymap 4–6), and 4 on alpine routes. A level needs room, so narrow routes get fewer.
+- Wide routes also get free-standing plateaus in the middle.
+- Coastal and river routes keep the low ground along the water.
+
+**Ledge rows** (Structure → Ledge rows) put a long ledge across the route on flat ground, with a gap at one end. Walking one way, the path winds along the ledge to the gap and back. Coming the other way, you just jump down, a shortcut. In Porymap the ground is 3 on both sides: the ledge is a one-way step, not a change of level. Hillier routes (higher Elevation) get extra rows.
+
+**Alpine routes are mountains.** The route runs up a valley and the ground on both sides climbs in terraces toward the map edges: up to 4 levels (Porymap 4–7) on a 40-wide route, 3 on a 30-wide route, 1–2 on the smallest. Each terrace has its own stairs, set away from the stairs below so the climb switches back. Alpine routes also get cliff borders, mostly bare rock with small clumps of conifers, narrow passes, and boulder fields. Any Elevation above 0 counts as quite hilly on alpine routes.
 
 **Snow** (Basic → Snow, 0–100) is roughly the share of the route under snow, highest ground first, so a hilly route can be white on top and green below. In the snow:
 
@@ -128,7 +135,7 @@ Each entrance is **Walk** or **Surf** (Entrances section). Changing the layout r
 - **Main path:** winds from entrance to entrance, with side branches that end in an item.
 - **Grass:** mostly beside the path.
 - **Water:** ponds, and sometimes a stream with a bridge where it crosses the path.
-- **Ledge shortcut:** a one-way loop that always leads back to the path.
+- **Ledge rows:** ledges across the route; the path winds round, and coming back you jump down.
 - **HM-gated area:** a small area sealed by a Cut tree, a Rock Smash rock or a strip of water (Surf), with an item inside.
 - **Trainers:** each faces across the path, and the player can always walk around them.
 - **Hidden items** and a **sign** at the entrance.
