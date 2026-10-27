@@ -72,6 +72,9 @@ export interface RouteParams {
   trainerSpacing: number;
   items: number;
   hiddenItems: number;
+  /** Wild Pokémon levels on this map, for the encounter draft (see encounters.ts). */
+  levelMin: number;
+  levelMax: number;
   /** How many times to retry with a related seed if validation fails. */
   retries: number;
 }
@@ -105,6 +108,8 @@ export const DEFAULT_ROUTE_PARAMS: RouteParams = {
   trainerSpacing: 8,
   items: 2,
   hiddenItems: 2,
+  levelMin: 3,
+  levelMax: 6,
   retries: 8,
 };
 
@@ -128,6 +133,8 @@ export const PARAM_RANGES: Record<string, [number, number, boolean]> = {
   trainerSpacing: [3, 20, true],
   items: [0, 10, true],
   hiddenItems: [0, 10, true],
+  levelMin: [1, 100, true],
+  levelMax: [1, 100, true],
   retries: [0, 20, true],
 };
 

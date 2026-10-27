@@ -301,6 +301,39 @@ On iPad, exports open the share sheet. Choose **Save to Files**.
 
 ---
 
+## Wild encounters (Milestone 4)
+
+Open **Generate → Gameplay → Encounters…**.
+
+**1. The species list (one for the whole project).** Paste your Pokémon, one per line, in this order or any order:
+
+```
+ZIGZAGOON 2-5 land meadow
+MAGIKARP 5-15 fish
+GEODUDE 6-10 rock alpine uncommon
+```
+
+- **Name:** with or without `SPECIES_`.
+- **Levels:** `5` or `2-5`: the levels it can appear at anywhere in your game.
+- **Where:** `land` (grass and caves), `surf`, `fish`, `rock` (Rock Smash). Several are fine. None = land.
+- **Biomes (optional):** e.g. `meadow`, `coastal`, `wetland`: it's more likely on maps of those biomes.
+- **Rarity (optional):** `common` (default), `uncommon` or `rare`. Rare ones end up in the 1% slots.
+
+A list copied from a spreadsheet (commas or tabs) works too. Press **Use this list**; lines it can't read are listed. **Example list** fills in a short list to try it out. The tool comes with no Pokémon data: replace it with your own.
+
+**2. Each map's draft.** Set the map's levels with **Lowest / Highest wild level** under Gameplay (default 3–6). Generate then drafts the tables the map needs, with vanilla Emerald's slots and rates:
+
+| Table | When | Slots | Rate |
+| --- | --- | --- | --- |
+| Grass (land) | grass on the map | 12 (20, 20, 10, 10, 10, 10, 5, 5, 4, 4, 1, 1 %) | 20 (10 in caves) |
+| Surfing | deep water | 5 (60, 30, 5, 4, 1 %) | 4 |
+| Rock Smash | Rock Smash rocks | 5 (60, 30, 5, 4, 1 %) | 20 |
+| Fishing | deep water | 10: Old Rod 2, Good Rod 3, Super Rod 5 | 30 |
+
+Common species get the likely slots; fishing levels rise from the Old to the Super Rod. **Redraft** makes a different draft. Change any species, level or rate by hand, add or remove a table: the draft is then kept (**Keep this draft when I Generate** is ticked); untick it to let Generate draft again. Everything is undoable.
+
+The Check tab warns when a map has no draft yet, or has grass, deep water or Rock Smash rocks with no table for them.
+
 ## Saving your work
 
 - **Save** writes a `.json` project file. That file is your real copy. Back it up like any other document.

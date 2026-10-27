@@ -4,7 +4,7 @@ This document defines the tool's file formats. The terrain vocabulary and the ti
 
 | File | Identifier (`format`) | Version field | Current |
 | --- | --- | --- | --- |
-| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 7 |
+| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 8 |
 | Terrain vocabulary (`profiles/terrain.json`) | `gen3-terrain-vocabulary` | `formatVersion` | 1 |
 | Terrain palette (`profiles/palettes/*.json`) | `gen3-terrain-palette` | `formatVersion` | 1 |
 | Tileset profile (`profiles/tilesets/*.json`) | `gen3-tileset-profile` | `formatVersion` | 1 (draft) |
@@ -33,6 +33,7 @@ When the format changes, `schemaVersion` goes up and a migration in `src/core/pr
 | 5 | 3 (part A) | Entities may have `"locked": true` (placed or moved by hand; Generate keeps them). New edit types `lock`, `area` and `entity`. Version-4 files need no changes. |
 | 6 | 3 (part B) | New edit type `smart` (smart strokes). Version-5 files need no changes. |
 | 7 | 4 (part B) | Entities may have `"accepted"` (warnings marked OK). Entity edits may have `"kind": "warp"`. New kinds placed by hand (berry tree, trigger, secret base, heal location, warp). Version-6 files need no changes. |
+| 8 | 4 (part C) | The region gains `speciesPool` (added empty to older files); a map's `encounterPlan` may hold draft tables. |
 
 ```jsonc
 {
@@ -44,6 +45,7 @@ When the format changes, `schemaVersion` goes up and a migration in `src/core/pr
     "name": "Cascadia",
     "seed": 42,                       // 0 … 4294967295
     "sketch": null,                   // region sketch: Milestone 6 (must be null in v1)
+    "speciesPool": [ … ],             // the species list for encounter drafts (from version 8; see below)
     "settings": {
       "defaultBiome": "temperate_rainforest",
       "levelCurve": { "start": 3, "end": 60 },
@@ -99,7 +101,7 @@ The region's connection graph isn't stored separately. It's derived from each ma
   "connections": [ { "direction": "up", "map": "map_2", "offset": 0 } ],
   "header": { /* map.json header, below */ },
   "layout": { "borderBlock": ["tree", "tree", "tree", "tree"], "primaryTileset": "", "secondaryTileset": "" },
-  "encounterPlan": null,              // Milestone 4 (must be null in v1)
+  "encounterPlan": null,              // draft wild encounters, or null before the first draft (from version 8; see below)
   "edits": [ /* Edit, below */ ],
   "routeId": null,
   "progressionStep": null
@@ -200,6 +202,7 @@ Every value is optional. Missing or out-of-range values fall back to the default
 | `availableHms` | (empty) | comma list of `cut, flash, rock_smash, strength, surf, dive, waterfall` |
 | `trainers`, `trainerSpacing` | 3, 8 | 0–10, 3–20 |
 | `items` (extra), `hiddenItems` | 2, 2 | 0–10 |
+| `levelMin`, `levelMax` | 3, 6 | 1–100 (wild Pokémon levels for the encounter draft) |
 | `retries` | 8 | 0–20 |
 | `generatorVersion` | (set by the app) | which generator produced the map |
 | `seedPinned` | absent | `true` when the seed is pinned in the app (New seed and Variations leave it alone); not used by the generator |
@@ -354,3 +357,22 @@ For each cell, the app builds a **neighbor mask**: one bit per neighbor, set whe
 A rule matches when `(neighborMask & care) == (mask & care)`. `care` marks which bits matter: leave a bit out of `care` to mean "don't care". The **first** rule that matches wins. If no rule matches, `fallbackMetatile` is used.
 
 This is how water edges, tree walls, path borders and cliffs get their correct edge and corner pieces. The planned tileset generator reads the vocabulary and these masks, draws matching metatiles, and writes the `rules` back.
+
+### Wild encounters (from version 8)
+
+`speciesPool` (on the region) is the user's species list:
+
+```json
+{ "species": "SPECIES_ZIGZAGOON", "minLevel": 2, "maxLevel": 5,
+  "habitats": ["land"],              // land | surf | fish | rock
+  "biomes": ["meadow"],              // biome ids where it's more likely; [] = anywhere
+  "rarity": "common" }               // common | uncommon | rare
+```
+
+`encounterPlan` (on each map) holds the draft tables. Each table has an `encounter_rate` and its slots in pokeemerald's order (`src/data/wild_encounters.json`): land 12 slots, surf 5, rock 5, fish 10 (Old Rod slots 0–1, Good Rod 2–4, Super Rod 5–9).
+
+```json
+{ "land": { "rate": 20, "slots": [ { "species": "SPECIES_ZIGZAGOON", "min": 3, "max": 4 }, … ] },
+  "surf": { … }, "rock": { … }, "fish": { … },   // each optional: only the tables the map needs
+  "locked": true }                               // optional: edited by hand, Generate keeps it
+```

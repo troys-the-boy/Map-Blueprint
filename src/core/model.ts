@@ -5,6 +5,7 @@
 // file format (a per-layer legend + numbers, see docs/formats.md).
 
 import type { Hm } from "./constants";
+import type { EncounterPlan, SpeciesEntry } from "./encounters";
 import { MAP_OFFSET_H, MAP_OFFSET_W, MAX_MAP_DATA_SIZE, OBJECT_EVENT_TEMPLATES_COUNT } from "./constants";
 import type { ElevationLevel } from "./terrain";
 import { DEFAULT_FILL_TERRAIN, ELEVATION_LEVELS, requireTerrain } from "./terrain";
@@ -259,8 +260,8 @@ export interface MapBlueprint {
   connections: Connection[];
   header: MapHeader;
   layout: MapLayout;
-  /** Draft wild encounter plan (Milestone 4). Always null in this version. */
-  encounterPlan: null;
+  /** Draft wild encounter tables (see core/encounters.ts), or null before the first draft. */
+  encounterPlan: EncounterPlan | null;
   edits: Edit[];
   /** The route this map is a segment of, if any. */
   routeId: string | null;
@@ -315,6 +316,8 @@ export interface Region {
   seed: Seed;
   /** The coarse region sketch (Milestone 6). Always null in this version. */
   sketch: null;
+  /** The species list pasted by the user, shared by every map's encounter draft. */
+  speciesPool: SpeciesEntry[];
   maps: MapBlueprint[];
   routes: Route[];
   progression: ProgressionStep[];
@@ -338,6 +341,7 @@ export function newRegion(name: string, seed: Seed): Region {
     name,
     seed,
     sketch: null,
+    speciesPool: [],
     maps: [],
     routes: [],
     progression: [],

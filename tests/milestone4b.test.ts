@@ -42,14 +42,14 @@ describe("every kind of thing", () => {
     expect(thingTag(map, b)).toBe("W0");
   });
 
-  it("save and open with warps and warnings marked OK (file format 7)", () => {
+  it("save and open with warps and warnings marked OK (file format 7 and later)", () => {
     const { region, map } = blank();
     const t = newThing(map, "trainer", 3, 3);
     t.accepted = ["unavoidable-trainer"];
     map.entities.push(t, newThing(map, "berry_tree", 4, 4));
     map.warps.push({ ...newWarp(map, 5, 5), kind: "cave_mouth", destMap: "MAP_GRANITE_CAVE_1F", destWarpId: 0 });
     map.edits.push({ type: "entity", action: "place", id: "w1", kind: "warp", x: 5, y: 5 });
-    expect(CURRENT_SCHEMA_VERSION).toBe(7);
+    expect(CURRENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(7);
     const loaded = parseProject(serializeProject(region, "test")).maps[0];
     expect(loaded.entities[0].accepted).toEqual(["unavoidable-trainer"]);
     expect(loaded.warps[0]).toMatchObject({ kind: "cave_mouth", destMap: "MAP_GRANITE_CAVE_1F" });

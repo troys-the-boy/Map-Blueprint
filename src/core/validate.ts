@@ -14,6 +14,7 @@ import { MOVEMENT_HMS, MoveGraph, openingCells, openingNeeds } from "./reach";
 import type { MapView } from "./reach";
 import { checkMapSize, describeSizeCheck } from "./sizeRule";
 import { TERRAIN_TYPES } from "./terrain";
+import { TABLE_LABELS, neededTables } from "./encounters";
 
 export type Severity = "error" | "warning";
 
@@ -202,6 +203,20 @@ export function validateMap(map: MapBlueprint, opts: ValidateOptions = {}): Issu
         });
     }
   }
+
+  // --- Encounters ----------------------------------------------------------------
+  // Grass, deep water and Rock Smash rocks each need a table. Before any draft, one
+  // reminder is enough.
+  const needed = neededTables(map);
+  if (needed.length && !map.encounterPlan)
+    warn("no-encounters", "No wild encounter draft yet. Paste a species list in Generate → Gameplay → Encounters, then Generate or Redraft.");
+  else if (map.encounterPlan)
+    for (const kind of needed)
+      if (!map.encounterPlan[kind])
+        warn(
+          "missing-encounter-table",
+          `The map has ${kind === "land" ? "grass" : kind === "rock" ? "Rock Smash rocks" : "deep water"} but no ${TABLE_LABELS[kind]} table. Add one in Encounters, or add species that live there.`,
+        );
 
   // --- Terrain quality -------------------------------------------------------------
   const grass = components(width, height, (i) => IS_GRASS[terrain[i]]);

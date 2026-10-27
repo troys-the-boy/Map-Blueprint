@@ -29,6 +29,8 @@ import {
 } from "../core/selection";
 import type { Direction } from "../core/terrain";
 import type { Anchor } from "../core/resize";
+import type { EncounterPlan, SpeciesEntry } from "../core/encounters";
+import { draftEncounters } from "../core/encounters";
 import { resizeMap } from "../core/resize";
 import { findThing, isWarp, newThing, newWarp, removeThing, setFacing, setSight, sightOf, thingAt, turnClockwise } from "../core/things";
 import type { PlaceKind, Thing } from "../core/things";
@@ -90,6 +92,7 @@ interface MapSnapshot {
   header: MapBlueprint["header"];
   layout: MapBlueprint["layout"];
   connections: MapBlueprint["connections"];
+  encounterPlan: MapBlueprint["encounterPlan"];
 }
 
 /** Everything a resize changes, sizes included. */
@@ -124,6 +127,7 @@ function snapshot(map: MapBlueprint): MapSnapshot {
     header: { ...map.header },
     layout: structuredClone(map.layout),
     connections: structuredClone(map.connections),
+    encounterPlan: structuredClone(map.encounterPlan),
   };
 }
 
@@ -140,6 +144,7 @@ function restore(map: MapBlueprint, snap: MapSnapshot) {
   map.header = { ...snap.header };
   map.layout = structuredClone(snap.layout);
   map.connections = structuredClone(snap.connections);
+  map.encounterPlan = structuredClone(snap.encounterPlan);
 }
 
 interface Stroke {
@@ -336,6 +341,7 @@ class EditorStore {
       applyResult(target, result);
       if (whole) target.layers.locks.data.fill(0);
     }
+    this.redraftAfterGenerate(target);
     this.selectedThing = null;
     this.pushUndo({ type: "snapshot", mapId: target.id, before, after: snapshot(target), edits: edit ? [edit] : [] }, joinUndo);
     this.lastGenerate = { mapId: target.id, attempts: result.attempts, ok: result.ok };
@@ -431,6 +437,7 @@ class EditorStore {
     map.seed = item.seed;
     applyResult(map, item.result);
     if (this.generateMode === "whole") map.layers.locks.data.fill(0);
+    this.redraftAfterGenerate(map);
     this.selectedThing = null;
     this.pushUndo({ type: "snapshot", mapId: map.id, before, after: snapshot(map) });
     this.lastGenerate = { mapId: map.id, attempts: item.result.attempts, ok: item.result.ok };
@@ -450,6 +457,61 @@ class EditorStore {
   setGenerateMode(mode: GenerateMode) {
     this.generateMode = mode;
     this.changed();
+  }
+
+  // ----- encounters --------------------------------------------------------
+
+  /** Bumped by Redraft, so each press gives a different draft. */
+  private draftSalt = 0;
+
+  /** After Generate: draft the encounter tables again from the species list, unless they were edited by hand. */
+  private redraftAfterGenerate(map: MapBlueprint) {
+    if (!this.region.speciesPool.length || map.encounterPlan?.locked) return;
+    map.encounterPlan = draftEncounters(map, this.region.speciesPool);
+  }
+
+  /** Replace the region's species list (from the pasted text). */
+  setSpeciesPool(entries: SpeciesEntry[]) {
+    this.region.speciesPool = entries;
+    this.markDirty();
+    this.changed();
+    this.scheduleValidate();
+  }
+
+  /** Draft this map's encounter tables again (a different draft each time). One undo step. */
+  redraftEncounters() {
+    const map = this.currentMap;
+    if (!map) return;
+    const before = snapshot(map);
+    this.draftSalt++;
+    map.encounterPlan = draftEncounters(map, this.region.speciesPool, this.draftSalt);
+    this.propertyStep(map, before);
+    this.scheduleValidate();
+  }
+
+  /** Change the draft by hand (a slot, a rate, a table added or removed). It's then locked, so Generate keeps it. */
+  editEncounters(field: string, change: (plan: EncounterPlan) => void) {
+    const map = this.currentMap;
+    if (!map) return;
+    const before = snapshot(map);
+    const plan: EncounterPlan = structuredClone(map.encounterPlan ?? {});
+    change(plan);
+    plan.locked = true;
+    map.encounterPlan = plan;
+    this.propertyStep(map, before, "encounters:" + field);
+    this.scheduleValidate();
+  }
+
+  /** Lock or unlock the draft: unlocked, Generate drafts it again from the species list. */
+  setEncountersLocked(locked: boolean) {
+    const map = this.currentMap;
+    if (!map) return;
+    const before = snapshot(map);
+    const plan: EncounterPlan = { ...(map.encounterPlan ?? {}) };
+    if (locked) plan.locked = true;
+    else delete plan.locked;
+    map.encounterPlan = plan;
+    this.propertyStep(map, before);
   }
 
   setParams(patch: Record<string, string | number | boolean>) {

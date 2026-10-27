@@ -170,6 +170,7 @@ button:focus-visible, summary:focus-visible, input:focus-visible, select:focus-v
 /* ---- drawers and dialogs ---- */
 
 .drawer-backdrop, .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 40; }
+.modal-backdrop { z-index: 50; }
 .drawer { position: fixed; top: 0; bottom: 0; width: min(340px, 90vw); background: var(--panel); border-right: 1px solid var(--line); z-index: 41; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
 .drawer.left { left: 0; }
 .map-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -237,7 +238,7 @@ legend { color: var(--muted); font-size: 13px; padding: 0 4px; }
 
 /* ---- side panel tabs (Milestone 2) ---- */
 
-.terrain-dock { width: 336px; }
+.terrain-dock { width: min(336px, 92vw); }
 .panel-head { gap: 6px; position: sticky; top: 0; background: var(--panel); z-index: 2; padding-top: 2px; }
 .tabs { display: flex; gap: 2px; flex: 1; min-width: 0; }
 .tab { flex: 1 1 auto; min-width: 0; padding: 0 4px; font-size: 14px; white-space: nowrap; color: var(--muted); border-bottom: 2px solid transparent; border-radius: 8px 8px 0 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
@@ -339,3 +340,20 @@ fieldset.checks .check { min-height: 38px; }
 .resize-loss ul { margin: 6px 0; padding-left: 20px; }
 .resize-loss li { margin: 2px 0; }
 button.danger { background: var(--bad); color: #1b1012; border: none; font-weight: 600; }
+.species-text { width: 100%; min-height: 140px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: 13px/1.45 ui-monospace, Menlo, Consolas, monospace; resize: vertical; }
+.button-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
+.problem-list { margin: 6px 0; padding-left: 26px; font-size: 13px; }
+.enc-heading { margin: 16px 0 4px; font-size: 16px; }
+.enc-table { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 8px; }
+.enc-table-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.enc-table-head h4 { margin: 0; flex: 1; font-size: 15px; }
+.enc-rate { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.enc-rate input { width: 64px; }
+.enc-slots { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 13px; }
+.enc-slots th { text-align: left; color: var(--muted); font-weight: 500; padding: 2px 4px; }
+.enc-slots td { padding: 2px 4px; }
+.enc-slots td.chance { color: var(--muted); width: 32px; font-variant-numeric: tabular-nums; }
+.enc-slots input, .enc-rate input { min-height: 36px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; color: var(--text); padding: 0 6px; font-size: 14px; }
+.enc-slots td:nth-child(2) input { width: 100%; min-width: 0; }
+.enc-slots td:nth-child(3) input, .enc-slots td:nth-child(4) input { width: 58px; }
+.enc-slots .rod-row td { padding-top: 8px; font-weight: 600; color: var(--text); }

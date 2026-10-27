@@ -11,6 +11,8 @@
 // CURRENT_SCHEMA_VERSION and add a migration that upgrades the previous version.
 
 import { HMS } from "./constants";
+import type { EncounterPlan, EncounterTable, SpeciesEntry } from "./encounters";
+import { HABITATS, RARITIES } from "./encounters";
 import type {
   Biome,
   Connection,
@@ -54,7 +56,7 @@ import {
 import { ELEVATION_LEVELS, TERRAIN_TYPES, terrainIndex } from "./terrain";
 
 export const FILE_FORMAT_ID = "gen3-map-blueprint-project";
-export const CURRENT_SCHEMA_VERSION = 7;
+export const CURRENT_SCHEMA_VERSION = 8;
 
 /** Safety limits for opened files. Anything bigger is rejected. */
 export const FILE_LIMITS = {
@@ -191,6 +193,7 @@ export function toProjectFile(region: Region, appVersion: string, savedAt: Date 
       name: region.name,
       seed: region.seed,
       sketch: region.sketch,
+      speciesPool: region.speciesPool,
       settings: region.settings,
       progression: region.progression,
       routes: region.routes,
@@ -258,6 +261,26 @@ const connectionCheck: Check<Connection> = object({
   map: str(64, ID),
   offset: num(-FILE_LIMITS.maxMapSide * 4, FILE_LIMITS.maxMapSide * 4),
 });
+
+// Encounters (see core/encounters.ts).
+const speciesName = str(64, /^[A-Za-z0-9_]{1,64}$/);
+const level = num(1, 100);
+const speciesCheck: Check<SpeciesEntry> = object({
+  species: speciesName,
+  minLevel: level,
+  maxLevel: level,
+  habitats: arrayOf(oneOf(HABITATS), HABITATS.length),
+  biomes: arrayOf(oneOf(BIOMES) as Check<Biome>, BIOMES.length),
+  rarity: oneOf(RARITIES),
+});
+const encounterTableCheck: Check<EncounterTable> = object({
+  rate: num(0, 255),
+  slots: arrayOf(object({ species: speciesName, min: level, max: level }), 12),
+});
+const encounterPlanCheck: Check<EncounterPlan> = object(
+  { land: encounterTableCheck, surf: encounterTableCheck, rock: encounterTableCheck, fish: encounterTableCheck, locked: bool },
+  ["land", "surf", "rock", "fish", "locked"],
+);
 
 const strokeEditCheck = object({
   type: literal("stroke"),
@@ -387,7 +410,7 @@ const savedMapCheck = object({
     primaryTileset: str(100),
     secondaryTileset: str(100),
   }),
-  encounterPlan: nullValue,
+  encounterPlan: nullable(encounterPlanCheck),
   edits: arrayOf(editCheck, FILE_LIMITS.maxEditsPerMap),
   routeId: nullable(str(64, ID)),
   progressionStep: nullable(str(64, ID)),
@@ -415,6 +438,7 @@ const regionCheck = object({
   name: text(),
   seed: num(0, MAX_SEED),
   sketch: nullValue,
+  speciesPool: arrayOf(speciesCheck, 2000),
   settings: object({
     defaultBiome: oneOf(BIOMES) as Check<Biome>,
     levelCurve: object({ start: num(1, 100), end: num(1, 100) }),
@@ -491,6 +515,12 @@ export const MIGRATIONS: Record<number, Migration> = {
   // and warnings marked OK on a thing ("accepted"). Nothing in a version-6 file
   // needs changing.
   6: (file) => ({ ...file, schemaVersion: 7 }),
+  // v7 → v8 (Milestone 4, part C): the region gains a species list ("speciesPool"),
+  // and a map's "encounterPlan" may hold draft encounter tables instead of null.
+  7: (file) => {
+    const region = file.region as Record<string, unknown> | null;
+    return { ...file, schemaVersion: 8, region: region && typeof region === "object" && !Array.isArray(region) ? { ...region, speciesPool: [] } : region };
+  },
 };
 
 /** Upgrade an old file step by step to the target version. */

@@ -253,7 +253,13 @@ function MapProperties() {
                 </option>
               ))}
             </select>
-            <Suggest id={`c${k}`} value={c.map} options={others.map((m) => m.header.id)} title="The neighbouring map (MAP_*)" onChange={(v) => setConnection(k, { map: constant(v) || "MAP_NONE" })} />
+            <select value={c.map} aria-label="Neighbouring map" title="The neighbouring map" onChange={(e) => setConnection(k, { map: e.target.value })}>
+              {others.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
             <input
               type="number"
               aria-label="Offset"
@@ -266,10 +272,11 @@ function MapProperties() {
             </button>
           </div>
         ))}
+        {others.length === 0 && <p className="hint">Connections join maps in this project: make the neighbouring map first (New map).</p>}
         <button
           className="secondary"
-          disabled={map.connections.length >= 16}
-          onClick={() => s.editMap("connections", (m) => (m.connections = [...m.connections, { direction: "up", map: others[0]?.header.id || "MAP_NONE", offset: 0 }]))}
+          disabled={map.connections.length >= 16 || others.length === 0}
+          onClick={() => s.editMap("connections", (m) => (m.connections = [...m.connections, { direction: "up", map: others[0].id, offset: 0 }]))}
         >
           <Icon name="plus" size={16} /> Add a connection
         </button>

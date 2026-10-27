@@ -1,6 +1,7 @@
 // The Generate panel: seed, settings in collapsible groups, and the button.
 // Every setting has a default, so Generate works without touching anything.
 
+import { useState } from "react";
 import { HMS } from "../../core/constants";
 import type { Hm } from "../../core/constants";
 import { canGenerate } from "../../core/generate";
@@ -14,6 +15,8 @@ import type { Biome, Edge, Opening, OpeningKind } from "../../core/model";
 import { MAX_SEED } from "../../core/rng";
 import { useStore } from "../store";
 import { NumberField } from "./NumberField";
+import { EncountersDialog } from "./EncountersDialog";
+import { TABLES } from "../../core/encounters";
 import { Icon } from "./icons";
 
 const BIOME_LABELS: Record<Biome, string> = {
@@ -31,6 +34,7 @@ const HM_LABELS: Record<string, string> = { cut: "Cut", flash: "Flash", rock_sma
 
 export function GeneratePanel() {
   const s = useStore();
+  const [encountersOpen, setEncountersOpen] = useState(false);
   const map = s.currentMap;
   if (!map) return null;
   const p = readRouteParams(map.params);
@@ -334,6 +338,13 @@ export function GeneratePanel() {
         {num("trainerSpacing", "Trainer spacing", "Minimum distance between trainers, in cells.")}
         {num("items", "Extra items", "Item balls besides the ones at dead ends and in HM areas.")}
         {num("hiddenItems", "Hidden items", "Hidden items in corners. Quiet dead ends also get one automatically.")}
+        {num("levelMin", "Lowest wild level", "The lowest level of wild Pokémon here, for the encounter draft.")}
+        {num("levelMax", "Highest wild level", "The highest level of wild Pokémon here, for the encounter draft.")}
+        <button className="secondary wide" title="The species list for the region, and this map's draft wild encounter tables" onClick={() => setEncountersOpen(true)}>
+          Encounters{map.encounterPlan ? `: ${TABLES.filter((k) => map.encounterPlan?.[k]).length} table${TABLES.filter((k) => map.encounterPlan?.[k]).length === 1 ? "" : "s"}` : ""}
+          {map.encounterPlan?.locked ? " (kept)" : ""}…
+        </button>
+        {encountersOpen && <EncountersDialog onClose={() => setEncountersOpen(false)} />}
         <fieldset className="checks" title="HMs the player has when they reach this map. Validation uses these to check every entrance can be reached.">
           <legend>Player has</legend>
           {HMS.map((h: Hm) => (
