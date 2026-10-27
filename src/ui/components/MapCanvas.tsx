@@ -35,11 +35,18 @@ export function MapCanvas({ onHover }: { onHover: (cell: [number, number] | null
       }
     });
     // Overlay toggles that don't change cells (grid, rulers, frame) only need a redraw.
+    // So do brush size and tool changes (the hover outline shows the brush footprint).
+    const brushFor = () => (store.tool === "pencil" || store.tool === "erase" ? store.brush : 1);
+    renderer.brush = brushFor();
     const offStore = store.subscribe(() => {
       const o = store.prefs.overlays;
       const r = renderer.overlays;
       if (o.grid !== r.grid || o.rulers !== r.rulers || o.screenFrame !== r.screenFrame) {
         renderer.overlays = { ...o };
+        renderer.requestFrame();
+      }
+      if (renderer.brush !== brushFor()) {
+        renderer.brush = brushFor();
         renderer.requestFrame();
       }
     });

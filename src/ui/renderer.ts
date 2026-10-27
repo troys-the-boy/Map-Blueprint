@@ -58,6 +58,8 @@ export class MapRenderer {
   overlays: Overlays = { grid: true, rulers: true, screenFrame: true, locks: false };
   /** Cell under the pointer, or null. */
   hover: [number, number] | null = null;
+  /** Width of the outline drawn around the hovered cell: the brush size when painting, else 1. */
+  brush = 1;
 
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -261,9 +263,13 @@ export class MapRenderer {
         ctx.strokeRect(offsetX + fx * scale, offsetY + fy * scale, SCREEN_WIDTH_METATILES * scale, SCREEN_HEIGHT_METATILES * scale);
         ctx.setLineDash([]);
       }
+      // Outline the cells the brush will paint (same footprint as brushCells in core/paint.ts).
+      const start = -Math.floor((this.brush - 1) / 2);
+      const bx = hx + start;
+      const by = hy + start;
       ctx.strokeStyle = "#ffffff";
       ctx.lineWidth = 2;
-      ctx.strokeRect(offsetX + hx * scale + 1, offsetY + hy * scale + 1, scale - 2, scale - 2);
+      ctx.strokeRect(offsetX + bx * scale + 1, offsetY + by * scale + 1, this.brush * scale - 2, this.brush * scale - 2);
     }
 
     if (this.overlays.rulers) this.drawRulers(map);
