@@ -95,6 +95,8 @@ export interface Warp {
   destMap: string;
   /** Index of the destination warp on that map (Porymap "dest_warp_id"). */
   destWarpId: number | null;
+  /** Placed by hand: Generate keeps it. Generated warps (town doors) are made again each time. Absent = false. */
+  locked?: boolean;
 }
 
 export const EDGES = ["north", "south", "east", "west"] as const;
@@ -231,7 +233,7 @@ export interface EntityEdit {
 /** A smart stroke (Smart strokes tool): a drawn line or outline, made valid by the tool. See core/strokes.ts. */
 export interface SmartEdit {
   type: "smart";
-  kind: "path" | "stream" | "tree_wall" | "grass" | "water" | "ledge";
+  kind: "path" | "stream" | "tree_wall" | "grass" | "water" | "ledge" | "building";
   /** Width in cells for line strokes (1 for ledges and areas). */
   width: number;
   /** Ledges only: the jump direction chosen, or null to work it out from the line. */

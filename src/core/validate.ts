@@ -162,6 +162,16 @@ export function validateMap(map: MapBlueprint, opts: ValidateOptions = {}): Issu
       if (!near(w.x, w.y)) err("unreachable-warp", `Warp W${k} at (${w.x}, ${w.y}) can't be reached ${hmList(hms)}.`, [w.y * width + w.x]);
     });
   }
+  // Doors: on a building's bottom edge with walkable ground in front. Gen 3 tilesets draw
+  // buildings from the front, so every door faces south.
+  map.warps.forEach((w, k) => {
+    if (w.kind !== "door") return;
+    const i = w.y * width + w.x;
+    const below = w.y + 1 < height ? terrain[i + width] : -1;
+    if (terrain[i] !== T.building) err("door-placement", `Door W${k} at (${w.x}, ${w.y}) isn't on a building. Paint the building (or a Building lot stroke), or make the warp another kind.`, [i]);
+    else if (below < 0 || !IS_WALKABLE[below] || below === T.building)
+      err("door-placement", `Door W${k} at (${w.x}, ${w.y}) has no walkable ground in front of it (south): doors are on a building's bottom edge.`, [i]);
+  });
   const others = opts.otherMaps ?? [];
   const isThis = (dest: string) => dest === map.id || dest === map.header.id;
   map.warps.forEach((w, k) => {
@@ -247,7 +257,9 @@ export function validateMap(map: MapBlueprint, opts: ValidateOptions = {}): Issu
       if (terrain[i] !== T.path || gated[i] || nextToStairs(x, y)) continue;
       if ((blocks(x - 1, y) && blocks(x + 1, y)) || (blocks(x, y - 1) && blocks(x, y + 1))) narrow.push(i);
     }
-  for (const g of groups(narrow, width, height)) warn("narrow-path", `Path near ${xy(g[0])} is only 1 cell wide.`, g);
+  // Towns have one-cell walks up to their doors, on purpose.
+  if (map.mapType !== "town")
+    for (const g of groups(narrow, width, height)) warn("narrow-path", `Path near ${xy(g[0])} is only 1 cell wide.`, g);
 
   const islands: number[] = [];
   for (let y = 0; y < height; y++)

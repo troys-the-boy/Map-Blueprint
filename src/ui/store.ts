@@ -38,7 +38,7 @@ import type { SmartKind } from "../core/strokes";
 import type { ZoneKind } from "../core/zones";
 import { edgeBand, newZone, zoneLabel } from "../core/zones";
 import type { Edge } from "../core/model";
-import { AREA_KINDS, applySmartStroke, strokeWidth } from "../core/strokes";
+import { AREA_KINDS, applySmartStroke, buildingLot, strokeWidth } from "../core/strokes";
 import { hmsFor, readRouteParams } from "../core/generators/params";
 import type { Issue } from "../core/validate";
 import { validateMap } from "../core/validate";
@@ -229,7 +229,7 @@ class EditorStore {
   /** True while Generate is running. */
   generating = false;
   /** Summary of the last Generate, for the panel. */
-  lastGenerate: { mapId: string; attempts: number; ok: boolean } | null = null;
+  lastGenerate: { mapId: string; attempts: number; ok: boolean; notes?: string[] } | null = null;
   /** A cell the canvas should scroll to (e.g. a clicked validation issue). */
   focus: { x: number; y: number; cells: number[]; seq: number } | null = null;
   /** Bumped when the map's terrain or things change, so overlays can refresh. */
@@ -344,7 +344,7 @@ class EditorStore {
     this.redraftAfterGenerate(target);
     this.selectedThing = null;
     this.pushUndo({ type: "snapshot", mapId: target.id, before, after: snapshot(target), edits: edit ? [edit] : [] }, joinUndo);
-    this.lastGenerate = { mapId: target.id, attempts: result.attempts, ok: result.ok };
+    this.lastGenerate = { mapId: target.id, attempts: result.attempts, ok: result.ok, notes: result.notes };
     if (!area) this.rememberSeed(target);
     this.markDirty();
     this.changed();
@@ -440,7 +440,7 @@ class EditorStore {
     this.redraftAfterGenerate(map);
     this.selectedThing = null;
     this.pushUndo({ type: "snapshot", mapId: map.id, before, after: snapshot(map) });
-    this.lastGenerate = { mapId: map.id, attempts: item.result.attempts, ok: item.result.ok };
+    this.lastGenerate = { mapId: map.id, attempts: item.result.attempts, ok: item.result.ok, notes: item.result.notes };
     this.rememberSeed(map);
     this.variations = null;
     this.markDirty();
@@ -1277,6 +1277,23 @@ class EditorStore {
       direction: kind === "ledge" && this.ledgeDir !== "auto" ? this.ledgeDir : null,
       points,
     };
+    if (kind === "building") {
+      // A building lot also gets a door: a warp on its front, placed by hand (kept by Generate).
+      const lot = buildingLot(map, points);
+      if (!lot) return;
+      const before = snapshot(map);
+      applySmartStroke(map, edit, emptyDiff(), new Map());
+      const w = newWarp(map, lot.doorX, lot.doorY);
+      w.kind = "door";
+      map.warps.push(w);
+      map.edits.push(edit);
+      this.selectedThing = null;
+      this.pushUndo({ type: "snapshot", mapId: map.id, before, after: snapshot(map), edits: [edit] });
+      this.markDirty();
+      this.changed();
+      this.cellsChanged(map.id, null);
+      return;
+    }
     const diff = emptyDiff();
     applySmartStroke(map, edit, diff, new Map());
     if (!diff.index.length) return;
@@ -1360,10 +1377,9 @@ class EditorStore {
     if (!e) return;
     if (d.moved) {
       e.elevation = ELEVATION_LEVELS[map.layers.elevation.data[e.y * map.width + e.x]];
-      if (!isWarp(e)) {
-        e.locked = true;
-        map.layers.locks.data[e.y * map.width + e.x] = 1;
-      }
+      e.locked = true;
+      // A warp's cell stays unlocked, so Generate can lead a path to it.
+      if (!isWarp(e)) map.layers.locks.data[e.y * map.width + e.x] = 1;
       this.finishThing(map, d.before, { type: "entity", action: "move", id: e.id, kind: isWarp(e) ? "warp" : e.kind, x: e.x, y: e.y });
     } else if (d.wasSelected && !isWarp(e) && e.kind === "trainer") {
       turnClockwise(e);
@@ -1425,7 +1441,7 @@ class EditorStore {
     if (!map || !t) return;
     const before = snapshot(map);
     change(t);
-    if (!isWarp(t)) t.locked = true;
+    t.locked = true;
     this.propertyStep(map, before, "thing:" + t.id + ":" + field);
   }
 

@@ -18,7 +18,7 @@
 
 import { ENTITY_PREFIX, FACE_MOVEMENT } from "./entities";
 import type { Entity, EntityKind, MapBlueprint, Warp } from "./model";
-import { ELEVATION_LEVELS } from "./terrain";
+import { ELEVATION_LEVELS, TERRAIN_TYPES } from "./terrain";
 import type { Direction } from "./terrain";
 
 /** What the Things tool can place: any kind of thing, or a warp. */
@@ -90,11 +90,12 @@ export function thingTag(map: MapBlueprint, t: Thing): string {
 
 export const WARP_LABELS: Record<Warp["kind"], string> = { door: "Door", cave_mouth: "Cave mouth", ladder: "Ladder", stairs: "Stairs", other: "Other" };
 
-/** A new warp at (x, y). Its destination is left for the user to fill in. */
+/** A new warp at (x, y): a door on a building, otherwise a cave mouth. Its destination is left for the user to fill in. */
 export function newWarp(map: MapBlueprint, x: number, y: number): Warp {
   let n = map.warps.length + 1;
   while (map.warps.some((w) => w.id === `w${n}`)) n++;
-  return { id: `w${n}`, kind: "door", x, y, elevation: ELEVATION_LEVELS[map.layers.elevation.data[y * map.width + x]], destMap: "", destWarpId: 0 };
+  const onBuilding = TERRAIN_TYPES[map.layers.terrain.data[y * map.width + x]]?.id === "building";
+  return { id: `w${n}`, kind: onBuilding ? "door" : "cave_mouth", x, y, elevation: ELEVATION_LEVELS[map.layers.elevation.data[y * map.width + x]], destMap: "", destWarpId: 0, locked: true };
 }
 
 /** Default sight range for a trainer placed by hand, in cells. */

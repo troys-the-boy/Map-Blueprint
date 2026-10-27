@@ -92,6 +92,7 @@ const SMART_TIPS: Record<SmartKind, string> = {
   grass: "Grass patch: draw round an area. It fills with tall grass; paths and water stay as they are.",
   water: "Water body: draw round an area. It fills with deep water, with a tidy shoreline; paths across it become bridges.",
   ledge: "Ledge: draw a line of ledges. Choose which way they jump below, or leave it on Auto (south across the map, east down it).",
+  building: "Building lot: drag across the area the building covers. It becomes a building with a door in the middle of its bottom edge (Gen 3 doors face south), a path cell in front, and a door warp: set where it leads in the Details tab.",
 };
 
 const LEDGE_DIRS: Array<{ dir: "auto" | "s" | "e" | "w"; label: string; tip: string }> = [

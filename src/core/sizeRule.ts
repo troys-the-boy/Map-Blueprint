@@ -65,8 +65,20 @@ export const SIZE_PRESETS: Record<MapType, SizePreset[]> = {
     { label: "M (horizontal)", width: 60, height: 30 },
     { label: "L (horizontal)", width: 80, height: 40 },
   ],
-  town: [{ label: "Standard", width: 30, height: 30 }],
-  forest: [{ label: "Standard", width: 40, height: 40 }],
-  cave: [{ label: "Floor", width: 40, height: 40 }],
+  town: [
+    { label: "S", width: 20, height: 20 },
+    { label: "M", width: 30, height: 30 },
+    { label: "L", width: 40, height: 40 },
+  ],
+  forest: [
+    { label: "S", width: 40, height: 40 },
+    { label: "M", width: 50, height: 50 },
+    { label: "L", width: 60, height: 60 },
+  ],
+  cave: [
+    { label: "S", width: 30, height: 30 },
+    { label: "M", width: 40, height: 40 },
+    { label: "L", width: 50, height: 50 },
+  ],
   interior_stub: [{ label: "Small room", width: 15, height: 10 }],
 };

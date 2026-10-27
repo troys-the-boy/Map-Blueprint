@@ -106,7 +106,11 @@ export function placeEntities(ctx: GenContext): void {
         kind: "sign",
         x,
         y,
-        fields: { player_facing_dir: "BG_EVENT_PLAYER_FACING_ANY", script: `${label}_EventScript_RouteSign`, text: label.replace(/([a-z])(\d)/, "$1 $2") },
+        fields: {
+          player_facing_dir: "BG_EVENT_PLAYER_FACING_ANY",
+          script: `${label}_EventScript_${ctx.input.mapType === "town" ? "TownSign" : "RouteSign"}`,
+          text: label.replace(/([a-z])(\d)/, "$1 $2").replace(/([a-z])([A-Z])/g, "$1 $2"),
+        },
       });
     }
   }

@@ -11,6 +11,7 @@
 // CURRENT_SCHEMA_VERSION and add a migration that upgrades the previous version.
 
 import { HMS } from "./constants";
+import { SMART_KINDS } from "./strokes";
 import type { EncounterPlan, EncounterTable, SpeciesEntry } from "./encounters";
 import { HABITATS, RARITIES } from "./encounters";
 import type {
@@ -56,7 +57,7 @@ import {
 import { ELEVATION_LEVELS, TERRAIN_TYPES, terrainIndex } from "./terrain";
 
 export const FILE_FORMAT_ID = "gen3-map-blueprint-project";
-export const CURRENT_SCHEMA_VERSION = 8;
+export const CURRENT_SCHEMA_VERSION = 9;
 
 /** Safety limits for opened files. Anything bigger is rejected. */
 export const FILE_LIMITS = {
@@ -246,7 +247,8 @@ const warpCheck: Check<Warp> = object({
   elevation,
   destMap: str(100),
   destWarpId: nullable(num(0, 255)),
-});
+  locked: bool,
+}, ["locked"]);
 
 const openingCheck: Check<Opening> = object({
   id: str(64, ID),
@@ -327,7 +329,7 @@ const entityEditCheck = object({
 
 const smartEditCheck = object({
   type: literal("smart"),
-  kind: oneOf(["path", "stream", "tree_wall", "grass", "water", "ledge"] as const),
+  kind: oneOf(SMART_KINDS),
   width: num(1, 16),
   direction: nullable(oneOf(["s", "e", "w"] as const)),
   points: intArray(0, FILE_LIMITS.maxMapSide - 1, FILE_LIMITS.maxCellsPerEdit),
@@ -520,6 +522,19 @@ export const MIGRATIONS: Record<number, Migration> = {
   7: (file) => {
     const region = file.region as Record<string, unknown> | null;
     return { ...file, schemaVersion: 8, region: region && typeof region === "object" && !Array.isArray(region) ? { ...region, speciesPool: [] } : region };
+  },
+  // v8 → v9 (Milestone 5, part A): warps can be "locked" (placed by hand) like things, since
+  // towns now generate door warps; every warp in an older file was placed by hand, so it's locked.
+  // Also the "building" smart stroke (building lots).
+  8: (file) => {
+    const region = file.region as Record<string, unknown> | null;
+    const maps = region && Array.isArray(region.maps) ? (region.maps as unknown[]) : null;
+    const lockWarps = (m: unknown) => {
+      if (!m || typeof m !== "object" || Array.isArray(m)) return m;
+      const warps = (m as { warps?: unknown }).warps;
+      return { ...(m as object), warps: Array.isArray(warps) ? warps.map((w) => (w && typeof w === "object" && !Array.isArray(w) ? { ...(w as object), locked: true } : w)) : warps };
+    };
+    return { ...file, schemaVersion: 9, region: region && maps ? { ...region, maps: maps.map(lockWarps) } : region };
   },
 };
 

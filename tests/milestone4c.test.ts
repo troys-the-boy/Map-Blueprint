@@ -121,11 +121,11 @@ describe("checks and saving", () => {
     expect(validateMap(map).map((i) => i.code)).not.toContain("missing-encounter-table");
   });
 
-  it("saves and opens the species list and the draft (file format 8)", () => {
+  it("saves and opens the species list and the draft (file format 8 and later)", () => {
     const { region, map } = route();
     region.speciesPool = pool;
     map.encounterPlan = { ...draftEncounters(map, pool), locked: true };
-    expect(CURRENT_SCHEMA_VERSION).toBe(8);
+    expect(CURRENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(8);
     const loaded = parseProject(serializeProject(region, "test"));
     expect(loaded.speciesPool).toEqual(pool);
     expect(loaded.maps[0].encounterPlan).toEqual(map.encounterPlan);

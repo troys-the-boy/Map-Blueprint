@@ -9,6 +9,8 @@ import { DEFAULT_ROUTE_PARAMS, PARAM_RANGES, POCKET_HMS, readRouteParams, resolv
 import type { Layout, LayoutSetting } from "../../core/generators/params";
 import type { RouteParams } from "../../core/generators/params";
 import { TRAVEL_LABELS, TRAVEL_SETTINGS, travelOf, travelVertical } from "../../core/generators/travel";
+import { BUILDING_TYPES, TOWN_LAYOUTS, TOWN_LAYOUT_LABELS, TOWN_RANGES, buildingList, readTownParams } from "../../core/generators/townParams";
+import type { TownLayout } from "../../core/generators/townParams";
 import type { TravelSetting } from "../../core/generators/travel";
 import { BIOMES, EDGES } from "../../core/model";
 import type { Biome, Edge, Opening, OpeningKind } from "../../core/model";
@@ -29,6 +31,67 @@ const BIOME_LABELS: Record<Biome, string> = {
 };
 
 const LAYOUT_LABELS: Record<Layout, string> = { land: "Land", coastal: "Coastal", river: "River", water: "Open water" };
+
+/** Town settings: street layout, buildings, people, edge grass (see generators/townParams.ts). */
+function TownSettings() {
+  const s = useStore();
+  const map = s.currentMap!;
+  const t = readTownParams(map.params);
+  const set = (patch: Record<string, string | number | boolean>) => s.setParams(patch);
+  const count = (key: keyof typeof TOWN_RANGES, label: string, tip: string) => {
+    const [min, max] = TOWN_RANGES[key];
+    return (
+      <label className="field inline" title={tip}>
+        <span>{label}</span>
+        <NumberField min={min} max={max} value={t[key]} onChange={(v) => set({ [key]: v })} />
+      </label>
+    );
+  };
+  const check = (key: "center" | "mart" | "gym" | "landmark", tip: string) => {
+    const b = BUILDING_TYPES[key];
+    return (
+      <label className="check" title={tip}>
+        <input type="checkbox" checked={t[key]} onChange={(e) => set({ [key]: e.target.checked })} />
+        {b.label} ({b.width}×{b.height})
+      </label>
+    );
+  };
+  return (
+    <details open>
+      <summary title="Streets and buildings">Town</summary>
+      <label className="field" title="How the streets are laid out.">
+        <span>Streets</span>
+        <select value={t.townLayout} onChange={(e) => set({ townLayout: e.target.value as TownLayout })}>
+          {TOWN_LAYOUTS.map((l) => (
+            <option key={l} value={l}>
+              {TOWN_LAYOUT_LABELS[l]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <fieldset className="checks" title="Buildings to place. Each gets a door on its front (south) side and a warp to its interior.">
+        <legend>Buildings</legend>
+        {check("center", "A Pokémon Center, near an entrance, with its heal location in front of the door.")}
+        {check("mart", "A Poké Mart, near an entrance.")}
+        {check("gym", "A Gym, further in, with a sign beside the door.")}
+        {check("landmark", "A bigger building of note (a museum, a lab…).")}
+      </fieldset>
+      {count("houses", "Houses", "Small houses (4×3).")}
+      {count("largeHouses", "Of which large", "How many of the houses are larger (5×4).")}
+      {count("people", "People", "People wandering beside the streets.")}
+      <label className="slider" title="Small patches of tall grass near the edges. They're never in the way: every exit and door can be reached without stepping in grass.">
+        <span>
+          Grass at the edges <b>{Math.round(t.edgeGrass * 100)}</b>
+        </span>
+        <input type="range" min={0} max={1} step={0.05} value={t.edgeGrass} onChange={(e) => set({ edgeGrass: Number(e.target.value) })} />
+      </label>
+      <p className="hint">
+        {buildingList(t).length} buildings. Doors lead to MAP_…_POKEMON_CENTER_1F, _MART, _GYM, _HOUSE1…: make those interiors in Porymap. Buildings that don't fit are left out (Generate says so): make the map bigger or ask
+        for fewer.
+      </p>
+    </details>
+  );
+}
 
 const HM_LABELS: Record<string, string> = { cut: "Cut", flash: "Flash", rock_smash: "Rock Smash", strength: "Strength", surf: "Surf", dive: "Dive", waterfall: "Waterfall" };
 
@@ -65,6 +128,7 @@ export function GeneratePanel() {
           ? `The route will run ${travelVertical(travel) ? "north–south, across the map's short side" : "west–east, across the map's short side"}.`
           : null;
   const supported = canGenerate(map);
+  const town = map.mapType === "town";
   const last = s.lastGenerate?.mapId === map.id ? s.lastGenerate : null;
   const errors = s.issues.filter((i) => i.severity === "error").length;
   const warnings = s.issues.length - errors;
@@ -106,7 +170,12 @@ export function GeneratePanel() {
         <button className="primary wide big" disabled={!supported || s.generating} onClick={() => void s.generate()} title="Generate this map from its seed and settings. By default, locked cells and things you placed are kept (see Generate changes, below). You can undo it.">
           {s.generating ? "Generating…" : "Generate"}
         </button>
-        {!supported && <p className="hint">Only routes can be generated so far. Towns, forests and caves arrive in Milestone 5.</p>}
+        {!supported && <p className="hint">Routes and towns can be generated so far. Forests and caves arrive in the next parts of Milestone 5.</p>}
+        {last?.notes?.map((n) => (
+          <p key={n} className="hint">
+            {n}
+          </p>
+        ))}
         <label className="field" title="What Generate changes. Locked cells are the ones you painted, moved or locked with the lock brush (yellow corner).">
           <span>Generate changes</span>
           <select value={s.generateMode} onChange={(e) => s.setGenerateMode(e.target.value as "keep" | "whole")}>
@@ -175,8 +244,10 @@ export function GeneratePanel() {
         )}
       </div>
 
-      <details open>
-        <summary title="Biome, path shape">Basic</summary>
+      {town && <TownSettings />}
+
+      <details open={!town}>
+        <summary title={town ? "Biome" : "Biome, path shape"}>Basic</summary>
         <label className="field" title="The look of the map: changes the mix of trees, grass, water and ground.">
           <span>Biome</span>
           <select value={map.biome} onChange={(e) => changeLayout(p.layout, e.target.value as Biome)}>
@@ -187,36 +258,40 @@ export function GeneratePanel() {
             ))}
           </select>
         </label>
-        <label className="field" title="The overall shape of the route. Auto = Coastal for the coastal biome, Land otherwise.">
-          <span>Layout</span>
-          <select value={p.layout} onChange={(e) => changeLayout(e.target.value as LayoutSetting, map.biome)}>
-            <option value="auto">Auto ({LAYOUT_LABELS[layout]})</option>
-            <option value="land">Land</option>
-            <option value="coastal">Coastal: sea along one side</option>
-            <option value="river">River: a river along the route</option>
-            <option value="water">Open water: sea or lake, surfing</option>
-          </select>
-        </label>
-        {layout === "water" && <p className="hint">Open-water routes are crossed by surfing, so the checks assume the player has Surf.</p>}
-        <label
-          className="field"
-          title="Which way the player first walks this route. Ledges then jump back toward the start (the winding path is the way forward), trainers face the player coming from the start, the hills rise toward the end, the sign stands at the start, and a ledge pocket holds an item you reach on the way back."
-        >
-          <span>Travel direction</span>
-          <select value={p.travel} onChange={(e) => changeTravel(e.target.value as TravelSetting)}>
-            {TRAVEL_SETTINGS.map((t) => (
-              <option key={t} value={t}>
-                {TRAVEL_LABELS[t]}
-              </option>
-            ))}
-          </select>
-        </label>
-        {travelHint && <p className="hint">{travelHint}</p>}
-        {num("elevation", "Elevation", "How hilly the route is. Hillsides rise along the sides of the route, with cliffs, stairs up and ledges down: higher values give more of them and more levels (up to 3, or 4 on alpine routes). Also adds ledge rows. 0 = flat.")}
-        {num("snow", "Snow", "How much of the route is under snow, highest ground first. 0 = none, 100 = snowed in. Grass becomes snowy grass, ponds freeze into slippery ice, some trees become snowdrifts.")}
-        {num("winding", "Path winding", "0 = straight, 100 = wanders a lot.")}
-        {num("pathWidthMin", "Narrowest path", "Narrowest the main path gets, in cells.")}
-        {num("pathWidthMax", "Widest path", "Widest the main path gets, in cells.")}
+        {!town && (
+          <>
+            <label className="field" title="The overall shape of the route. Auto = Coastal for the coastal biome, Land otherwise.">
+              <span>Layout</span>
+              <select value={p.layout} onChange={(e) => changeLayout(e.target.value as LayoutSetting, map.biome)}>
+                <option value="auto">Auto ({LAYOUT_LABELS[layout]})</option>
+                <option value="land">Land</option>
+                <option value="coastal">Coastal: sea along one side</option>
+                <option value="river">River: a river along the route</option>
+                <option value="water">Open water: sea or lake, surfing</option>
+              </select>
+            </label>
+            {layout === "water" && <p className="hint">Open-water routes are crossed by surfing, so the checks assume the player has Surf.</p>}
+            <label
+              className="field"
+              title="Which way the player first walks this route. Ledges then jump back toward the start (the winding path is the way forward), trainers face the player coming from the start, the hills rise toward the end, the sign stands at the start, and a ledge pocket holds an item you reach on the way back."
+            >
+              <span>Travel direction</span>
+              <select value={p.travel} onChange={(e) => changeTravel(e.target.value as TravelSetting)}>
+                {TRAVEL_SETTINGS.map((t) => (
+                  <option key={t} value={t}>
+                    {TRAVEL_LABELS[t]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {travelHint && <p className="hint">{travelHint}</p>}
+            {num("elevation", "Elevation", "How hilly the route is. Hillsides rise along the sides of the route, with cliffs, stairs up and ledges down: higher values give more of them and more levels (up to 3, or 4 on alpine routes). Also adds ledge rows. 0 = flat.")}
+            {num("snow", "Snow", "How much of the route is under snow, highest ground first. 0 = none, 100 = snowed in. Grass becomes snowy grass, ponds freeze into slippery ice, some trees become snowdrifts.")}
+            {num("winding", "Path winding", "0 = straight, 100 = wanders a lot.")}
+            {num("pathWidthMin", "Narrowest path", "Narrowest the main path gets, in cells.")}
+            {num("pathWidthMax", "Widest path", "Widest the main path gets, in cells.")}
+          </>
+        )}
       </details>
 
       <details>
@@ -274,9 +349,9 @@ export function GeneratePanel() {
 
       <details>
         <summary title="Grass, water, trees, border">Terrain</summary>
-        {num("grass", "Grass", "Share of open ground that becomes grass (wild encounters).")}
-        {num("water", "Water", "Ponds and streams.")}
-        {num("treeDensity", "Tree cover", "How much of the map is trees rather than open ground.")}
+        {!town && num("grass", "Grass", "Share of open ground that becomes grass (wild encounters).")}
+        {!town && num("water", "Water", "Ponds and streams.")}
+        {num("treeDensity", "Tree cover", town ? "How many trees dot the town." : "How much of the map is trees rather than open ground.")}
         {num("borderThickness", "Border thickness", "Cells of wall around the map edge.")}
         <label className="field" title="What the wall around the map is made of. Auto = cliffs on alpine routes, dense forest otherwise.">
           <span>Border style</span>
@@ -286,57 +361,63 @@ export function GeneratePanel() {
             <option value="cliff">Cliffs</option>
           </select>
         </label>
-        <label className="field" title="A stream crossing the route, with a bridge where it meets the path.">
-          <span>Stream</span>
-          <select value={p.stream} onChange={(e) => set({ stream: e.target.value })}>
-            <option value="auto">Sometimes</option>
-            <option value="yes">Always</option>
-            <option value="no">Never</option>
-          </select>
-        </label>
-        {(layout === "coastal" || layout === "river") && (
-          <label className="check" title="Add entrances on the water at each end, which need Surf. Applies when entrances are picked automatically.">
-            <input type="checkbox" checked={p.surfEntrances} onChange={(e) => set({ surfEntrances: e.target.checked })} />
-            Surf entrances on the water
-          </label>
+        {!town && (
+          <>
+              <label className="field" title="A stream crossing the route, with a bridge where it meets the path.">
+                <span>Stream</span>
+                <select value={p.stream} onChange={(e) => set({ stream: e.target.value })}>
+                  <option value="auto">Sometimes</option>
+                  <option value="yes">Always</option>
+                  <option value="no">Never</option>
+                </select>
+              </label>
+              {(layout === "coastal" || layout === "river") && (
+                <label className="check" title="Add entrances on the water at each end, which need Surf. Applies when entrances are picked automatically.">
+                  <input type="checkbox" checked={p.surfEntrances} onChange={(e) => set({ surfEntrances: e.target.checked })} />
+                  Surf entrances on the water
+                </label>
+            )}
+            <label className="check" title="An open clearing beside the path.">
+              <input type="checkbox" checked={p.clearing} onChange={(e) => set({ clearing: e.target.checked })} />
+              Clearing
+            </label>
+          </>
         )}
-        <label className="check" title="An open clearing beside the path.">
-          <input type="checkbox" checked={p.clearing} onChange={(e) => set({ clearing: e.target.checked })} />
-          Clearing
-        </label>
       </details>
 
-      <details>
-        <summary title="Branches, ledges, HM-gated areas">Structure</summary>
-        <label className="check" title="A shorter second way through that's mostly tall grass. Taking the path means trainer battles; taking the grass means wild Pokémon.">
-          <input type="checkbox" checked={p.grassShortcut} onChange={(e) => set({ grassShortcut: e.target.checked })} />
-          Grass shortcut (two ways through)
-        </label>
-        {num("pathGrass", "Grass across the path", "Stretches of grass on the main path itself, so the path still has some wild encounters.")}
-        {num("branches", "Side branches", "Dead-end paths off the main route.")}
-        {num("branchLength", "Branch length", "How far side branches reach.")}
-        <label className="check" title="Put an item at the end of every dead end.">
-          <input type="checkbox" checked={p.deadEndRewards} onChange={(e) => set({ deadEndRewards: e.target.checked })} />
-          Items at dead ends
-        </label>
-        {num("ledges", "Ledge rows", "Ledges across the route on flat ground. Going one way, the path winds round the end of the ledge; coming back, you jump down as a shortcut. Elevation adds more.")}
-        {num("hmPockets", "HM-gated areas", "Small optional areas with an item, sealed behind an HM.")}
-        <fieldset className="checks" title="Which HMs can seal those areas.">
-          <legend>Sealed by</legend>
-          {POCKET_HMS.map((h) => (
-            <label key={h} className="check">
-              <input type="checkbox" checked={p.hmPocketTypes.includes(h)} onChange={(e) => toggleList("hmPocketTypes", h, e.target.checked)} />
-              {HM_LABELS[h]}
-            </label>
-          ))}
-        </fieldset>
-      </details>
+      {!town && (
+        <details>
+          <summary title="Branches, ledges, HM-gated areas">Structure</summary>
+          <label className="check" title="A shorter second way through that's mostly tall grass. Taking the path means trainer battles; taking the grass means wild Pokémon.">
+            <input type="checkbox" checked={p.grassShortcut} onChange={(e) => set({ grassShortcut: e.target.checked })} />
+            Grass shortcut (two ways through)
+          </label>
+          {num("pathGrass", "Grass across the path", "Stretches of grass on the main path itself, so the path still has some wild encounters.")}
+          {num("branches", "Side branches", "Dead-end paths off the main route.")}
+          {num("branchLength", "Branch length", "How far side branches reach.")}
+          <label className="check" title="Put an item at the end of every dead end.">
+            <input type="checkbox" checked={p.deadEndRewards} onChange={(e) => set({ deadEndRewards: e.target.checked })} />
+            Items at dead ends
+          </label>
+          {num("ledges", "Ledge rows", "Ledges across the route on flat ground. Going one way, the path winds round the end of the ledge; coming back, you jump down as a shortcut. Elevation adds more.")}
+          {num("hmPockets", "HM-gated areas", "Small optional areas with an item, sealed behind an HM.")}
+          <fieldset className="checks" title="Which HMs can seal those areas.">
+            <legend>Sealed by</legend>
+            {POCKET_HMS.map((h) => (
+              <label key={h} className="check">
+                <input type="checkbox" checked={p.hmPocketTypes.includes(h)} onChange={(e) => toggleList("hmPocketTypes", h, e.target.checked)} />
+                {HM_LABELS[h]}
+              </label>
+            ))}
+          </fieldset>
+        </details>
+      )}
 
       <details>
         <summary title="Trainers, items, HMs the player has">Gameplay</summary>
-        {num("trainers", "Trainers", "How many trainers to place. Each faces the path and can be walked around.")}
-        {num("trainerSpacing", "Trainer spacing", "Minimum distance between trainers, in cells.")}
-        {num("items", "Extra items", "Item balls besides the ones at dead ends and in HM areas.")}
+        {!town && num("trainers", "Trainers", "How many trainers to place. Each faces the path and can be walked around.")}
+        {!town && num("trainerSpacing", "Trainer spacing", "Minimum distance between trainers, in cells.")}
+        {!town && num("items", "Extra items", "Item balls besides the ones at dead ends and in HM areas.")}
         {num("hiddenItems", "Hidden items", "Hidden items in corners. Quiet dead ends also get one automatically.")}
         {num("levelMin", "Lowest wild level", "The lowest level of wild Pokémon here, for the encounter draft.")}
         {num("levelMax", "Highest wild level", "The highest level of wild Pokémon here, for the encounter draft.")}

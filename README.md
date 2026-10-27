@@ -96,6 +96,7 @@ Double-click **`start.command`**. If macOS refuses to open it:
 - **Grass patch:** draw round an area; it fills with tall grass. Paths and water inside stay as they are.
 - **Water body:** draw round an area; it fills with deep water, with the shoreline tidied (no one-cell spikes or notches). Paths across it become bridges.
 - **Ledge:** a line of ledges. Below the kinds, choose which way they jump: **Auto** (a line across the map jumps south, a line down it jumps east), or ↓ → ←.
+- **Building lot:** drag across the area a building covers. It becomes a building with its door in the middle of the bottom edge (Gen 3 buildings face south), a path cell in front, and a door warp; set where the door leads in the Details tab.
 
 You see the stroke as you draw; it's applied when you let go, and one Undo takes it back. Everything a stroke draws is locked, so Generate builds the rest of the route around it. Water gets Porymap's water elevation (1) and bridges 15 (F).
 
@@ -169,6 +170,18 @@ Zones are optional. Without them the generator decides everything; with them it 
 **Soft or hard:** zones are soft by default: the generator follows their general shape with natural, irregular edges. **Fuzziness** (0–100) sets how loose: at 100 the edge moves up to 4 cells in or out. Tick **Exact edges (hard)** to have a zone followed cell for cell. On the map, soft zones have a dashed outline and hard ones a solid one (**Show → Zones** turns the overlay off).
 
 Zones are saved with the map and kept every time you generate. Locked cells always win over zones. Automatic entrances move along the edge out of water and wall zones.
+
+## Generate a town (Milestone 5)
+
+Make a map of type **Town** (sizes S 20×20, M 30×30, L 40×40), then press **Generate**. The **Town** group in the Generate tab sets:
+
+- **Streets:** *Grid* (roads in blocks), *Organic* (winding lanes) or *Waterfront* (the sea along one side, the main road along the shore).
+- **Buildings:** Pokémon Center (5×4), Mart (4×4), Gym (7×6), a landmark building (6×5), and houses (4×3, some 5×4). Each sits on a lot beside a street with its door in the middle of its front (south) side, a walk to the street, and a **door warp** to its interior: `MAP_<TOWN>_POKEMON_CENTER_1F`, `_MART`, `_GYM`, `_HOUSE1`… (vanilla's naming). The interiors aren't made: build them in Porymap. Buildings that don't fit are left out, and Generate says so.
+- **People** wandering beside the streets, and **Grass at the edges**: small tall-grass patches near the border that are never in the way (every exit and door can be reached without stepping in grass).
+
+Generate also adds the town sign, a sign by the Gym, flower beds, fences and trees, a few hidden items, and the Pokémon Center's **heal location** on the step in front of its door. The building sizes are typical Gen 3 sizes, not checked against pokeemerald's (binary) layouts; tell me if one is wrong.
+
+Doors Generate makes are replaced each time you Generate; warps you place yourself are kept. **Check** reports a door that isn't on a building's bottom edge with walkable ground in front of it.
 
 ## Generate a route (Milestone 2)
 
@@ -431,7 +444,8 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 
 ## Known limitations
 
-- **Routes only.** Generate works for routes. Towns, forests and caves arrive in Milestone 5, and until then those map types stay blank.
+- **Routes and towns only.** Forests and caves arrive in the next parts of Milestone 5; until then those map types stay blank.
+- **Waterfront towns** sometimes get wide patches of road where lanes run side by side.
 - **Mountains follow the map's own biome.** A biome zone changes the ground, trees, grass and detail in its area, but elevation (alpine terraces) still follows the map's main biome.
 - **Generate works around drawn features but doesn't route through them.** A path you draw is kept, but the generated main path may run elsewhere; join them with another stroke if you want one route.
 - **Regenerated gaps are often forest.** Away from the path, the generator mostly grows trees, so a gap filled with generated terrain may come back as forest. Use Fill with… or the pencil if you want open ground there.

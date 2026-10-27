@@ -15,18 +15,18 @@
 // Everything a stroke changes is locked, so Generate keeps it. Elevation follows
 // the terrain: water on low ground is Porymap's water level (1), bridges are 15.
 
-import { IS_WALL, IS_WATER, T } from "./grid";
+import { IS_WALKABLE, IS_WALL, IS_WATER, T } from "./grid";
 import type { MapBlueprint, SmartEdit } from "./model";
 import type { CellDiff } from "./paint";
 import { brushCells, lineCells, paintCellLevel } from "./paint";
 import { areaCells, lassoArea } from "./selection";
 import { ELEVATION_LEVELS } from "./terrain";
 
-export const SMART_KINDS = ["path", "stream", "tree_wall", "grass", "water", "ledge"] as const;
+export const SMART_KINDS = ["path", "stream", "tree_wall", "grass", "water", "ledge", "building"] as const;
 export type SmartKind = (typeof SMART_KINDS)[number];
 
 /** Kinds drawn as an outline that's filled in, rather than as a line. */
-export const AREA_KINDS: ReadonlySet<SmartKind> = new Set(["grass", "water"]);
+export const AREA_KINDS: ReadonlySet<SmartKind> = new Set(["grass", "water", "building"]);
 
 export const SMART_LABELS: Record<SmartKind, string> = {
   path: "Path",
@@ -35,6 +35,7 @@ export const SMART_LABELS: Record<SmartKind, string> = {
   grass: "Grass patch",
   water: "Water body",
   ledge: "Ledge",
+  building: "Building lot",
 };
 
 /** The terrain each stroke mostly paints (for its swatch). */
@@ -45,10 +46,11 @@ export const SMART_TERRAIN: Record<SmartKind, number> = {
   grass: T.tallGrass,
   water: T.waterDeep,
   ledge: T.ledgeS,
+  building: T.building,
 };
 
 /** Narrowest each line stroke may be, in cells. */
-const MIN_WIDTH: Record<SmartKind, number> = { path: 1, stream: 2, tree_wall: 2, grass: 1, water: 1, ledge: 1 };
+const MIN_WIDTH: Record<SmartKind, number> = { path: 1, stream: 2, tree_wall: 2, grass: 1, water: 1, ledge: 1, building: 1 };
 
 const LEVEL = {
   water: ELEVATION_LEVELS.indexOf("water"),
@@ -107,6 +109,27 @@ function filled(map: MapBlueprint, points: number[]): number[] {
  * Apply a smart stroke to a map, recording every change in `diff` (for undo).
  * `points` are the cells the pointer went through: [x0, y0, x1, y1, …].
  */
+/** The building a "building lot" stroke makes: the drawn shape's bounding box (at least 3×2) and its door. */
+export function buildingLot(map: MapBlueprint, points: readonly number[]): { x: number; y: number; w: number; h: number; doorX: number; doorY: number } | null {
+  if (points.length < 2) return null;
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (let k = 0; k + 1 < points.length; k += 2) {
+    x0 = Math.min(x0, points[k]);
+    x1 = Math.max(x1, points[k]);
+    y0 = Math.min(y0, points[k + 1]);
+    y1 = Math.max(y1, points[k + 1]);
+  }
+  x1 = Math.min(map.width - 1, Math.max(x1, x0 + 2));
+  y1 = Math.min(map.height - 1, Math.max(y1, y0 + 1));
+  const w = x1 - x0 + 1;
+  const h = y1 - y0 + 1;
+  if (w < 3 || h < 2) return null;
+  return { x: x0, y: y0, w, h, doorX: x0 + Math.floor(w / 2), doorY: y1 };
+}
+
 export function applySmartStroke(map: MapBlueprint, edit: SmartEdit, diff: CellDiff, seen: Map<number, number>): void {
   const t = map.layers.terrain.data;
   const e = map.layers.elevation.data;
@@ -117,6 +140,19 @@ export function applySmartStroke(map: MapBlueprint, edit: SmartEdit, diff: CellD
   const isWaterNow = (i: number) => IS_WATER[t[i]];
 
   switch (edit.kind) {
+    case "building": {
+      // The rectangle around what was drawn (at least 3×2), and a path cell in front of the door.
+      // Gen 3 tilesets draw buildings from the front, so the door is in the middle of the bottom row.
+      const lot = buildingLot(map, edit.points);
+      if (!lot) return;
+      for (let y = lot.y; y < lot.y + lot.h; y++) for (let x = lot.x; x < lot.x + lot.w; x++) set(y * map.width + x, T.building, landLevel(y * map.width + x));
+      if (lot.doorY + 1 < map.height) {
+        const front = (lot.doorY + 1) * map.width + lot.doorX;
+        if (!IS_WALKABLE[t[front]] || IS_WATER[t[front]]) set(front, T.path, landLevel(front));
+      }
+      return;
+    }
+
     case "path":
       for (const i of widened(map, edit.points, width)) {
         if (isWaterNow(i)) set(i, T.bridge, LEVEL.bridge);

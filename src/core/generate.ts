@@ -7,7 +7,7 @@
 // example a painted wall across the only way through), the best attempt is
 // returned along with the validation errors that explain why.
 
-import type { Entity, MapBlueprint, Opening, Zone } from "./model";
+import type { Entity, MapBlueprint, Opening, Warp, Zone } from "./model";
 import type { Area } from "./selection";
 import { inArea } from "./selection";
 import { cloneThing } from "./things";
@@ -30,6 +30,8 @@ import { placeEntities } from "./generators/placement";
 import { addSnow } from "./generators/snow";
 import { applyMarsh, applyZones, prepareZones, shiftOpeningsOutOfZones } from "./generators/zones";
 import { ELEVATION_LEVELS } from "./terrain";
+import { buildTown } from "./generators/town";
+import { buildingList, readTownParams } from "./generators/townParams";
 
 /** Version of the generators. Bumped when the same seed starts giving different maps. */
 export const GENERATOR_VERSION = 5;
@@ -39,16 +41,20 @@ export interface GenerateResult {
   terrain: Uint8Array;
   elevation: Uint8Array;
   entities: Entity[];
+  /** Warps placed by hand, and the ones the generator made (town doors). */
+  warps: Warp[];
   openings: Opening[];
   zones: Zone[];
   issues: Issue[];
   /** How many tries it took (1 = first try). */
   attempts: number;
+  /** Plain-language notes for the user, e.g. buildings that didn't fit. */
+  notes?: string[];
 }
 
 /** Map types that have a generator so far. */
 export function canGenerate(map: MapBlueprint): boolean {
-  return map.mapType === "route";
+  return map.mapType === "route" || map.mapType === "town";
 }
 
 /** Final elevation: plateau levels as built, water on the low level marked "water", bridges "bridge". */
@@ -85,10 +91,26 @@ function renumberClashes(entities: Entity[]): void {
   }
 }
 
+/** A town: streets, buildings with doors, gardens, people (see generators/town.ts). */
+function townStages(ctx: GenContext, geometry: Geometry) {
+  prepareZones(ctx);
+  applyLayout(ctx, geometry); // the sea, for a waterfront town
+  applyZones(ctx);
+  buildTown(ctx);
+  placeEntities(ctx); // the town sign and hidden items
+}
+
 function runOnce(map: MapBlueprint, input: GenInput, geometry: Geometry, seed: number, validate: ValidateOptions): GenerateResult {
   const ctx = new GenContext(input, new Rng(seed));
   // Things placed by hand stay put; the generator works around them.
   for (const e of map.entities) if (e.locked) ctx.entities.push(cloneThing(e));
+  if (map.mapType === "town") townStages(ctx, geometry);
+  else routeStages(ctx, geometry);
+  return finish(map, input, ctx, validate);
+}
+
+/** A route: the path, hills, grass, water, ledges, pockets, trainers and items. */
+function routeStages(ctx: GenContext, geometry: Geometry) {
   prepareZones(ctx); // which cells each of the user's zones covers; biome per cell
   applyLayout(ctx, geometry); // sea, river or open water
   applyZones(ctx); // the user's water, boundaries and keep-clear areas
@@ -106,8 +128,21 @@ function runOnce(map: MapBlueprint, input: GenInput, geometry: Geometry, seed: n
   addSnow(ctx); // snow from the highest ground down
   closeLedgeTraps(ctx); // no ledge may drop the player somewhere they can't leave
   placeEntities(ctx);
+}
 
+/** Final elevation, the things' levels, the warps, validation, and the hidden items for quiet dead ends. */
+function finish(map: MapBlueprint, input: GenInput, ctx: GenContext, validate: ValidateOptions): GenerateResult {
   const elevation = finishElevation(ctx);
+  // Warps placed by hand are kept; the generator's own (town doors) get IDs that don't clash with them.
+  const keptWarps = map.warps.filter((w) => w.locked);
+  const used = new Set(keptWarps.map((w) => w.id));
+  const madeWarps = ctx.warps.map((w) => {
+    let n = 1;
+    while (used.has(`w${n}`)) n++;
+    used.add(`w${n}`);
+    return { ...w, id: `w${n}` };
+  });
+  const warps = [...keptWarps, ...madeWarps];
   // Each thing stands at the elevation of its cell (Porymap events need it to match).
   const levelAt = (x: number, y: number) => ELEVATION_LEVELS[elevation[y * ctx.width + x]];
   const keptZones = map.layers.zones.filter((z) => z.data.generated !== true);
@@ -116,6 +151,7 @@ function runOnce(map: MapBlueprint, input: GenInput, geometry: Geometry, seed: n
     ...map,
     openings: input.openings,
     entities: ctx.entities,
+    warps,
     layers: {
       ...map.layers,
       terrain: { width: map.width, height: map.height, data: ctx.terrain },
@@ -140,11 +176,19 @@ function runOnce(map: MapBlueprint, input: GenInput, geometry: Geometry, seed: n
     issues = validateMap(draft, validate);
   }
   renumberClashes(ctx.entities);
+  const notes: string[] = [];
+  if (input.town) {
+    const wanted = buildingList(input.town).length;
+    if (ctx.buildings.length < wanted)
+      notes.push(`Only ${ctx.buildings.length} of the ${wanted} buildings fit. Make the town bigger (Maps → resize), or ask for fewer houses.`);
+  }
   return {
+    notes,
     ok: !issues.some((i) => i.severity === "error"),
     terrain: ctx.terrain,
     elevation,
     entities: ctx.entities,
+    warps,
     openings: input.openings,
     zones,
     issues,
@@ -154,7 +198,13 @@ function runOnce(map: MapBlueprint, input: GenInput, geometry: Geometry, seed: n
 
 /** Generate a route for this map, using its seed and saved settings. Doesn't change the map. */
 export function generateRoute(map: MapBlueprint, validate: Omit<ValidateOptions, "availableHms"> = {}): GenerateResult {
-  const params = readRouteParams(map.params);
+  const town = map.mapType === "town" ? readTownParams(map.params) : undefined;
+  // Towns share the route settings they use (border, trees, hidden items) but have no trainers,
+  // extra items, branches, hills or ledges; a waterfront town is laid out like a coastal route.
+  const routeParams = readRouteParams(map.params);
+  const params = town
+    ? { ...routeParams, trainers: 0, items: 0, branches: 0, deadEndRewards: false, elevation: 0, ledges: 0, hmPockets: 0, travel: "auto" as const, layout: town.townLayout === "waterfront" ? ("coastal" as const) : ("land" as const), surfEntrances: false, water: -0.5 }
+    : routeParams;
   const layout = resolveLayout(params, map.biome);
   const layoutSeed = deriveSeed(map.seed, "layout");
   const geometry = computeGeometry(map.width, map.height, params, layout, layoutSeed);
@@ -175,6 +225,9 @@ export function generateRoute(map: MapBlueprint, validate: Omit<ValidateOptions,
     params,
     labelBase: labelBase(map),
     layoutSeed,
+    mapType: map.mapType,
+    mapConstant: map.header.id,
+    town,
   };
   const opts: ValidateOptions = { ...validate, availableHms: hmsFor(params, map.biome) };
   let best: GenerateResult | null = null;
@@ -194,12 +247,13 @@ export function applyResult(map: MapBlueprint, result: GenerateResult): void {
   map.layers.terrain.data.set(result.terrain);
   map.layers.elevation.data.set(result.elevation);
   map.entities = result.entities;
+  map.warps = result.warps;
   map.openings = result.openings;
   map.layers.zones = result.zones;
   map.params = { ...map.params, generatorVersion: GENERATOR_VERSION };
   // The border block shows beyond the map edges: water for sea routes, the wall style otherwise.
   const p = readRouteParams(map.params);
-  const layout = resolveLayout(p, map.biome);
+  const layout = map.mapType === "town" ? (readTownParams(map.params).townLayout === "waterfront" ? "coastal" : "land") : resolveLayout(p, map.biome);
   const border = layout === "water" || layout === "coastal" ? "water_deep" : resolveBorder(p, map.biome) === "cliff" ? "rock_wall" : "tree";
   map.layout.borderBlock = [border, border, border, border];
 }
@@ -243,6 +297,16 @@ export function applyAreaResult(map: MapBlueprint, area: Area, result: GenerateR
     ...map.layers.zones.filter((z) => z.data.generated !== true || !touches(z)),
     ...result.zones.filter((z) => z.data.generated === true && inside(z) && !map.layers.zones.some((k) => k.id === z.id)),
   ];
+  // Warps: keep those outside the area and those placed by hand; take the new ones inside it.
+  const keptWarps = map.warps.filter((w) => !inArea(area, w.x, w.y) || w.locked);
+  const usedWarpIds = new Set(keptWarps.map((w) => w.id));
+  const newWarps = result.warps.filter((w) => !w.locked && inArea(area, w.x, w.y)).map((w) => {
+    let n = 1;
+    while (usedWarpIds.has(`w${n}`)) n++;
+    usedWarpIds.add(`w${n}`);
+    return { ...w, id: `w${n}` };
+  });
+  map.warps = [...keptWarps, ...newWarps];
   const keep = map.entities.filter((e) => !inArea(area, e.x, e.y) || e.locked);
   const added = result.entities.filter((e) => inArea(area, e.x, e.y) && !e.locked && !keep.some((k) => k.x === e.x && k.y === e.y));
   map.entities = [...keep, ...added];

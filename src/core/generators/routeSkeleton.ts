@@ -17,7 +17,7 @@ import { Role } from "./context";
  * Carve an entrance through the border, from the map edge inwards. Walk entrances
  * become path; surf entrances become water. Returns the inner end cell.
  */
-function carveOpening(ctx: GenContext, o: Opening): number {
+export function carveOpening(ctx: GenContext, o: Opening): number {
   const depth = ctx.params.borderThickness + 1;
   const surf = o.kind === "surf";
   let inner = 0;

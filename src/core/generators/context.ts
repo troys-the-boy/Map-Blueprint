@@ -6,7 +6,9 @@
 
 import type { Rng } from "../rng";
 import { ValueNoise } from "../noise";
-import type { Biome, Entity, Opening, Warp, Zone } from "../model";
+import type { Biome, Entity, MapType, Opening, Warp, Zone } from "../model";
+import type { TownParams } from "./townParams";
+import type { TownBuilding } from "./town";
 import { BIOMES } from "../model";
 import type { Layout, RouteParams } from "./params";
 import type { Travel } from "./travel";
@@ -32,6 +34,7 @@ export const Role = {
   Stairs: 13, // stairs up a plateau, and the cells in front of and behind them
   GrassRoute: 14, // the grass shortcut ("two ways through")
   Keep: 15, // a zone's keep-clear or open ground: stays walkable ground
+  Building: 16, // a town building, its fences and signs
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];
 
@@ -59,6 +62,12 @@ export interface GenInput {
   openings: Opening[];
   /** Warps placed by hand (doors, cave mouths…): the path must lead to each one. */
   warps: Warp[];
+  /** What kind of map this is (routes and towns have their own generators). */
+  mapType?: MapType;
+  /** The map's MAP_* constant, for naming interiors behind generated doors. */
+  mapConstant?: string;
+  /** Town settings (towns only). */
+  town?: TownParams;
   biome: Biome;
   /** The user's zones (not the generator's own). */
   zones: Zone[];
@@ -108,8 +117,12 @@ export class GenContext {
   ledgeDetours = new Set<number>();
   /** Ledge pockets: the cell for their item (reached by jumping in, on the way back). */
   ledgePockets: number[] = [];
-  /** Cells nothing may be placed on (where the player jumps into and out of a ledge pocket). */
+  /** Cells nothing may be placed on (where the player jumps into and out of a ledge pocket, or a door's front step). */
   keepClear = new Set<number>();
+  /** Warps the generator made (town doors). */
+  warps: Warp[] = [];
+  /** Town buildings, with their door cells. */
+  buildings: TownBuilding[] = [];
 
   constructor(
     readonly input: GenInput,

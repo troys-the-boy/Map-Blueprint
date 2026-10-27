@@ -4,7 +4,7 @@ This document defines the tool's file formats. The terrain vocabulary and the ti
 
 | File | Identifier (`format`) | Version field | Current |
 | --- | --- | --- | --- |
-| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 8 |
+| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 9 |
 | Terrain vocabulary (`profiles/terrain.json`) | `gen3-terrain-vocabulary` | `formatVersion` | 1 |
 | Terrain palette (`profiles/palettes/*.json`) | `gen3-terrain-palette` | `formatVersion` | 1 |
 | Tileset profile (`profiles/tilesets/*.json`) | `gen3-tileset-profile` | `formatVersion` | 1 (draft) |
@@ -13,7 +13,7 @@ Coordinates are in **metatiles** (16×16 px). The origin (0, 0) is the top-left 
 
 ---
 
-## Project file, schemaVersion 8
+## Project file, schemaVersion 9
 
 A project is a single JSON file holding one region and all of its maps. The app treats it as untrusted data when opening it:
 
@@ -34,6 +34,7 @@ When the format changes, `schemaVersion` goes up and a migration in `src/core/pr
 | 6 | 3 (part B) | New edit type `smart` (smart strokes). Version-5 files need no changes. |
 | 7 | 4 (part B) | Entities may have `"accepted"` (warnings marked OK). Entity edits may have `"kind": "warp"`. New kinds placed by hand (berry tree, trigger, secret base, heal location, warp). Version-6 files need no changes. |
 | 8 | 4 (part C) | The region gains `speciesPool` (added empty to older files); a map's `encounterPlan` may hold draft tables. |
+| 9 | 5 (part A) | Warps may have `"locked"` (placed by hand; all warps in older files get `true`). Towns generate door warps (not locked). New smart-stroke kind `building`. |
 
 ```jsonc
 {
@@ -142,6 +143,8 @@ Vanilla Emerald's map.json has **no** `floor_number`. That field comes from poke
 
 `fields` holds the suggested Porymap values (for example `graphics_id`, `movement_type`, `script`, `flag`, `trainer_type`, `trainer_sight_or_berry_tree_id`, `var`, `var_value`, `player_facing_dir`, `item`). Field names are filled in by Milestone 4.
 
+Warps may also have `locked` (from version 9): `true` for a warp placed by hand, which Generate keeps; warps Generate made (town doors) leave it out and are made again each time.
+
 `locked` (optional, from version 5) is `true` for a thing placed, moved or turned by hand. Generate keeps locked things where they are and gives generated things IDs that don't clash with them. Left out = `false`.
 
 `accepted` (optional, from version 7) lists check warnings the user marked OK for this thing, by code. Only `"unavoidable-trainer"` is used so far. Left out = none.
@@ -203,6 +206,16 @@ Every value is optional. Missing or out-of-range values fall back to the default
 | `trainers`, `trainerSpacing` | 3, 8 | 0–10, 3–20 |
 | `items` (extra), `hiddenItems` | 2, 2 | 0–10 |
 | `levelMin`, `levelMax` | 3, 6 | 1–100 (wild Pokémon levels for the encounter draft) |
+
+Towns (Milestone 5) also read these keys, and share `treeDensity`, `borderThickness`, `borderStyle` and `hiddenItems` with routes:
+
+| Key | Default | Range / values |
+| --- | --- | --- |
+| `townLayout` | `grid` | `grid`, `organic`, `waterfront` |
+| `center`, `mart`, `gym`, `landmark` | true, true, false, false | true / false |
+| `houses`, `largeHouses` | 3, 1 | 0–12, 0–6 (how many of the houses are 5×4) |
+| `people` | 3 | 0–10 |
+| `edgeGrass` | 0.3 | 0–1 (optional grass patches near the border) |
 | `retries` | 8 | 0–20 |
 | `generatorVersion` | (set by the app) | which generator produced the map |
 | `seedPinned` | absent | `true` when the seed is pinned in the app (New seed and Variations leave it alone); not used by the generator |
@@ -267,7 +280,7 @@ A smart stroke records what was drawn; replaying it (`applySmartStroke` in `src/
 
 ```jsonc
 { "type": "smart", "kind": "stream", "width": 2, "direction": null,
-  "points": [x0, y0, x1, y1, …] }   // kind: path | stream | tree_wall | grass | water | ledge
+  "points": [x0, y0, x1, y1, …] }   // kind: path | stream | tree_wall | grass | water | ledge | building (from version 9)
 ```
 
 `points` are the cells the pointer passed through, in order; `grass` and `water` treat them as an outline to fill. `width` is the line width in cells (1 for outlines and ledges). `direction` is `s`, `e` or `w` for a ledge whose jump direction was chosen, else `null`.
