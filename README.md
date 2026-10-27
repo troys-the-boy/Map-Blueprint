@@ -98,8 +98,12 @@ iPads can't run an HTML file from the Files app, so the iPad uses a hosted copy 
    ```bash
    git push -u origin main
    ```
-4. **Turn on Pages:** in the repository on github.com, go to **Settings → Pages → Build and deployment → Source** and choose **GitHub Actions**.
-5. Wait about two minutes. The **Actions** tab shows "Publish web app" with a green tick. Your tool is at `https://YOUR-NAME.github.io/map-blueprint/`.
+   If the first command says **"remote origin already exists"**, it was already run once (perhaps with `YOUR-NAME` still in it). Fix the address instead of adding it again, then push:
+   ```bash
+   git remote set-url origin https://github.com/YOUR-NAME/map-blueprint.git
+   ```
+4. **Turn on Pages:** in the repository on github.com, go to **Settings → Pages → Build and deployment → Source** and choose **GitHub Actions**. GitHub then suggests starter workflows ("GitHub Pages Jekyll", "Static HTML"). **Ignore them**: this project already has its own workflow.
+5. Open the **Actions** tab. If you pushed before turning on Pages, the first "Publish web app" run will have failed (red ✗). Click it, then **Re-run all jobs**. After about two minutes it shows a green tick. Your tool is at `https://YOUR-NAME.github.io/map-blueprint/`, using the same capital letters as your repository name.
 6. **On the iPad:** open that address in **Safari**. Tap **Share → Add to Home Screen**, then open the tool once from the new icon while online. After that it opens with no connection.
 
 Whenever you push new code to GitHub, the hosted copy updates. The iPad picks up the new version the second time you open the app after an update.
