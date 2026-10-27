@@ -80,6 +80,23 @@ export async function saveProject(store: EditorStore, opts: { forceDownload?: bo
   }
 }
 
+/** Hand an exported file to the user: the share sheet on iPad/iPhone, a download elsewhere. */
+export async function deliverFile(store: EditorStore, name: string, mime: string, data: Uint8Array | string): Promise<void> {
+  const blob = new Blob([data as BlobPart], { type: mime });
+  try {
+    const file = new File([blob], name, { type: mime });
+    if (isTouchDevice() && navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: name });
+      store.setNotice({ kind: "info", text: `Shared ${name}. Choose "Save to Files" to keep it.` });
+      return;
+    }
+    downloadBlob(blob, name);
+    store.setNotice({ kind: "info", text: `Downloaded ${name}.` });
+  } catch (err) {
+    if (!isAbort(err)) store.setNotice({ kind: "error", text: `Could not export ${name}: ${err instanceof Error ? err.message : String(err)}` });
+  }
+}
+
 export function downloadBlob(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

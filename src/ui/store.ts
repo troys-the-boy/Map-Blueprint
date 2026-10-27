@@ -6,7 +6,13 @@
 // the canvas listens for cell changes through onCells().
 
 import { useSyncExternalStore } from "react";
-import type { MapBlueprint, NewMapOptions, Region, StrokeEdit } from "../core/model";
+import type { Entity, MapBlueprint, NewMapOptions, Opening, Region, StrokeEdit, Zone } from "../core/model";
+import type { GenerateResult } from "../core/generate";
+import { applyResult, canGenerate } from "../core/generate";
+import { readRouteParams } from "../core/generators/params";
+import type { Issue } from "../core/validate";
+import { validateMap } from "../core/validate";
+import { runGenerate } from "./generation";
 import { addNewMap, newRegion } from "../core/model";
 import type { CellDiff } from "../core/paint";
 import { applyDiff, brushCells, emptyDiff, lineCells, paintCell } from "../core/paint";
@@ -19,11 +25,43 @@ export const APP_VERSION = "0.1.0";
 
 export type Tool = "pencil" | "erase" | "pan" | "pick";
 
-/** One undoable action. */
-interface Command {
-  mapId: string;
-  diff: CellDiff;
-  edit: StrokeEdit;
+/** Everything Generate can change on a map, for undoing it. */
+interface MapSnapshot {
+  terrain: Uint8Array;
+  elevation: Uint8Array;
+  entities: Entity[];
+  openings: Opening[];
+  zones: Zone[];
+  params: MapBlueprint["params"];
+}
+
+/** One undoable action: a paint stroke, or a whole-map change such as Generate. */
+type Command =
+  | { type: "stroke"; mapId: string; diff: CellDiff; edit: StrokeEdit }
+  | { type: "snapshot"; mapId: string; before: MapSnapshot; after: MapSnapshot };
+
+function cloneZones(zones: Zone[]): Zone[] {
+  return zones.map((z) => ({ ...z, mask: { ...z.mask, data: z.mask.data.slice() }, data: { ...z.data } }));
+}
+
+function snapshot(map: MapBlueprint): MapSnapshot {
+  return {
+    terrain: map.layers.terrain.data.slice(),
+    elevation: map.layers.elevation.data.slice(),
+    entities: structuredClone(map.entities),
+    openings: structuredClone(map.openings),
+    zones: cloneZones(map.layers.zones),
+    params: { ...map.params },
+  };
+}
+
+function restore(map: MapBlueprint, snap: MapSnapshot) {
+  map.layers.terrain.data.set(snap.terrain);
+  map.layers.elevation.data.set(snap.elevation);
+  map.entities = structuredClone(snap.entities);
+  map.openings = structuredClone(snap.openings);
+  map.layers.zones = cloneZones(snap.zones);
+  map.params = { ...snap.params };
 }
 
 interface Stroke {
@@ -64,6 +102,16 @@ class EditorStore {
   notice: { kind: "info" | "error"; text: string } | null = null;
   /** Bumped on every change React needs to see. */
   version = 0;
+  /** Validation results for the open map. */
+  issues: Issue[] = [];
+  /** True while Generate is running. */
+  generating = false;
+  /** Summary of the last Generate, for the panel. */
+  lastGenerate: { mapId: string; attempts: number; ok: boolean } | null = null;
+  /** A cell the canvas should scroll to (e.g. a clicked validation issue). */
+  focus: { x: number; y: number; cells: number[]; seq: number } | null = null;
+  /** Bumped when the map's terrain or things change, so overlays can refresh. */
+  mapVersion = 0;
 
   private undoStacks = new Map<string, Command[]>();
   private redoStacks = new Map<string, Command[]>();
@@ -71,6 +119,7 @@ class EditorStore {
   private listeners = new Set<() => void>();
   private cellListeners = new Set<(mapId: string, indices: number[] | null) => void>();
   private autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private validateTimer: ReturnType<typeof setTimeout> | null = null;
 
   // ----- subscriptions -----------------------------------------------------
 
@@ -92,7 +141,107 @@ class EditorStore {
   }
 
   private cellsChanged(mapId: string, indices: number[] | null) {
+    this.mapVersion++;
     for (const fn of this.cellListeners) fn(mapId, indices);
+    this.scheduleValidate();
+  }
+
+  // ----- validation --------------------------------------------------------
+
+  private scheduleValidate() {
+    if (this.validateTimer) clearTimeout(this.validateTimer);
+    this.validateTimer = setTimeout(() => this.validateNow(), 150);
+  }
+
+  /** Re-check the open map. Runs shortly after every change. */
+  validateNow() {
+    this.validateTimer = null;
+    const map = this.currentMap;
+    this.issues = map
+      ? validateMap(map, { limits: this.region.settings.engineLimits, availableHms: readRouteParams(map.params).availableHms })
+      : [];
+    this.changed();
+  }
+
+  /** Scroll the canvas to an issue and highlight its cells. */
+  focusIssue(issue: Issue) {
+    const map = this.currentMap;
+    if (!map || !issue.cells.length) return;
+    const c = issue.cells[0];
+    this.focus = { x: c % map.width, y: Math.floor(c / map.width), cells: issue.cells, seq: (this.focus?.seq ?? 0) + 1 };
+    this.changed();
+  }
+
+  // ----- generation --------------------------------------------------------
+
+  /** Generate the open map from its seed and settings (in the background). */
+  async generate() {
+    const map = this.currentMap;
+    if (!map || this.generating || this.isStroking) return;
+    if (!canGenerate(map)) {
+      this.setNotice({ kind: "info", text: "Only routes can be generated so far. Towns, forests and caves arrive in Milestone 5." });
+      return;
+    }
+    this.generating = true;
+    this.changed();
+    let result: GenerateResult;
+    try {
+      result = await runGenerate(map, this.region.settings.engineLimits);
+    } catch (err) {
+      this.setNotice({ kind: "error", text: "Generation failed: " + (err instanceof Error ? err.message : String(err)) });
+      return;
+    } finally {
+      this.generating = false;
+      this.changed();
+    }
+    // The map may have been deleted while generating.
+    const target = this.region.maps.find((m) => m.id === map.id);
+    if (!target) return;
+    const before = snapshot(target);
+    applyResult(target, result);
+    this.pushUndo({ type: "snapshot", mapId: target.id, before, after: snapshot(target) });
+    this.lastGenerate = { mapId: target.id, attempts: result.attempts, ok: result.ok };
+    this.markDirty();
+    this.changed();
+    this.cellsChanged(target.id, null);
+  }
+
+  /** Change generator settings for the open map. */
+  setParams(patch: Record<string, string | number | boolean>) {
+    const map = this.currentMap;
+    if (!map) return;
+    map.params = { ...map.params, ...patch };
+    this.markDirty();
+    this.changed();
+    this.scheduleValidate();
+  }
+
+  setBiome(biome: MapBlueprint["biome"]) {
+    const map = this.currentMap;
+    if (!map) return;
+    map.biome = biome;
+    this.markDirty();
+    this.changed();
+  }
+
+  setSeed(seed: number) {
+    const map = this.currentMap;
+    if (!map) return;
+    map.seed = seed >>> 0;
+    this.markDirty();
+    this.changed();
+  }
+
+  /** Replace the open map's entrances (undoable). */
+  setOpenings(openings: Opening[]) {
+    const map = this.currentMap;
+    if (!map) return;
+    const before = snapshot(map);
+    map.openings = openings;
+    this.pushUndo({ type: "snapshot", mapId: map.id, before, after: snapshot(map) });
+    this.markDirty();
+    this.changed();
+    this.cellsChanged(map.id, []);
   }
 
   private markDirty() {
@@ -247,7 +396,7 @@ class EditorStore {
       cells: s.cells,
     };
     s.map.edits.push(edit);
-    this.pushUndo({ mapId: s.map.id, diff: s.diff, edit });
+    this.pushUndo({ type: "stroke", mapId: s.map.id, diff: s.diff, edit });
     this.markDirty();
     this.changed();
   }
@@ -289,11 +438,13 @@ class EditorStore {
     if (!map || this.stroke) return;
     const cmd = this.undoStacks.get(map.id)?.pop();
     if (!cmd) return;
-    applyDiff(map, cmd.diff, "before");
-    const i = map.edits.lastIndexOf(cmd.edit);
-    if (i >= 0) map.edits.splice(i, 1);
+    if (cmd.type === "stroke") {
+      applyDiff(map, cmd.diff, "before");
+      const i = map.edits.lastIndexOf(cmd.edit);
+      if (i >= 0) map.edits.splice(i, 1);
+    } else restore(map, cmd.before);
     (this.redoStacks.get(map.id) ?? this.redoStacks.set(map.id, []).get(map.id)!).push(cmd);
-    this.cellsChanged(map.id, cmd.diff.index);
+    this.cellsChanged(map.id, cmd.type === "stroke" ? cmd.diff.index : null);
     this.markDirty();
     this.changed();
   }
@@ -303,10 +454,12 @@ class EditorStore {
     if (!map || this.stroke) return;
     const cmd = this.redoStacks.get(map.id)?.pop();
     if (!cmd) return;
-    applyDiff(map, cmd.diff, "after");
-    map.edits.push(cmd.edit);
+    if (cmd.type === "stroke") {
+      applyDiff(map, cmd.diff, "after");
+      map.edits.push(cmd.edit);
+    } else restore(map, cmd.after);
     (this.undoStacks.get(map.id) ?? this.undoStacks.set(map.id, []).get(map.id)!).push(cmd);
-    this.cellsChanged(map.id, cmd.diff.index);
+    this.cellsChanged(map.id, cmd.type === "stroke" ? cmd.diff.index : null);
     this.markDirty();
     this.changed();
   }

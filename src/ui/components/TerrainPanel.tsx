@@ -3,7 +3,7 @@
 import { useStore } from "../store";
 import { TERRAIN_TYPES, getPalette } from "../../core/terrain";
 import type { Overlays } from "../prefs";
-import { Icon } from "./icons";
+import { HEAT_COLORS } from "../renderer";
 
 const CATEGORY_LABELS: Record<string, string> = {
   ground: "Ground",
@@ -28,24 +28,29 @@ const OVERLAYS: Array<{ key: keyof Overlays; label: string; tip: string }> = [
   { key: "grid", label: "Grid", tip: "Cell grid. Lighter lines every 5 cells, brighter every 10." },
   { key: "rulers", label: "Rulers", tip: "Coordinate rulers along the top and left edges." },
   { key: "screenFrame", label: "Screen frame", tip: "The 15×10 area one GBA screen shows, around the cell under the pointer." },
-  { key: "locks", label: "Locked cells", tip: "Mark cells you painted. Generators (from Milestone 2) never change locked cells." },
+  { key: "locks", label: "Locked cells", tip: "Mark cells you painted. Generate never changes locked cells." },
+  { key: "sight", label: "Trainer sight lines", tip: "The cells each trainer can see, up to the first tree or wall." },
+  { key: "issues", label: "Problems", tip: "Outline cells with errors (red) and warnings (amber) from the Check tab." },
+  { key: "reach", label: "Reachability (HMs needed)", tip: "Colour each cell by which HM you need to reach it from an entrance. Red = can't be reached at all." },
+  { key: "elevation", label: "Elevation", tip: "Shade water darker and raised ground lighter." },
 ];
 
-export function TerrainPanel({ onClose }: { onClose?: () => void }) {
+const HEAT_KEY: Array<[number, string]> = [
+  [1, "Cut"],
+  [2, "Rock Smash"],
+  [4, "Surf"],
+  [5, "Waterfall"],
+  [7, "Several HMs"],
+  [-1, "Can't reach"],
+];
+
+export function TerrainPanel({ onPicked }: { onPicked?: () => void }) {
   const s = useStore();
   const palette = getPalette(s.prefs.paletteId);
   const categories = [...new Set(TERRAIN_TYPES.map((t) => t.category))];
 
   return (
-    <aside className="side-panel" aria-label="Terrain and overlays">
-      <div className="panel-head">
-        <h2>Terrain</h2>
-        {onClose && (
-          <button className="icon-button" aria-label="Close terrain panel" title="Close" onClick={onClose}>
-            <Icon name="close" />
-          </button>
-        )}
-      </div>
+    <div aria-label="Terrain and overlays">
       {categories.map((cat) => (
         <section key={cat} className="terrain-group">
           <h3>{CATEGORY_LABELS[cat] ?? cat}</h3>
@@ -59,7 +64,7 @@ export function TerrainPanel({ onClose }: { onClose?: () => void }) {
                   aria-pressed={s.terrain === i}
                   onClick={() => {
                     s.setTerrain(i);
-                    onClose?.();
+                    onPicked?.();
                   }}
                 >
                   <span className="swatch" style={{ background: palette.colors[t.id] }}>
@@ -80,11 +85,21 @@ export function TerrainPanel({ onClose }: { onClose?: () => void }) {
             {o.label}
           </label>
         ))}
-        <label className="check" title="When on, every cell you paint is locked, so generators (from Milestone 2) build around it.">
+        <label className="check" title="When on, every cell you paint is locked, so Generate builds around it.">
           <input type="checkbox" checked={s.prefs.lockWhenPainting} onChange={(e) => s.updatePrefs({ lockWhenPainting: e.target.checked })} />
           Lock what I paint
         </label>
+        {s.prefs.overlays.reach && (
+          <ul className="heat-key" aria-label="Reachability colours">
+            {HEAT_KEY.map(([v, label]) => (
+              <li key={v}>
+                <span className="swatch small" style={{ background: HEAT_COLORS[v] }} />
+                {label}
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
-    </aside>
+    </div>
   );
 }

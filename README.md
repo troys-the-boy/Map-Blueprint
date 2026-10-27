@@ -2,7 +2,13 @@
 
 A planning tool for a pokeemerald ROM hack. You lay out maps here as colored terrain blueprints, then rebuild them by hand in Porymap. It runs in your web browser, works offline, and never sends anything over the internet.
 
-**Status:** Milestone 1 (Foundation) is done. You can create maps, paint terrain, and save and open projects. It runs on Windows, Mac and iPad. Map generation comes in Milestone 2.
+**Status:** Milestone 2 (route generator and validation) is done:
+
+- **Generate routes** from a seed, with settings for paths, grass, water, ledges, HM-gated areas, trainers and items.
+- **Check every map** for Gen 3 problems, such as an entrance you can't reach or a ledge trap.
+- **Export** a blueprint PNG, screen-by-screen tiles, and a placement table.
+
+Milestone 1 (Foundation: create maps, paint, save and open, on Windows, Mac and iPad) is also done. Smart drawing tools come in Milestone 3.
 
 ---
 
@@ -56,6 +62,84 @@ Double-click **`start.command`**. If macOS refuses to open it:
 - The status bar shows the cell (x, y), which screen it is in (**A1, B1, A2…**), its terrain, and the map-memory budget.
 
 **Locked cells:** everything you paint is *locked* (turn this off with **Lock what I paint**). Locked cells will be left alone by the generators that arrive in Milestone 2. Turn on **Show → Locked cells** to see them.
+
+---
+
+## Generate a route (Milestone 2)
+
+1. Create a map with **Type: Route** (for example the **M (vertical)** preset, 30×60).
+2. Press **Generate**: the ✨ button in the tool strip, the **G** key, or the big button on the **Generate** tab of the right-hand panel. On iPad, tap the colour square in the tool strip to open the panel.
+3. Don't like it? Press **New seed**. The same seed always gives exactly the same map, so note the seeds you like.
+4. Open the setting groups on the **Generate** tab to change the map:
+   - **Basic:** biome, path winding, path width.
+   - **Entrances:** which edges, where, and how wide.
+   - **Terrain:** grass, water, tree cover, border, stream, clearing.
+   - **Structure:** side branches, ledge shortcuts, HM-gated areas.
+   - **Gameplay:** trainers, items, hidden items, and which HMs the player has by now.
+
+   Then Generate again. Every setting has a tooltip.
+5. **Painting first works too.** Cells you paint are locked, and Generate builds around them. Paint a pond, then Generate, and the pond stays exactly as drawn. If your painting blocks the route, the Check tab tells you where.
+6. **Undo** reverses a Generate, like any other change.
+
+**What a generated route contains:**
+
+- **Main path:** winds from entrance to entrance, with side branches that end in an item.
+- **Grass:** mostly beside the path.
+- **Water:** ponds, and sometimes a stream with a bridge where it crosses the path.
+- **Ledge shortcut:** a one-way loop that always leads back to the path.
+- **HM-gated area:** a small area sealed by a Cut tree, a Rock Smash rock or a strip of water (Surf), with an item inside.
+- **Trainers:** each faces across the path, and the player can always walk around them.
+- **Hidden items** and a **sign** at the entrance.
+
+### Check tab (validation)
+
+Checks run after every change. **Errors** (red) block exporting. **Warnings** (amber) are advice. Click any problem to jump to it on the map.
+
+**Errors:**
+
+- An entrance you can't reach from another, using only the HMs the player has.
+- Ledge traps: places you can jump into but never get out of.
+- A blocked entrance.
+- A map too big for the game.
+- Too many objects on the map.
+
+**Warnings:**
+
+- A trainer you can't avoid.
+- A grass patch under 6 cells.
+- A 1-cell-wide path.
+- Single-cell terrain patches.
+- Diagonal tree patterns a tileset can't draw.
+- An item nobody can reach.
+- A dead end with no reward.
+- A crowded screen.
+
+### What's on the canvas
+
+The **Paint** tab's **Show** list toggles:
+
+- **Trainer sight lines** (red).
+- **Problems** (outlined cells).
+- **Reachability:** cells coloured by which HM you need to reach them. Red means unreachable.
+- **Elevation shading.**
+
+Entrances are outlined in yellow. Things on the map are coloured squares; zoom in to see their IDs (T1 = trainer 1, I2 = item 2, H1 = hidden item, S1 = sign, C1 = Cut tree, R1 = Rock Smash rock).
+
+### Export
+
+Click **Export** in the top bar (blocked while the map has errors):
+
+- **Blueprint (PNG):**
+  - The map at 16 px per cell, the same size as a Gen 3 metatile.
+  - Rulers every 5 cells, with numbers every 10.
+  - Numbered things and trainer sight lines.
+  - A colour legend.
+- **Screen tiles (ZIP):** one PNG per 15×10 GBA screen, named A1, B1, A2… (letters go across, numbers go down), with real coordinates. Use these to rebuild the map in Porymap one screen at a time.
+- **Placement table (CSV, or a printable page):** one row per thing, with its position and suggested Porymap fields:
+  - `graphics_id`, `movement_type`, `trainer_type`, sight range, `script`, `flag` and `item`.
+  - The Porymap list it belongs in, and its number in that list.
+
+On iPad, exports open the share sheet. Choose **Save to Files**.
 
 ---
 
@@ -119,7 +203,8 @@ Whenever you push new code to GitHub, the hosted copy updates. The iPad picks up
 | `npm run typecheck` | Type-check everything, and check that `src/core` uses no browser APIs |
 | `npm run build:standalone` | Build `dist-standalone/Gen3MapBlueprint.html` |
 | `npm run build:web` | Build the hosted, installable app into `dist-web/` |
-| `npm run gen -- --config examples/route.json --seed 42` | Run the core with no browser (prints a project file; add `--out file.json` to save it) |
+| `npm run gen -- --config examples/route.json --seed 42` | Generate a route with no browser and print the project file (add `--out file.json` to save it) |
+| `npm run gen -- --config examples/route.json --seed 42 --export out` | Same, and write every export (PNG, ZIP, CSV, HTML) into the folder `out` |
 
 **Layout**
 
@@ -140,10 +225,15 @@ Whenever you push new code to GitHub, the hosted copy updates. The iPad picks up
 
 ---
 
-## Known limitations (Milestone 1)
+## Known limitations (Milestone 2)
 
-- **No generation yet.** "New map" makes a blank map filled with ground. Generators, validation and exports start in Milestone 2.
-- **Not tested on real Apple devices.** Testing used Chromium on Windows with an iPad-sized viewport and simulated Pencil and touch input. Please try it on the real iPad and in desktop Safari, and tell me anything that feels wrong.
+- **Routes only.** Generate works for routes. Towns, forests and caves arrive in Milestone 5, and until then those map types stay blank.
+- **No stroke tools yet.** Painting is still the single-cell pencil. Stroke tools (paths, streams, tree walls…), "regenerate only part of the map" and the variations grid come in Milestone 3.
+- **Basic entities only.** Generate places trainers, items, hidden items, Cut trees, Rock Smash rocks and a sign. Their field values are suggestions to check in Porymap. Other kinds, editing entities, and encounter tables come in Milestone 4.
+- **No intentional unavoidable trainers.** Generated trainers can always be avoided. Marking an unavoidable battle as intended comes with the properties panel in Milestone 4.
+- **Simplified movement checks.** Water currents count as plain Surf water (the forced movement is ignored). Elevation is only modelled for bridges. Both will be refined when caves and cliffs arrive.
+- **Plain export text.** Labels in exported images use a small built-in pixel font, in capitals only.
+- **Not tested on real Apple devices.** Testing used Chromium on Windows, including an iPad-sized viewport. Please try Generate and Export on the real iPad and in desktop Safari.
 - **No resizing.** You can't change an existing map's size; create a new map instead.
 - **Region view later.** The breadcrumb shows the region name, but the region sketch view arrives in Milestone 6.
 - **Approximate screen frame.** The frame assumes the player stands 7 cells from the left and 4 from the top of the screen. This only affects the overlay.

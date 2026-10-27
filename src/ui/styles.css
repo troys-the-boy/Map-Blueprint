@@ -205,3 +205,68 @@ legend { color: var(--muted); font-size: 13px; padding: 0 4px; }
 @media (max-height: 700px) {
   .tool { width: 44px; height: 44px; }
 }
+
+/* ---- side panel tabs (Milestone 2) ---- */
+
+.terrain-dock { width: 300px; }
+.panel-head { gap: 6px; position: sticky; top: 0; background: var(--panel); z-index: 2; padding-top: 2px; }
+.tabs { display: flex; gap: 2px; flex: 1; }
+.tab { flex: 1; padding: 0 6px; font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; border-radius: 8px 8px 0 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.tab.active { color: var(--text); border-bottom-color: var(--accent); background: var(--panel-2); }
+.count { font-size: 11px; font-weight: 700; padding: 0 6px; min-width: 18px; line-height: 18px; text-align: center; border-radius: 9px; color: #111; }
+.count.bad { background: var(--bad); }
+.count.warn { background: var(--warn); }
+
+/* ---- generate panel ---- */
+
+.generate-panel details { border: 1px solid var(--line); border-radius: 10px; margin: 8px 0; padding: 0 10px; }
+.generate-panel summary { min-height: var(--hit); display: flex; align-items: center; cursor: pointer; font-weight: 600; list-style: none; }
+.generate-panel summary::-webkit-details-marker { display: none; }
+.generate-panel summary::before { content: "▸"; color: var(--muted); margin-right: 8px; transition: transform .15s; }
+.generate-panel details[open] summary::before { transform: rotate(90deg); }
+.generate-panel details[open] { padding-bottom: 8px; }
+.generate-top { padding: 8px 0 4px; }
+.primary.big { min-height: 52px; font-size: 17px; margin-bottom: 8px; }
+.slider { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; font-size: 13px; color: var(--muted); }
+.slider b { color: var(--text); font-weight: 600; }
+.slider input { width: 100%; min-height: 32px; accent-color: var(--accent); }
+.field.inline { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
+.field.inline input { width: 84px; }
+.opening-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 13px; color: var(--muted); }
+.opening-row select, .opening-row input { min-height: var(--hit); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; color: var(--text); font-size: 15px; padding: 0 6px; }
+.opening-row input { width: 56px; margin-left: 4px; }
+.opening-row label { display: flex; align-items: center; }
+fieldset.checks { padding: 2px 10px 4px; }
+fieldset.checks .check { min-height: 38px; }
+.hint.bad, .bad { color: var(--bad); }
+.warn { color: var(--warn); }
+.good { color: var(--accent-strong); }
+
+/* ---- check panel ---- */
+
+.check-summary { font-weight: 600; margin: 10px 0 2px; }
+.issue-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.issue { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; width: 100%; padding: 8px 10px; background: var(--panel-2); border-left: 4px solid var(--warn); font-size: 13px; }
+.issue.error { border-left-color: var(--bad); }
+.issue:hover:not(:disabled) { background: var(--line); }
+.issue-badge { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.issue:disabled { opacity: 1; cursor: default; }
+
+/* ---- export dialog ---- */
+
+.export-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.export-list li { display: flex; align-items: center; gap: 12px; padding: 8px 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; }
+.export-list li div { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.export-list small { color: var(--muted); font-size: 12px; }
+.notice-inline { padding: 8px 10px; border-radius: 8px; background: #43272a; margin: 0 0 10px; }
+
+.heat-key { list-style: none; margin: 4px 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 12px; color: var(--muted); }
+.heat-key li { display: flex; align-items: center; gap: 6px; }
+.swatch.small { width: 14px; height: 14px; border-radius: 3px; }
+
+.status-check { min-height: 24px; min-width: 0; padding: 0 8px; font-size: 13px; background: var(--panel-2); }
+
+/* Header buttons show icons only on tablet widths (labels stay in their tooltips). */
+@media (max-width: 1000px) {
+  .icon-button.labeled span { display: none; }
+}

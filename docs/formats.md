@@ -4,7 +4,7 @@ This document defines the tool's file formats. The terrain vocabulary and the ti
 
 | File | Identifier (`format`) | Version field | Current |
 | --- | --- | --- | --- |
-| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 1 |
+| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 2 |
 | Terrain vocabulary (`profiles/terrain.json`) | `gen3-terrain-vocabulary` | `formatVersion` | 1 |
 | Terrain palette (`profiles/palettes/*.json`) | `gen3-terrain-palette` | `formatVersion` | 1 |
 | Tileset profile (`profiles/tilesets/*.json`) | `gen3-tileset-profile` | `formatVersion` | 1 (draft) |
@@ -13,7 +13,7 @@ Coordinates are in **metatiles** (16×16 px). The origin (0, 0) is the top-left 
 
 ---
 
-## Project file, schemaVersion 1
+## Project file, schemaVersion 2
 
 A project is a single JSON file holding one region and all of its maps. The app treats it as untrusted data when opening it:
 
@@ -24,10 +24,15 @@ A project is a single JSON file holding one region and all of its maps. The app 
 
 When the format changes, `schemaVersion` goes up and a migration in `src/core/project.ts` upgrades older files when they're opened.
 
+| Version | Milestone | Change |
+| --- | --- | --- |
+| 1 | 1 | First version. |
+| 2 | 2 | Each map gains `openings` (edge entrances). Version-1 files are upgraded with `openings: []`. |
+
 ```jsonc
 {
   "format": "gen3-map-blueprint-project",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "appVersion": "0.1.0",
   "savedAt": "2026-10-26T20:00:00.000Z",
   "region": {
@@ -69,7 +74,7 @@ The region's connection graph isn't stored separately. It's derived from each ma
   "width": 40, "height": 20,
   "seed": 7,
   "biome": "temperate_rainforest",    // temperate_rainforest | coastal | wetland | alpine | meadow | urban_edge
-  "params": {},                       // generator settings (text / number / true-false values)
+  "params": { "winding": 0.5, "trainers": 3, "availableHms": "cut,surf" },  // generator settings (see below)
   "layers": {
     "terrain":   { "legend": ["ground", "tree"], "rows": [[1,1,0, …], …] },
     "elevation": { "legend": ["ground"], "rows": [[0,0,0, …], …] },
@@ -85,6 +90,7 @@ The region's connection graph isn't stored separately. It's derived from each ma
                   "fields": { "script": "Route1_EventScript_Sign" } } ],
   "warps": [ { "id": "w0", "kind": "cave_mouth", "x": 10, "y": 2, "elevation": "ground",
                "destMap": "map_5", "destWarpId": 0 } ],
+  "openings": [ { "id": "o1", "edge": "north", "start": 8, "width": 3 } ],   // edge entrances
   "connections": [ { "direction": "up", "map": "map_2", "offset": 0 } ],
   "header": { /* map.json header, below */ },
   "layout": { "borderBlock": ["tree", "tree", "tree", "tree"], "primaryTileset": "", "secondaryTileset": "" },
@@ -130,6 +136,53 @@ Vanilla Emerald's map.json has **no** `floor_number`. That field comes from poke
 `fields` holds the suggested Porymap values (for example `graphics_id`, `movement_type`, `script`, `flag`, `trainer_type`, `trainer_sight_or_berry_tree_id`, `var`, `var_value`, `player_facing_dir`, `item`). Field names are filled in by Milestone 4.
 
 Warps are kept separately in `warps`, as they are in Porymap.
+
+#### Openings
+
+An opening is a gap in the map edge where the player walks onto a neighbouring map.
+
+- `edge` is `north`, `south`, `east` or `west`.
+- `start` is the first cell along that edge: x for north and south, y for east and west.
+- `width` is how many cells wide the gap is.
+
+An empty list means "let the generator choose". The first Generate then picks one opening at each short end of the map and saves them here.
+
+#### Generator settings (`params`, routes)
+
+Every value is optional. Missing or out-of-range values fall back to the default, or are clamped to the allowed range.
+
+| Key | Default | Range / values |
+| --- | --- | --- |
+| `pathWidthMin`, `pathWidthMax` | 2, 3 | 1–4, 1–5 cells |
+| `winding` | 0.5 | 0–1 |
+| `branches` | 2 | 0–6 |
+| `branchLength` | 0.5 | 0–1 |
+| `deadEndRewards` | true | true / false |
+| `ledges` | 1 | 0–4 |
+| `grass`, `water`, `treeDensity` | 0.35, 0.25, 0.55 | 0–1 |
+| `borderThickness` | 2 | 1–4 |
+| `borderStyle` | `forest` | `forest`, `cliff` |
+| `stream` | `auto` | `auto`, `yes`, `no` |
+| `clearing` | true | true / false |
+| `hmPockets` | 1 | 0–3 |
+| `hmPocketTypes` | `cut,rock_smash,surf` | comma list |
+| `availableHms` | (empty) | comma list of `cut, flash, rock_smash, strength, surf, dive, waterfall` |
+| `trainers`, `trainerSpacing` | 3, 8 | 0–10, 3–20 |
+| `items` (extra), `hiddenItems` | 2, 2 | 0–10 |
+| `retries` | 8 | 0–20 |
+| `generatorVersion` | (set by the app) | which generator produced the map |
+
+The same map, settings and seed always produce exactly the same result. If the generators change in a way that alters results, `GENERATOR_VERSION` in `src/core/generate.ts` is bumped.
+
+#### Zones written by the generator
+
+Each HM-gated area becomes a zone with these values:
+
+- `kind` is `"hm_gate"` and `hard` is `true`.
+- `data.hm` names the HM that seals it.
+- `data.generated` is `true`.
+
+The next Generate replaces zones with `data.generated: true`. Any other zone is kept.
 
 #### Edits
 

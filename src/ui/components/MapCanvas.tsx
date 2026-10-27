@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { CanvasInput } from "../input";
 import { MapRenderer } from "../renderer";
 import { store } from "../store";
+import { hmHeatmap, openingCells } from "../../core/reach";
 
 /** The renderer of the canvas on screen, so toolbar buttons (zoom, fit) can reach it. */
 export const canvasRef: { renderer: MapRenderer | null } = { renderer: null };
@@ -38,18 +39,42 @@ export function MapCanvas({ onHover }: { onHover: (cell: [number, number] | null
     // So do brush size and tool changes (the hover outline shows the brush footprint).
     const brushFor = () => (store.tool === "pencil" || store.tool === "erase" ? store.brush : 1);
     renderer.brush = brushFor();
-    const offStore = store.subscribe(() => {
+    let heatFor = -1;
+    let focusSeq = store.focus?.seq ?? 0;
+    const sync = () => {
+      let redraw = false;
       const o = store.prefs.overlays;
-      const r = renderer.overlays;
-      if (o.grid !== r.grid || o.rulers !== r.rulers || o.screenFrame !== r.screenFrame) {
+      if (JSON.stringify(o) !== JSON.stringify(renderer.overlays)) {
+        // Lock marks are drawn into the terrain bitmaps, so those need a full redraw.
+        const locksChanged = o.locks !== renderer.overlays.locks;
         renderer.overlays = { ...o };
-        renderer.requestFrame();
+        if (locksChanged) renderer.setMap(store.currentMap);
+        redraw = true;
       }
       if (renderer.brush !== brushFor()) {
         renderer.brush = brushFor();
-        renderer.requestFrame();
+        redraw = true;
       }
-    });
+      if (renderer.issues !== store.issues) {
+        renderer.issues = store.issues;
+        redraw = true;
+      }
+      // The reachability heatmap is only worked out while it's switched on.
+      const map = store.currentMap;
+      if (o.reach && map && heatFor !== store.mapVersion) {
+        heatFor = store.mapVersion;
+        const starts = map.openings.flatMap((op) => openingCells(op, map.width, map.height));
+        renderer.heat = hmHeatmap({ width: map.width, height: map.height, terrain: map.layers.terrain.data, entities: map.entities }, starts);
+        redraw = true;
+      }
+      if (store.focus && store.focus.seq !== focusSeq) {
+        focusSeq = store.focus.seq;
+        renderer.focusOn(store.focus.x, store.focus.y, store.focus.cells);
+      }
+      if (redraw) renderer.requestFrame();
+    };
+    const offStore = store.subscribe(sync);
+    sync();
 
     const input = new CanvasInput(canvas, store, renderer, (cell) => hoverRef.current(cell));
 

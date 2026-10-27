@@ -8,8 +8,26 @@
 
 import { SCREEN_HEIGHT_METATILES, SCREEN_WIDTH_METATILES, PLAYER_SCREEN_X, PLAYER_SCREEN_Y } from "../core/constants";
 import type { MapBlueprint } from "../core/model";
-import { TERRAIN_TYPES, getPalette } from "../core/terrain";
+import { ELEVATION_LEVELS, TERRAIN_TYPES, getPalette } from "../core/terrain";
+import { trainerSight } from "../core/entities";
+import { ENTITY_COLORS, screenName } from "../core/exporters/blueprint";
+import { openingCells } from "../core/reach";
+import type { Issue } from "../core/validate";
 import type { Overlays } from "./prefs";
+import { DEFAULT_PREFS } from "./prefs";
+
+/** Heatmap colours: index = heatmap value + 1 (see hmHeatmap in core/reach.ts). */
+export const HEAT_COLORS: Record<number, string> = {
+  [-1]: "rgba(224, 72, 72, 0.55)", // can't be reached at all
+  0: "rgba(0, 0, 0, 0)", // reachable with no HMs
+  1: "rgba(72, 190, 90, 0.5)", // Cut
+  2: "rgba(176, 128, 72, 0.55)", // Rock Smash
+  3: "rgba(150, 150, 150, 0.55)", // Strength
+  4: "rgba(70, 150, 230, 0.5)", // Surf
+  5: "rgba(120, 220, 230, 0.55)", // Waterfall
+  6: "rgba(40, 70, 170, 0.55)", // Dive
+  7: "rgba(170, 90, 210, 0.55)", // several HMs
+};
 
 const CHUNK = 32;
 const CELL_PX = 16;
@@ -35,13 +53,7 @@ export interface View {
 
 /** Spreadsheet-style label of the 15×10 GBA screen containing a cell: A1, B1, A2… */
 export function screenLabel(x: number, y: number): string {
-  let col = Math.floor(x / SCREEN_WIDTH_METATILES);
-  let letters = "";
-  do {
-    letters = String.fromCharCode(65 + (col % 26)) + letters;
-    col = Math.floor(col / 26) - 1;
-  } while (col >= 0);
-  return `${letters}${Math.floor(y / SCREEN_HEIGHT_METATILES) + 1}`;
+  return screenName(Math.floor(x / SCREEN_WIDTH_METATILES), Math.floor(y / SCREEN_HEIGHT_METATILES));
 }
 
 export class MapRenderer {
@@ -55,9 +67,15 @@ export class MapRenderer {
   private cssHeight = 0;
 
   view: View = { scale: 16, offsetX: RULER_LEFT + 16, offsetY: RULER_TOP + 16 };
-  overlays: Overlays = { grid: true, rulers: true, screenFrame: true, locks: false };
+  overlays: Overlays = { ...DEFAULT_PREFS.overlays };
   /** Cell under the pointer, or null. */
   hover: [number, number] | null = null;
+  /** Reachability heatmap for the shown map (or null when the overlay is off). */
+  heat: Int8Array | null = null;
+  /** Validation results to mark on the map. */
+  issues: Issue[] = [];
+  /** Cells to highlight briefly after clicking a problem. */
+  private flash: { cells: number[]; until: number } | null = null;
   /** Width of the outline drawn around the hovered cell: the brush size when painting, else 1. */
   brush = 1;
 
@@ -165,6 +183,16 @@ export class MapRenderer {
     this.requestFrame();
   }
 
+  /** Centre the view on a cell and briefly highlight some cells. */
+  focusOn(x: number, y: number, cells: number[]) {
+    const v = this.view;
+    if (v.scale < 12) v.scale = 12;
+    v.offsetX = this.cssWidth / 2 - (x + 0.5) * v.scale;
+    v.offsetY = this.cssHeight / 2 - (y + 0.5) * v.scale;
+    this.flash = { cells: cells.slice(0, 2000), until: performance.now() + 2500 };
+    this.requestFrame();
+  }
+
   /** Zoom and centre so the whole map fits on screen, clear of the tool strip on the left. */
   fit() {
     const map = this.map;
@@ -212,11 +240,40 @@ export class MapRenderer {
       ctx.drawImage(chunk.canvas, x, y, w, h);
     });
 
-    // Visible cell range, for the grid lines.
+    // Visible cell range, for overlays and grid lines.
     const x0 = Math.max(0, Math.floor(-offsetX / scale));
     const y0 = Math.max(0, Math.floor(-offsetY / scale));
     const x1 = Math.min(map.width, Math.ceil((this.cssWidth - offsetX) / scale));
     const y1 = Math.min(map.height, Math.ceil((this.cssHeight - offsetY) / scale));
+    const cellRect = (i: number, inset = 0) => {
+      const x = i % map.width;
+      const y = (i - x) / map.width;
+      return [offsetX + x * scale + inset, offsetY + y * scale + inset, scale - inset * 2, scale - inset * 2] as const;
+    };
+
+    // Elevation shading: lighter = higher, darker = water.
+    if (this.overlays.elevation) {
+      const shade = ["rgba(0,20,60,0.35)", "rgba(0,0,0,0)", "rgba(255,255,255,0.25)", "rgba(255,255,255,0.45)", "rgba(255,200,80,0.35)"];
+      const elev = map.layers.elevation.data;
+      for (let y = y0; y < y1; y++)
+        for (let x = x0; x < x1; x++) {
+          const e = elev[y * map.width + x];
+          if (e === ELEVATION_LEVELS.indexOf("ground")) continue;
+          ctx.fillStyle = shade[e];
+          ctx.fillRect(offsetX + x * scale, offsetY + y * scale, scale, scale);
+        }
+    }
+
+    // Reachability heatmap.
+    if (this.overlays.reach && this.heat) {
+      for (let y = y0; y < y1; y++)
+        for (let x = x0; x < x1; x++) {
+          const v = this.heat[y * map.width + x];
+          if (v <= 0 && v !== -1) continue;
+          ctx.fillStyle = HEAT_COLORS[v];
+          ctx.fillRect(offsetX + x * scale, offsetY + y * scale, scale, scale);
+        }
+    }
 
     if (this.overlays.grid) {
       const line = (along: "x" | "y", i: number, style: string, width: number) => {
@@ -250,6 +307,72 @@ export class MapRenderer {
     ctx.strokeStyle = "rgba(255,255,255,0.8)";
     ctx.lineWidth = 1;
     ctx.strokeRect(Math.round(offsetX) - 0.5, Math.round(offsetY) - 0.5, map.width * scale + 1, map.height * scale + 1);
+
+    // Entrances: yellow outline on their edge cells.
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(255, 214, 60, 0.95)";
+    for (const o of map.openings) for (const c of openingCells(o, map.width, map.height)) ctx.strokeRect(...cellRect(c, 1));
+
+    // Trainer sight lines.
+    if (this.overlays.sight) {
+      for (const e of map.entities) {
+        if (e.kind !== "trainer") continue;
+        const sight = trainerSight(e, map.width, map.height, map.layers.terrain.data);
+        ctx.fillStyle = "rgba(208, 69, 58, 0.3)";
+        for (const c of sight) ctx.fillRect(...cellRect(c));
+        if (sight.length) {
+          const last = sight[sight.length - 1];
+          ctx.strokeStyle = "rgba(208, 69, 58, 0.9)";
+          ctx.lineWidth = Math.max(1.5, scale / 8);
+          ctx.beginPath();
+          ctx.moveTo(offsetX + (e.x + 0.5) * scale, offsetY + (e.y + 0.5) * scale);
+          ctx.lineTo(offsetX + ((last % map.width) + 0.5) * scale, offsetY + (Math.floor(last / map.width) + 0.5) * scale);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Things on the map: a coloured tile, with its ID when zoomed in enough.
+    const marker = (x: number, y: number, color: string, label: string) => {
+      const sx = offsetX + x * scale;
+      const sy = offsetY + y * scale;
+      if (sx + scale < 0 || sy + scale < 0 || sx > this.cssWidth || sy > this.cssHeight) return;
+      const pad = Math.max(1, scale * 0.08);
+      ctx.fillStyle = color;
+      ctx.fillRect(sx + pad, sy + pad, scale - pad * 2, scale - pad * 2);
+      ctx.strokeStyle = "rgba(0,0,0,0.7)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sx + pad + 0.5, sy + pad + 0.5, scale - pad * 2 - 1, scale - pad * 2 - 1);
+      if (scale >= 14) {
+        ctx.fillStyle = "#fff";
+        ctx.font = `bold ${Math.floor(scale * 0.42)}px system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, sx + scale / 2, sy + scale / 2 + 1);
+      }
+    };
+    for (const e of map.entities) marker(e.x, e.y, ENTITY_COLORS[e.kind], e.id);
+    map.warps.forEach((w, k) => marker(w.x, w.y, ENTITY_COLORS.warp, `W${k}`));
+
+    // Validation markers.
+    if (this.overlays.issues) {
+      for (const issue of this.issues) {
+        ctx.strokeStyle = issue.severity === "error" ? "rgba(255, 80, 80, 0.95)" : "rgba(255, 190, 60, 0.9)";
+        ctx.lineWidth = 2;
+        for (const c of issue.cells.slice(0, 400)) ctx.strokeRect(...cellRect(c, 2));
+      }
+    }
+
+    // Brief highlight after clicking a problem in the list.
+    if (this.flash) {
+      const left = this.flash.until - performance.now();
+      if (left <= 0) this.flash = null;
+      else {
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.25 + 0.25 * Math.sin(left / 120)})`;
+        for (const c of this.flash.cells) ctx.fillRect(...cellRect(c));
+        this.requestFrame();
+      }
+    }
 
     // Hovered cell, and the 15×10 GBA screen around it.
     if (this.hover) {

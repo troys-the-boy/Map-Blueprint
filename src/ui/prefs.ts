@@ -9,6 +9,14 @@ export interface Overlays {
   rulers: boolean;
   screenFrame: boolean;
   locks: boolean;
+  /** Trainer sight lines. */
+  sight: boolean;
+  /** Validation markers on the map. */
+  issues: boolean;
+  /** Reachability heatmap: colour by which HMs are needed. */
+  reach: boolean;
+  /** Elevation shading. */
+  elevation: boolean;
 }
 
 export interface Prefs {
@@ -28,7 +36,7 @@ export const DEFAULT_PREFS: Prefs = {
   fingerMode: "auto",
   penSeen: false,
   paletteId: "pnw",
-  overlays: { grid: true, rulers: true, screenFrame: true, locks: false },
+  overlays: { grid: true, rulers: true, screenFrame: true, locks: false, sight: true, issues: true, reach: false, elevation: false },
   lockWhenPainting: true,
 };
 
@@ -46,6 +54,10 @@ export function loadPrefs(): Prefs {
         rulers: p.overlays?.rulers !== false,
         screenFrame: p.overlays?.screenFrame !== false,
         locks: p.overlays?.locks === true,
+        sight: p.overlays?.sight !== false,
+        issues: p.overlays?.issues !== false,
+        reach: p.overlays?.reach === true,
+        elevation: p.overlays?.elevation === true,
       },
       lockWhenPainting: p.lockWhenPainting !== false,
     };

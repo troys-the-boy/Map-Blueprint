@@ -1,0 +1,43 @@
+// The right-hand panel with tabs: Terrain (paint + overlays), Generate, Check.
+// On narrow screens it slides in as a drawer.
+
+import { CheckPanel } from "./CheckPanel";
+import { GeneratePanel } from "./GeneratePanel";
+import { TerrainPanel } from "./TerrainPanel";
+import { Icon } from "./icons";
+import { useStore } from "../store";
+
+export type SideTab = "terrain" | "generate" | "check";
+
+export function SidePanel({ tab, onTab, onClose }: { tab: SideTab; onTab: (t: SideTab) => void; onClose?: () => void }) {
+  const s = useStore();
+  const errors = s.issues.filter((i) => i.severity === "error").length;
+  const warnings = s.issues.length - errors;
+  const tabs: Array<{ id: SideTab; label: string; tip: string }> = [
+    { id: "terrain", label: "Paint", tip: "Terrain to paint with, and what to show on the map" },
+    { id: "generate", label: "Generate", tip: "Generate this map from a seed and settings" },
+    { id: "check", label: "Check", tip: "Problems found on this map" },
+  ];
+  return (
+    <aside className="side-panel" aria-label="Side panel">
+      <div className="panel-head">
+        <div className="tabs" role="tablist">
+          {tabs.map((t) => (
+            <button key={t.id} role="tab" aria-selected={tab === t.id} className={`tab ${tab === t.id ? "active" : ""}`} title={t.tip} onClick={() => onTab(t.id)}>
+              {t.label}
+              {t.id === "check" && (errors || warnings) ? <span className={`count ${errors ? "bad" : "warn"}`}>{errors || warnings}</span> : null}
+            </button>
+          ))}
+        </div>
+        {onClose && (
+          <button className="icon-button" aria-label="Close panel" title="Close" onClick={onClose}>
+            <Icon name="close" />
+          </button>
+        )}
+      </div>
+      {tab === "terrain" && <TerrainPanel onPicked={onClose} />}
+      {tab === "generate" && <GeneratePanel />}
+      {tab === "check" && <CheckPanel />}
+    </aside>
+  );
+}

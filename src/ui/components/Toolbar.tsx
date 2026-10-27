@@ -5,14 +5,15 @@ import { useStore } from "../store";
 import { getPalette, TERRAIN_TYPES } from "../../core/terrain";
 import { Icon } from "./icons";
 import { canvasRef } from "./MapCanvas";
+import type { SideTab } from "./SidePanel";
 
 const TOOLS: Array<{ tool: Tool; icon: string; label: string; key: string; tip: string }> = [
-  { tool: "pencil", icon: "pencil", label: "Pencil", key: "B", tip: "Pencil (B): paint the selected terrain. Painted cells are locked so future generators keep them." },
+  { tool: "pencil", icon: "pencil", label: "Pencil", key: "B", tip: "Pencil (B): paint the selected terrain. Painted cells are locked so Generate keeps them." },
   { tool: "erase", icon: "erase", label: "Eraser", key: "E", tip: "Eraser (E): set cells back to plain ground and unlock them." },
   { tool: "pan", icon: "pan", label: "Move view", key: "H", tip: "Move view (H): drag to pan. You can also hold Space and drag, or drag with two fingers." },
 ];
 
-export function Toolbar({ onToggleTerrain }: { onToggleTerrain: () => void }) {
+export function Toolbar({ onShowTab }: { onShowTab: (tab: SideTab) => void }) {
   const s = useStore();
   const palette = getPalette(s.prefs.paletteId);
   const current = TERRAIN_TYPES[s.terrain];
@@ -41,7 +42,7 @@ export function Toolbar({ onToggleTerrain }: { onToggleTerrain: () => void }) {
       >
         <Icon name="pick" />
       </button>
-      <button className="tool swatch-button" title={`Terrain: ${current.label}. Tap to choose another terrain type.`} aria-label={`Choose terrain (current: ${current.label})`} onClick={onToggleTerrain}>
+      <button className="tool swatch-button" title={`Terrain: ${current.label}. Tap to choose another terrain type.`} aria-label={`Choose terrain (current: ${current.label})`} onClick={() => onShowTab("terrain")}>
         <span className="swatch big" style={{ background: palette.colors[current.id] }}>
           {current.glyph ?? ""}
         </span>
@@ -55,6 +56,20 @@ export function Toolbar({ onToggleTerrain }: { onToggleTerrain: () => void }) {
           +
         </button>
       </div>
+      <hr />
+      <button
+        className="tool"
+        title="Generate (G): build this map from its seed and settings. Long-press or right-click for settings."
+        aria-label="Generate map"
+        disabled={s.generating}
+        onClick={() => void s.generate()}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onShowTab("generate");
+        }}
+      >
+        <Icon name="generate" />
+      </button>
       <hr />
       <button className="tool" title="Undo (Ctrl+Z, or tap with two fingers)" aria-label="Undo" disabled={!s.canUndo()} onClick={() => s.undo()}>
         <Icon name="undo" />

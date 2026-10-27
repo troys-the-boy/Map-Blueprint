@@ -8,20 +8,28 @@ import { MapCanvas, canvasRef } from "./components/MapCanvas";
 import { MapsPanel } from "./components/MapsPanel";
 import { NewMapDialog } from "./components/NewMapDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
-import { TerrainPanel } from "./components/TerrainPanel";
+import { SidePanel } from "./components/SidePanel";
+import type { SideTab } from "./components/SidePanel";
+import { ExportDialog } from "./components/ExportDialog";
 import { Toolbar } from "./components/Toolbar";
 import { Icon } from "./components/icons";
 import { openProject, saveProject } from "./files";
 import { screenLabel } from "./renderer";
 import { store, useStore } from "./store";
 
-type Dialog = null | "newMap" | "settings";
+type Dialog = null | "newMap" | "settings" | "export";
 
 export function App() {
   const s = useStore();
   const [dialog, setDialog] = useState<Dialog>(null);
   const [mapsOpen, setMapsOpen] = useState(false);
-  const [terrainOpen, setTerrainOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [tab, setTab] = useState<SideTab>("terrain");
+  /** Show a side-panel tab (and slide the panel in on narrow screens). */
+  const showTab = (t: SideTab) => {
+    setTab(t);
+    setPanelOpen(true);
+  };
   const [hover, setHover] = useState<[number, number] | null>(null);
   const map = s.currentMap;
 
@@ -75,6 +83,11 @@ export function App() {
         <button className="icon-button labeled" onClick={() => void saveProject(store)} title="Save the project to a file on this device (Ctrl+S)">
           <Icon name="save" /> <span>Save</span>
         </button>
+        {map && (
+          <button className="icon-button labeled" onClick={() => setDialog("export")} title="Export the blueprint PNG, screen tiles and placement table">
+            <Icon name="export" /> <span>Export</span>
+          </button>
+        )}
         <details className="menu">
           <summary className="icon-button" title="More">
             ⋯
@@ -110,7 +123,7 @@ export function App() {
       <main className="workspace">
         <div className="canvas-wrap">
           <MapCanvas onHover={setHover} />
-          {map && <Toolbar onToggleTerrain={() => setTerrainOpen((o) => !o)} />}
+          {map && <Toolbar onShowTab={showTab} />}
           {!map && (
             <div className="welcome">
               <h1>Gen 3 Map Blueprint</h1>
@@ -127,8 +140,8 @@ export function App() {
           )}
         </div>
         {map && (
-          <div className={`terrain-dock ${terrainOpen ? "open" : ""}`}>
-            <TerrainPanel onClose={terrainOpen ? () => setTerrainOpen(false) : undefined} />
+          <div className={`terrain-dock ${panelOpen ? "open" : ""}`}>
+            <SidePanel tab={tab} onTab={setTab} onClose={panelOpen ? () => setPanelOpen(false) : undefined} />
           </div>
         )}
       </main>
@@ -146,6 +159,13 @@ export function App() {
             <span title={size ? `Map memory: ${size.used.toLocaleString("en-US")} of ${size.limit.toLocaleString("en-US")} used` : ""} className={size?.ok ? "" : "bad"}>
               {map.width}×{map.height} · {size?.ok ? `${size.remaining.toLocaleString("en-US")} left` : "too big"}
             </span>
+            <button
+              className={`status-check ${s.issues.some((i) => i.severity === "error") ? "bad" : s.issues.length ? "warn" : "good"}`}
+              title="Problems found on this map. Click to see them."
+              onClick={() => showTab("check")}
+            >
+              {s.issues.length === 0 ? "✓ OK" : `${s.issues.filter((i) => i.severity === "error").length} errors · ${s.issues.filter((i) => i.severity === "warning").length} warnings`}
+            </button>
             <span title="Seed for this map">Seed {map.seed}</span>
           </>
         ) : (
@@ -167,6 +187,7 @@ export function App() {
       )}
       {dialog === "newMap" && <NewMapDialog onClose={() => setDialog(null)} />}
       {dialog === "settings" && <SettingsDialog onClose={() => setDialog(null)} />}
+      {dialog === "export" && <ExportDialog onClose={() => setDialog(null)} />}
     </div>
   );
 }
@@ -190,6 +211,7 @@ function useKeyboardShortcuts(openNewMap: () => void) {
       else if (key === "h") store.setTool("pan");
       else if (key === "i") store.setTool("pick");
       else if (key === "n") openNewMap();
+      else if (key === "g") void store.generate();
       else if (key === "[") store.setBrush(store.brush - 1);
       else if (key === "]") store.setBrush(store.brush + 1);
       else if (key === "0") canvasRef.renderer?.fit();

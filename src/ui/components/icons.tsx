@@ -18,6 +18,8 @@ const paths: Record<string, string> = {
   layers: "M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5",
   close: "M6 6l12 12M18 6L6 18",
   trash: "M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13",
+  export: "M12 3v12M7 8l5-5 5 5M5 15v5h14v-5",
+  generate: "M12 3l1.8 4.7L18 9l-4.2 1.3L12 15l-1.8-4.7L6 9l4.2-1.3L12 3zM18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8L18 15zM5 15l.6 1.4L7 17l-1.4.6L5 19l-.6-1.4L3 17l1.4-.6L5 15z",
 };
 
 export function Icon({ name, size = 22 }: { name: keyof typeof paths | string; size?: number }) {

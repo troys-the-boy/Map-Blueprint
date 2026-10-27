@@ -130,6 +130,15 @@ describe("opening untrusted files", () => {
 });
 
 describe("migrations", () => {
+  it("opens a version-1 file (Milestone 1) and adds empty openings", () => {
+    const f = parseSample();
+    f.schemaVersion = 1;
+    for (const m of f.region.maps) delete m.openings;
+    const loaded = parseProject(JSON.stringify(f));
+    expect(loaded.maps[0].openings).toEqual([]);
+    expect(loaded.maps[0].entities).toHaveLength(1);
+  });
+
   it("upgrades step by step", () => {
     const steps = {
       1: (f: Record<string, unknown>) => ({ ...f, schemaVersion: 2, a: 1 }),

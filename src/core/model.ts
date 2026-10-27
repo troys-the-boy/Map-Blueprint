@@ -92,6 +92,20 @@ export interface Warp {
   destWarpId: number | null;
 }
 
+export const EDGES = ["north", "south", "east", "west"] as const;
+export type Edge = (typeof EDGES)[number];
+
+/**
+ * A gap in the map's edge where the player walks onto a neighbouring map.
+ * `start` is the first cell along the edge (x for north/south, y for east/west).
+ */
+export interface Opening {
+  id: string;
+  edge: Edge;
+  start: number;
+  width: number;
+}
+
 /** Connection directions, named as in pokeemerald map.json ("up", "down", …). */
 export const CONNECTION_DIRECTIONS = ["up", "down", "left", "right", "dive", "emerge"] as const;
 export type ConnectionDirection = (typeof CONNECTION_DIRECTIONS)[number];
@@ -165,6 +179,8 @@ export interface MapBlueprint {
   layers: MapLayers;
   entities: Entity[];
   warps: Warp[];
+  /** Edge openings (entrances/exits). Empty = let the generator choose. */
+  openings: Opening[];
   connections: Connection[];
   header: MapHeader;
   layout: MapLayout;
@@ -330,6 +346,7 @@ export function addNewMap(region: Region, opts: NewMapOptions): MapBlueprint {
     },
     entities: [],
     warps: [],
+    openings: [],
     connections: [],
     header: defaultHeader(opts.name, opts.mapType),
     layout: {

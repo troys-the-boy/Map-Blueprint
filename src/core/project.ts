@@ -18,6 +18,7 @@ import type {
   Entity,
   Grid,
   MapBlueprint,
+  Opening,
   ProgressionStep,
   Region,
   Route,
@@ -27,6 +28,7 @@ import type {
 import {
   BIOMES,
   CONNECTION_DIRECTIONS,
+  EDGES,
   ENTITY_KINDS,
   MAP_TYPES,
   WARP_KINDS,
@@ -51,7 +53,7 @@ import {
 import { ELEVATION_LEVELS, TERRAIN_TYPES, terrainIndex } from "./terrain";
 
 export const FILE_FORMAT_ID = "gen3-map-blueprint-project";
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 /** Safety limits for opened files. Anything bigger is rejected. */
 export const FILE_LIMITS = {
@@ -166,6 +168,7 @@ function saveMap(m: MapBlueprint) {
     },
     entities: m.entities,
     warps: m.warps,
+    openings: m.openings,
     connections: m.connections,
     header: m.header,
     layout: m.layout,
@@ -239,6 +242,13 @@ const warpCheck: Check<Warp> = object({
   destWarpId: nullable(num(0, 255)),
 });
 
+const openingCheck: Check<Opening> = object({
+  id: str(64, ID),
+  edge: oneOf(EDGES),
+  start: num(0, FILE_LIMITS.maxMapSide - 1),
+  width: num(1, FILE_LIMITS.maxMapSide),
+});
+
 const connectionCheck: Check<Connection> = object({
   direction: oneOf(CONNECTION_DIRECTIONS),
   map: str(64, ID),
@@ -303,6 +313,7 @@ const savedMapCheck = object({
   }),
   entities: arrayOf(entityCheck, FILE_LIMITS.maxEntitiesPerMap),
   warps: arrayOf(warpCheck, 256),
+  openings: arrayOf(openingCheck, 32),
   connections: arrayOf(connectionCheck, 16),
   header: headerCheck,
   layout: object({
@@ -370,11 +381,25 @@ const envelopeCheck = object({
 /** A migration upgrades a parsed file from version N to N + 1. */
 export type Migration = (file: Record<string, unknown>) => Record<string, unknown>;
 
-/**
- * Migrations, keyed by the version they upgrade FROM.
- * Example for a future v2:  1: (file) => ({ ...file, schemaVersion: 2, region: … }),
- */
-export const MIGRATIONS: Record<number, Migration> = {};
+/** Migrations, keyed by the version they upgrade FROM. Each returns a new object. */
+export const MIGRATIONS: Record<number, Migration> = {
+  // v1 → v2 (Milestone 2): every map gains an "openings" list (edge entrances).
+  1: (file) => {
+    const region = file.region as Record<string, unknown> | null;
+    const maps = Array.isArray(region?.maps) ? (region!.maps as unknown[]) : null;
+    return {
+      ...file,
+      schemaVersion: 2,
+      region:
+        region && maps
+          ? {
+              ...region,
+              maps: maps.map((m) => (m && typeof m === "object" && !Array.isArray(m) ? { ...(m as object), openings: [] } : m)),
+            }
+          : region,
+    };
+  },
+};
 
 /** Upgrade an old file step by step to the target version. */
 export function migrate(
@@ -418,6 +443,11 @@ function loadMap(saved: ReturnType<typeof savedMapCheck>, path: string): MapBlue
   };
   saved.entities.forEach((e, i) => inside(e.x, e.y, `${path}.entities[${i}]`));
   saved.warps.forEach((w, i) => inside(w.x, w.y, `${path}.warps[${i}]`));
+  saved.openings.forEach((o, i) => {
+    const edgeLength = o.edge === "north" || o.edge === "south" ? width : height;
+    if (o.start + o.width > edgeLength)
+      throw new FileFormatError(`${path}.openings[${i}]`, `the opening runs past the end of the ${o.edge} edge (${edgeLength} cells long)`);
+  });
   saved.edits.forEach((e, i) => {
     if (e.cells.length % 2 !== 0) throw new FileFormatError(`${path}.edits[${i}].cells`, "expected pairs of x, y numbers");
     if (terrainIndex(e.terrain) < 0) throw new FileFormatError(`${path}.edits[${i}].terrain`, `unknown terrain type "${e.terrain}"`);
