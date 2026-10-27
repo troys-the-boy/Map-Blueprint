@@ -7,11 +7,15 @@ import { ENTITY_PREFIX, PORYMAP_GROUP } from "../entities";
 import type { MapBlueprint } from "../model";
 import { ELEVATION_VALUES } from "../porymap";
 import { renderBlueprint, screenName } from "./blueprint";
+import { checklistHtml, checklistMarkdown, encountersHtml, headerSheetHtml, healLocations, jsonText, mapJson, page, rawGrid, screens } from "./rebuild";
+import { wildEncountersEntry } from "../encounters";
 
 export interface ExportContext {
   paletteId: string;
   regionName: string;
   appVersion: string;
+  /** All maps in the project, to name neighbours in connections. */
+  maps?: readonly MapBlueprint[];
 }
 
 export interface ExportFile {
@@ -62,49 +66,58 @@ export const screenTilesZip: Exporter = {
   label: "Screen tiles (ZIP of PNGs)",
   description: "The map cut into 15×10 GBA screens named A1, B1, A2… with real coordinates, for rebuilding cell by cell. Each screen also comes as an elevation sheet.",
   run(map, ctx) {
-    const files: Record<string, Uint8Array> = {};
-    const cols = Math.ceil(map.width / SCREEN_WIDTH_METATILES);
-    const rows = Math.ceil(map.height / SCREEN_HEIGHT_METATILES);
     const base = fileBase(map);
-    const index: string[] = [
-      `${map.name} - screen tiles`,
-      `Map ${map.width} x ${map.height} cells. Each tile is one GBA screen (15 x 10 cells).`,
-      `Columns are letters (A = x 0-14, B = x 15-29, ...); rows are numbers (1 = y 0-9, 2 = y 10-19, ...).`,
-      `The elevation folder has the same screens the way Porymap's collision tab shows them.`,
-      "",
-    ];
-    for (let r = 0; r < rows; r++)
-      for (let c = 0; c < cols; c++) {
-        const x = c * SCREEN_WIDTH_METATILES;
-        const y = r * SCREEN_HEIGHT_METATILES;
-        const w = Math.min(SCREEN_WIDTH_METATILES, map.width - x);
-        const h = Math.min(SCREEN_HEIGHT_METATILES, map.height - y);
-        const name = screenName(c, r);
-        const img = renderBlueprint(map, {
-          paletteId: ctx.paletteId,
-          area: { x, y, width: w, height: h },
-          title: `${map.name} ${name}`,
-          subtitle: `X ${x}-${x + w - 1}  Y ${y}-${y + h - 1}`,
-          labelEvery: 5,
-        });
-        files[`${base}-screens/${name}.png`] = img.toPng();
-        const elev = renderBlueprint(map, {
-          paletteId: ctx.paletteId,
-          area: { x, y, width: w, height: h },
-          title: `${map.name} ${name} elevation`,
-          subtitle: `X ${x}-${x + w - 1}  Y ${y}-${y + h - 1}`,
-          labelEvery: 5,
-          mode: "elevation",
-        });
-        files[`${base}-screens/elevation/${name}.png`] = elev.toPng();
-        index.push(`${name}.png  x ${x}-${x + w - 1}, y ${y}-${y + h - 1}`);
-      }
-    files[`${base}-screens/index.txt`] = strToU8(index.join("\r\n") + "\r\n");
-    // A fixed date keeps the zip identical for identical maps.
-    const zipped = zipSync(files, { level: 0, mtime: new Date("2000-01-01T00:00:00Z") });
-    return { name: `${base}-screens.zip`, mime: "application/zip", data: zipped };
+    const files = screenFiles(map, ctx, `${base}-screens/`);
+    return { name: `${base}-screens.zip`, mime: "application/zip", data: zip(files) };
   },
 };
+
+/** A zip with a fixed date, so identical maps give identical files. */
+function zip(files: Record<string, Uint8Array>): Uint8Array {
+  return zipSync(files, { level: 0, mtime: new Date("2000-01-01T00:00:00Z") });
+}
+
+/** The screen PNGs (and their elevation sheets) with an index, inside `folder`. */
+function screenFiles(map: MapBlueprint, ctx: ExportContext, folder: string): Record<string, Uint8Array> {
+  const files: Record<string, Uint8Array> = {};
+  const cols = Math.ceil(map.width / SCREEN_WIDTH_METATILES);
+  const rows = Math.ceil(map.height / SCREEN_HEIGHT_METATILES);
+  const index: string[] = [
+    `${map.name} - screen tiles`,
+    `Map ${map.width} x ${map.height} cells. Each tile is one GBA screen (15 x 10 cells).`,
+    `Columns are letters (A = x 0-14, B = x 15-29, ...); rows are numbers (1 = y 0-9, 2 = y 10-19, ...).`,
+    `The elevation folder has the same screens the way Porymap's collision tab shows them.`,
+    "",
+  ];
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      const x = c * SCREEN_WIDTH_METATILES;
+      const y = r * SCREEN_HEIGHT_METATILES;
+      const w = Math.min(SCREEN_WIDTH_METATILES, map.width - x);
+      const h = Math.min(SCREEN_HEIGHT_METATILES, map.height - y);
+      const name = screenName(c, r);
+      const img = renderBlueprint(map, {
+        paletteId: ctx.paletteId,
+        area: { x, y, width: w, height: h },
+        title: `${map.name} ${name}`,
+        subtitle: `X ${x}-${x + w - 1}  Y ${y}-${y + h - 1}`,
+        labelEvery: 5,
+      });
+      files[`${folder}${name}.png`] = img.toPng();
+      const elev = renderBlueprint(map, {
+        paletteId: ctx.paletteId,
+        area: { x, y, width: w, height: h },
+        title: `${map.name} ${name} elevation`,
+        subtitle: `X ${x}-${x + w - 1}  Y ${y}-${y + h - 1}`,
+        labelEvery: 5,
+        mode: "elevation",
+      });
+      files[`${folder}elevation/${name}.png`] = elev.toPng();
+      index.push(`${name}.png  x ${x}-${x + w - 1}, y ${y}-${y + h - 1}`);
+    }
+  files[`${folder}index.txt`] = strToU8(index.join("\r\n") + "\r\n");
+  return files;
+}
 
 // --- Placement table --------------------------------------------------------------------
 
@@ -267,4 +280,119 @@ ${body}
   },
 };
 
-export const EXPORTERS: readonly Exporter[] = [blueprintPng, elevationPng, screenTilesZip, placementCsv, placementHtml];
+// --- Header sheet, encounters, checklist, raw grid (see rebuild.ts) ---------------------
+
+export const headerSheet: Exporter = {
+  id: "header-sheet",
+  label: "Header sheet (printable page)",
+  description: "map.json header values, layout (size, border, tilesets) and connections with offsets, as a list and as JSON.",
+  run(map, ctx) {
+    return { name: `${fileBase(map)}-header-sheet.html`, mime: "text/html", data: headerSheetHtml(map, ctx) };
+  },
+};
+
+export const mapJsonFile: Exporter = {
+  id: "map-json",
+  label: "map.json draft",
+  description: "The whole map.json in pokeemerald's format: header, connections and every event, numbered as in the placement table.",
+  run(map, ctx) {
+    return { name: `${fileBase(map)}-map.json`, mime: "application/json", data: jsonText(mapJson(map, ctx.maps ?? [])) };
+  },
+};
+
+export const encountersPage: Exporter = {
+  id: "encounters",
+  label: "Encounter draft (page and JSON)",
+  description: "The draft wild encounter tables as a readable page, with the wild_encounters.json entry to paste.",
+  run(map, ctx) {
+    return { name: `${fileBase(map)}-encounters.html`, mime: "text/html", data: encountersHtml(map, ctx) };
+  },
+};
+
+export const checklist: Exporter = {
+  id: "checklist",
+  label: "Rebuild checklist (page)",
+  description: "Step-by-step rebuild in Porymap with this map's values: create, size and border, paint by screen, events, connections, encounters, then walk every exit.",
+  run(map, ctx) {
+    return { name: `${fileBase(map)}-checklist.html`, mime: "text/html", data: checklistHtml(map, ctx) };
+  },
+};
+
+export const rawGridJson: Exporter = {
+  id: "raw-grid",
+  label: "Raw grid (JSON)",
+  description: "The terrain, elevation and things as plain data, for scripts and the planned tileset tool.",
+  run(map) {
+    return { name: `${fileBase(map)}-grid.json`, mime: "application/json", data: jsonText(rawGrid(map)) };
+  },
+};
+
+/** Everything for rebuilding one map, in one ZIP with an index page. */
+export const rebuildPacket: Exporter = {
+  id: "rebuild-packet",
+  label: "Rebuild packet (everything, ZIP)",
+  description: "All of the below in one folder, with an index page and the checklist to work through: blueprint, elevation sheet, screen tiles, placement table, header sheet, map.json, encounters and raw grid.",
+  run(map, ctx) {
+    const base = fileBase(map);
+    const dir = `${base}-rebuild/`;
+    const files: Record<string, Uint8Array> = {};
+    const put = (name: string, data: Uint8Array | string) => (files[dir + name] = typeof data === "string" ? strToU8(data) : data);
+    put("checklist.html", checklistHtml(map, ctx));
+    put("checklist.md", checklistMarkdown(map, ctx));
+    put("blueprint.png", blueprintPng.run(map, ctx).data as Uint8Array);
+    put("elevation.png", elevationPng.run(map, ctx).data as Uint8Array);
+    Object.assign(files, screenFiles(map, ctx, `${dir}screens/`));
+    put("placements.html", placementHtml.run(map, ctx).data as string);
+    put("placements.csv", placementCsv.run(map, ctx).data as string);
+    put("header-sheet.html", headerSheetHtml(map, ctx));
+    put("map.json", jsonText(mapJson(map, ctx.maps ?? [])));
+    put("encounters.html", encountersHtml(map, ctx));
+    if (map.encounterPlan) put("wild_encounters-entry.json", jsonText(wildEncountersEntry(map, map.encounterPlan)));
+    const heals = healLocations(map);
+    if (heals.length) put("heal_locations-entries.json", jsonText(heals));
+    put("grid.json", jsonText(rawGrid(map)));
+    const link = (href: string, label: string, note: string) => `<li><a href="${escapeHtml(href)}">${escapeHtml(label)}</a>: ${escapeHtml(note)}</li>`;
+    const scr = screens(map);
+    put(
+      "index.html",
+      page(
+        `${map.name} - rebuild packet`,
+        `<h1>${escapeHtml(map.name)} - rebuild packet</h1>
+<p class="sub">${escapeHtml(ctx.regionName)} &middot; ${map.width}&times;${map.height} &middot; seed ${map.seed} &middot; made with Gen 3 Map Blueprint ${escapeHtml(ctx.appVersion)}</p>
+<h2>Start here</h2>
+<ul>${link("checklist.html", "Rebuild checklist", "the steps in order, with this map's values (also checklist.md)")}</ul>
+<h2>Sheets</h2>
+<ul>
+${link("blueprint.png", "Blueprint", "the whole map with rulers, numbered things and sight lines")}
+${link("elevation.png", "Elevation sheet", "as Porymap's collision tab shows it")}
+${link("screens/index.txt", `Screen tiles (${scr.length})`, "screens/A1.png … one per GBA screen, plus screens/elevation/")}
+${link("placements.html", "Placement table", "every thing with its Porymap fields (also placements.csv)")}
+${link("header-sheet.html", "Header sheet", "header values, layout and connections")}
+${link("encounters.html", "Encounter draft", "the wild Pokémon tables")}
+</ul>
+<h2>Files to paste or keep</h2>
+<ul>
+${link("map.json", "map.json", "the full map.json draft for data/maps/${map.header.name}/")}
+${map.encounterPlan ? link("wild_encounters-entry.json", "wild_encounters-entry.json", "this map's entry for src/data/wild_encounters.json") : ""}
+${heals.length ? link("heal_locations-entries.json", "heal_locations-entries.json", "entries for src/data/heal_locations.json") : ""}
+${link("grid.json", "grid.json", "the raw grid (terrain, elevation, things) for scripts")}
+</ul>`,
+      ),
+    );
+    return { name: `${base}-rebuild.zip`, mime: "application/zip", data: zip(files) };
+  },
+};
+
+export const EXPORTERS: readonly Exporter[] = [
+  rebuildPacket,
+  checklist,
+  blueprintPng,
+  elevationPng,
+  screenTilesZip,
+  placementCsv,
+  placementHtml,
+  headerSheet,
+  mapJsonFile,
+  encountersPage,
+  rawGridJson,
+];

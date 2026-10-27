@@ -47,7 +47,8 @@ describe("exports", () => {
       const b = e.run(generated(5), ctx).data;
       expect(a).toEqual(b);
     }
-  });
+    // The rebuild packet draws every sheet, so this takes a few seconds.
+  }, 30_000);
 
   it("screen tiles: one valid PNG per 15×10 screen, named A1, B1…", () => {
     const map = generated(3, 20, 40); // 2 columns × 4 rows of screens

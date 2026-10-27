@@ -13,7 +13,7 @@ Coordinates are in **metatiles** (16×16 px). The origin (0, 0) is the top-left 
 
 ---
 
-## Project file, schemaVersion 6
+## Project file, schemaVersion 8
 
 A project is a single JSON file holding one region and all of its maps. The app treats it as untrusted data when opening it:
 
@@ -357,6 +357,22 @@ For each cell, the app builds a **neighbor mask**: one bit per neighbor, set whe
 A rule matches when `(neighborMask & care) == (mask & care)`. `care` marks which bits matter: leave a bit out of `care` to mean "don't care". The **first** rule that matches wins. If no rule matches, `fallbackMetatile` is used.
 
 This is how water edges, tree walls, path borders and cliffs get their correct edge and corner pieces. The planned tileset generator reads the vocabulary and these masks, draws matching metatiles, and writes the `rules` back.
+
+## Raw grid, version 1 (`grid.json` in the rebuild packet)
+
+The terrain, elevation and things of one map as plain data, for scripts (the planned Porymap paint script and tileset tool). Made by `rawGrid` in `src/core/exporters/rebuild.ts`.
+
+```json
+{ "format": "gen3-map-blueprint-grid", "version": 1,
+  "map": "MAP_ROUTE7", "width": 30, "height": 60,
+  "terrain":   { "legend": ["path", "road", …], "rows": [[3, 3, 0, …], …] },   // ids from profiles/terrain.json
+  "elevation": { "legend": ["water", "ground", …], "values": [1, 3, …], "rows": [[1, 1, …], …] },
+              // values: Porymap's elevation number for each legend entry (stairs cells use 0, "transition")
+  "entities": [ { "id": "T1", "kind": "trainer", "x": 5, "y": 9, "elevation": "ground", "fields": { … } } ],
+  "warps":    [ { "number": 0, "kind": "door", "x": 4, "y": 2, "elevation": "ground", "dest_map": "MAP_…", "dest_warp_id": 0 } ] }
+```
+
+The rebuild packet's `map.json` follows pokeemerald's `data/maps/*/map.json` exactly (key order and event fields checked against Route101, Route104, Route119 and LittlerootTown_BrendansHouse_1F); `connections` is `null` when there are none.
 
 ### Wild encounters (from version 8)
 

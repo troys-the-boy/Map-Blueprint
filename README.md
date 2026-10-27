@@ -2,13 +2,14 @@
 
 A planning tool for a pokeemerald ROM hack. You lay out maps here as colored terrain blueprints, then rebuild them by hand in Porymap. It runs in your web browser, works offline, and never sends anything over the internet.
 
-**Status:** Milestone 2 (route generator and validation) is done:
+**Status:** Milestones 1–4 are done:
 
-- **Generate routes** from a seed, with settings for paths, grass, water, ledges, HM-gated areas, trainers and items.
+- **Generate routes** from a seed, with settings for paths, grass, water, ledges, HM-gated areas, trainers and items, and a travel direction.
+- **Edit by hand:** smart strokes, selections, zones, every kind of Porymap event (with all their fields), wild encounter tables.
 - **Check every map** for Gen 3 problems, such as an entrance you can't reach or a ledge trap.
-- **Export** a blueprint PNG, screen-by-screen tiles, and a placement table.
+- **Export a rebuild packet:** everything you need beside Porymap to rebuild a map by hand, with a step-by-step checklist.
 
-Milestone 1 (Foundation: create maps, paint, save and open, on Windows, Mac and iPad) is also done. Smart drawing tools come in Milestone 3.
+Towns, forests and caves come in Milestone 5, and the region view in Milestone 6.
 
 ---
 
@@ -284,7 +285,19 @@ Entrances are outlined in yellow. Things on the map are coloured squares; zoom i
 
 ### Export
 
-Click **Export** in the top bar (blocked while the map has errors):
+Click **Export** in the top bar (blocked while the map has errors). The first option is the one you usually want:
+
+- **Rebuild packet (ZIP):** everything below in one folder, with an `index.html` page linking it all. Open the folder, open **checklist.html**, and work down it with Porymap open. It contains:
+  - `checklist.html` / `checklist.md`: the rebuild steps with this map's values: create the map, set the size and border, paint by screen tile, place events, set connections, paste encounters, then run the game and walk every exit;
+  - `blueprint.png`, `elevation.png` and the `screens` folder;
+  - `placements.html` / `placements.csv`;
+  - `header-sheet.html`: the map.json header values, layout (size, border, tilesets) and connections with offsets, as a list and as JSON;
+  - `map.json`: the whole map.json in pokeemerald's format (header, connections and every event, numbered as in the placement table). You can use it as the map's `data/maps/<Name>/map.json`, or copy values from it;
+  - `encounters.html` and `wild_encounters-entry.json`: the encounter draft, readable and ready to paste into `src/data/wild_encounters.json`;
+  - `heal_locations-entries.json` if the map has heal locations;
+  - `grid.json`: the raw grid (terrain, elevation, things) for scripts.
+
+Each sheet can also be exported on its own:
 
 - **Blueprint (PNG):**
   - The map at 16 px per cell, the same size as a Gen 3 metatile.
@@ -297,7 +310,7 @@ Click **Export** in the top bar (blocked while the map has errors):
   - `graphics_id`, `movement_type`, `trainer_type`, sight range, `script`, `flag` and `item`.
   - The Porymap list it belongs in, and its number in that list.
 
-On iPad, exports open the share sheet. Choose **Save to Files**.
+On iPad, exports open the share sheet. Choose **Save to Files**; in the Files app, tap the ZIP to unpack it, then open `index.html` or `checklist.html`.
 
 ---
 
@@ -423,12 +436,13 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 - **Generate works around drawn features but doesn't route through them.** A path you draw is kept, but the generated main path may run elsewhere; join them with another stroke if you want one route.
 - **Regenerated gaps are often forest.** Away from the path, the generator mostly grows trees, so a gap filled with generated terrain may come back as forest. Use Fill with… or the pencil if you want open ground there.
 - **Moving across elevation** isn't smoothed: an area moved onto raised ground keeps its own elevation, so check the Elevation view (and the Check tab) afterwards.
-- **Basic entities only.** Generate places trainers, items, hidden items, Cut trees, Rock Smash rocks and a sign. Their field values are suggestions to check in Porymap. Other kinds, editing entities, and encounter tables come in Milestone 4.
-- **No intentional unavoidable trainers.** Generated trainers can always be avoided. Marking an unavoidable battle as intended comes with the properties panel in Milestone 4.
+- **What Generate places.** Generate places trainers, items, hidden items, Cut trees, Rock Smash rocks and a sign. Berry trees, people, triggers, Secret Base spots, heal locations and warps are placed by hand (towns and caves place their own in Milestone 5). Field values are suggestions to check in Porymap.
+- **Generated trainers are always avoidable.** Place a trainer by hand (and tick "on purpose" in Details) for a battle you can't avoid.
+- **Connections aren't checked against the neighbour yet.** The rebuild checklist reminds you to line up the entrances; region mode (Milestone 6) will check both sides.
+- **The map.json draft is a starting point.** Scripts, flags and trainer data it names don't exist in your project until you write them.
 - **Water currents.** They count as plain Surf water: the forced movement is ignored for now.
 - **Plain export text.** Labels in exported images use a small built-in pixel font, in capitals only.
 - **Not tested on real Apple devices.** Testing used Chromium on Windows, including an iPad-sized viewport. Please try Generate and Export on the real iPad and in desktop Safari.
-- **No resizing.** You can't change an existing map's size; create a new map instead.
 - **Region view later.** The breadcrumb shows the region name, but the region sketch view arrives in Milestone 6.
 - **Approximate screen frame.** The frame assumes the player stands 7 cells from the left and 4 from the top of the screen. This only affects the overlay.
 - **Unconfirmed presets.** The forest, cave-floor and interior size presets are placeholders.

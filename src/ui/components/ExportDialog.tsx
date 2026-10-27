@@ -1,4 +1,4 @@
-// Export dialog: blueprint PNG, screen tiles, placement table.
+// Export dialog: the rebuild packet, and each of its sheets on its own.
 // Exports are blocked while the map has validation errors.
 
 import { useState } from "react";
@@ -19,7 +19,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
     // Let the "Working…" label paint before the (brief) work starts.
     await new Promise((r) => setTimeout(r, 30));
     try {
-      const file = exporter.run(map, { paletteId: s.prefs.paletteId, regionName: s.region.name, appVersion: APP_VERSION });
+      const file = exporter.run(map, { paletteId: s.prefs.paletteId, regionName: s.region.name, appVersion: APP_VERSION, maps: s.region.maps });
       await deliverFile(s, file.name, file.mime, file.data);
     } catch (err) {
       s.setNotice({ kind: "error", text: `Export failed: ${err instanceof Error ? err.message : String(err)}` });

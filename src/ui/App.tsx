@@ -87,7 +87,7 @@ export function App() {
           <Icon name="save" /> <span>Save</span>
         </button>
         {map && (
-          <button className="icon-button labeled" onClick={() => setDialog("export")} title="Export the blueprint PNG, screen tiles and placement table">
+          <button className="icon-button labeled" onClick={() => setDialog("export")} title="Export the rebuild packet, or any of its sheets (blueprint, screen tiles, placement table, header sheet, map.json, encounters, checklist)">
             <Icon name="export" /> <span>Export</span>
           </button>
         )}
