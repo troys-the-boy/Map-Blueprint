@@ -21,7 +21,7 @@ export type Passability =
 export type Direction = "n" | "s" | "e" | "w";
 
 /** Abstract elevation levels, mapped to real Gen 3 values by a tileset profile. */
-export const ELEVATION_LEVELS = ["water", "ground", "raised1", "raised2", "bridge"] as const;
+export const ELEVATION_LEVELS = ["water", "ground", "raised1", "raised2", "raised3", "raised4", "bridge"] as const;
 export type ElevationLevel = (typeof ELEVATION_LEVELS)[number];
 
 export interface TerrainType {
@@ -31,6 +31,8 @@ export interface TerrainType {
   passability: Passability;
   hm?: string;
   direction?: Direction;
+  /** Ice: the player keeps sliding across it until something stops them. */
+  slide?: boolean;
   /** Which encounter table this terrain triggers, if any. */
   encounters: "land" | "water" | "cave" | null;
   /** The elevation level this terrain normally sits at. */
@@ -77,6 +79,7 @@ function loadVocabulary(raw: unknown): TerrainType[] {
       passability: t.passability,
       hm: t.hm,
       direction: t.direction,
+      slide: t.slide === true ? true : undefined,
       encounters: t.encounters ?? null,
       elevation: t.elevation,
       glyph: t.glyph,

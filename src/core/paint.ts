@@ -4,8 +4,8 @@
 // map and returns a "diff" (what each cell was before and after) so the change
 // can be undone, and so the same stroke can be replayed later as an Edit.
 
-import type { MapBlueprint, StrokeEdit } from "./model";
-import { requireTerrain } from "./terrain";
+import type { Edit, MapBlueprint } from "./model";
+import { ELEVATION_LEVELS, requireTerrain } from "./terrain";
 
 /** Cells touched by a straight line from (x0, y0) to (x1, y1), with no gaps (Bresenham). */
 export function lineCells(x0: number, y0: number, x1: number, y1: number): Array<[number, number]> {
@@ -49,22 +49,25 @@ export interface CellDiff {
   terrainAfter: number[];
   lockBefore: number[];
   lockAfter: number[];
+  elevationBefore: number[];
+  elevationAfter: number[];
 }
 
 export function emptyDiff(): CellDiff {
-  return { index: [], terrainBefore: [], terrainAfter: [], lockBefore: [], lockAfter: [] };
+  return { index: [], terrainBefore: [], terrainAfter: [], lockBefore: [], lockAfter: [], elevationBefore: [], elevationAfter: [] };
 }
 
 /**
- * Paint one cell. Returns true if anything changed. `seen` (cell index → position
- * in the diff) stops a stroke from recording the same cell twice, so the diff's
- * "before" is the value from before the stroke started.
+ * Set one cell's terrain, elevation and lock. Returns true if anything changed.
+ * `seen` (cell index → position in the diff) stops a stroke from recording the
+ * same cell twice, so the diff's "before" is the value from before the stroke started.
  */
-export function paintCell(
+function setCell(
   map: MapBlueprint,
   x: number,
   y: number,
-  terrain: number,
+  terrain: number | null,
+  elevation: number | null,
   lock: 0 | 1,
   diff: CellDiff,
   seen: Map<number, number>,
@@ -72,43 +75,69 @@ export function paintCell(
   if (x < 0 || y < 0 || x >= map.width || y >= map.height) return false;
   const i = y * map.width + x;
   const t = map.layers.terrain.data;
+  const e = map.layers.elevation.data;
   const l = map.layers.locks.data;
-  if (t[i] === terrain && l[i] === lock) return false;
+  const nt = terrain ?? t[i];
+  const ne = elevation ?? e[i];
+  if (t[i] === nt && e[i] === ne && l[i] === lock) return false;
   const k = seen.get(i);
   if (k === undefined) {
     seen.set(i, diff.index.length);
     diff.index.push(i);
     diff.terrainBefore.push(t[i]);
+    diff.elevationBefore.push(e[i]);
     diff.lockBefore.push(l[i]);
-    diff.terrainAfter.push(terrain);
+    diff.terrainAfter.push(nt);
+    diff.elevationAfter.push(ne);
     diff.lockAfter.push(lock);
   } else {
-    diff.terrainAfter[k] = terrain;
+    diff.terrainAfter[k] = nt;
+    diff.elevationAfter[k] = ne;
     diff.lockAfter[k] = lock;
   }
-  t[i] = terrain;
+  t[i] = nt;
+  e[i] = ne;
   l[i] = lock;
   return true;
 }
 
-/** Re-apply a recorded stroke to a map (used when regenerating, and in tests). */
-export function replayStroke(map: MapBlueprint, edit: StrokeEdit): CellDiff {
-  const terrain = requireTerrain(edit.terrain);
+/** Paint one cell's terrain (pencil and eraser). Returns true if anything changed. */
+export function paintCell(map: MapBlueprint, x: number, y: number, terrain: number, lock: 0 | 1, diff: CellDiff, seen: Map<number, number>): boolean {
+  return setCell(map, x, y, terrain, null, lock, diff, seen);
+}
+
+/** Paint one cell's elevation level (elevation brush), keeping its terrain. */
+export function paintElevation(map: MapBlueprint, x: number, y: number, level: number, lock: 0 | 1, diff: CellDiff, seen: Map<number, number>): boolean {
+  return setCell(map, x, y, null, level, lock, diff, seen);
+}
+
+/** Re-apply a recorded stroke (pencil, eraser or elevation brush) to a map. */
+export function replayStroke(map: MapBlueprint, edit: Edit): CellDiff {
   const lock = edit.locked ? 1 : 0;
   const diff = emptyDiff();
   const seen = new Map<number, number>();
+  if (edit.type === "elevation") {
+    const level = ELEVATION_LEVELS.indexOf(edit.level);
+    for (let k = 0; k < edit.cells.length; k += 2) paintElevation(map, edit.cells[k], edit.cells[k + 1], level, lock, diff, seen);
+    return diff;
+  }
+  const terrain = requireTerrain(edit.terrain);
   for (let k = 0; k < edit.cells.length; k += 2) paintCell(map, edit.cells[k], edit.cells[k + 1], terrain, lock, diff, seen);
   return diff;
 }
 
+
 /** Apply the "before" (undo) or "after" (redo) side of a diff. */
 export function applyDiff(map: MapBlueprint, diff: CellDiff, side: "before" | "after"): void {
   const t = map.layers.terrain.data;
+  const e = map.layers.elevation.data;
   const l = map.layers.locks.data;
+  const ev = side === "before" ? diff.elevationBefore : diff.elevationAfter;
   const tv = side === "before" ? diff.terrainBefore : diff.terrainAfter;
   const lv = side === "before" ? diff.lockBefore : diff.lockAfter;
   for (let k = 0; k < diff.index.length; k++) {
     t[diff.index[k]] = tv[k];
+    e[diff.index[k]] = ev[k];
     l[diff.index[k]] = lv[k];
   }
 }

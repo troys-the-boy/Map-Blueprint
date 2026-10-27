@@ -37,7 +37,7 @@ export function MapCanvas({ onHover }: { onHover: (cell: [number, number] | null
     });
     // Overlay toggles that don't change cells (grid, rulers, frame) only need a redraw.
     // So do brush size and tool changes (the hover outline shows the brush footprint).
-    const brushFor = () => (store.tool === "pencil" || store.tool === "erase" ? store.brush : 1);
+    const brushFor = () => (store.tool === "pencil" || store.tool === "erase" || store.tool === "elevation" ? store.brush : 1);
     renderer.brush = brushFor();
     let heatFor = -1;
     let focusSeq = store.focus?.seq ?? 0;
@@ -49,6 +49,10 @@ export function MapCanvas({ onHover }: { onHover: (cell: [number, number] | null
         const locksChanged = o.locks !== renderer.overlays.locks;
         renderer.overlays = { ...o };
         if (locksChanged) renderer.setMap(store.currentMap);
+        redraw = true;
+      }
+      if (renderer.elevationOpacity !== store.prefs.elevationOpacity) {
+        renderer.elevationOpacity = store.prefs.elevationOpacity;
         redraw = true;
       }
       if (renderer.brush !== brushFor()) {

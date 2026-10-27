@@ -15,7 +15,7 @@ export interface Overlays {
   issues: boolean;
   /** Reachability heatmap: colour by which HMs are needed. */
   reach: boolean;
-  /** Elevation shading. */
+  /** Elevation, drawn like Porymap's collision view. */
   elevation: boolean;
 }
 
@@ -26,6 +26,8 @@ export interface Prefs {
   penSeen: boolean;
   paletteId: string;
   overlays: Overlays;
+  /** How strongly the Elevation overlay covers the map, 0.15 … 1 (like Porymap's opacity slider). */
+  elevationOpacity: number;
   /** Lock cells the pencil paints, so later generators keep them. */
   lockWhenPainting: boolean;
 }
@@ -38,6 +40,7 @@ export const DEFAULT_PREFS: Prefs = {
   paletteId: "pnw",
   overlays: { grid: true, rulers: true, screenFrame: true, locks: false, sight: true, issues: true, reach: false, elevation: false },
   lockWhenPainting: true,
+  elevationOpacity: 0.6,
 };
 
 export function loadPrefs(): Prefs {
@@ -60,6 +63,8 @@ export function loadPrefs(): Prefs {
         elevation: p.overlays?.elevation === true,
       },
       lockWhenPainting: p.lockWhenPainting !== false,
+      elevationOpacity:
+        typeof p.elevationOpacity === "number" && p.elevationOpacity >= 0.15 && p.elevationOpacity <= 1 ? p.elevationOpacity : DEFAULT_PREFS.elevationOpacity,
     };
   } catch {
     return structuredClone(DEFAULT_PREFS);

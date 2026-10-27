@@ -8,7 +8,8 @@
 
 import { SCREEN_HEIGHT_METATILES, SCREEN_WIDTH_METATILES, PLAYER_SCREEN_X, PLAYER_SCREEN_Y } from "../core/constants";
 import type { MapBlueprint } from "../core/model";
-import { ELEVATION_LEVELS, TERRAIN_TYPES, getPalette } from "../core/terrain";
+import { TERRAIN_TYPES, getPalette } from "../core/terrain";
+import { PORYMAP_BLOCKED_TEXT, PORYMAP_ELEVATION_COLORS, PORYMAP_PASSABLE_TEXT, cellElevationValue, hexDigit, isImpassable } from "../core/porymap";
 import { trainerSight } from "../core/entities";
 import { ENTITY_COLORS, screenName } from "../core/exporters/blueprint";
 import { openingCells } from "../core/reach";
@@ -76,6 +77,8 @@ export class MapRenderer {
   issues: Issue[] = [];
   /** Cells to highlight briefly after clicking a problem. */
   private flash: { cells: number[]; until: number } | null = null;
+  /** Opacity of the Elevation overlay. */
+  elevationOpacity = DEFAULT_PREFS.elevationOpacity;
   /** Width of the outline drawn around the hovered cell: the brush size when painting, else 1. */
   brush = 1;
 
@@ -251,17 +254,36 @@ export class MapRenderer {
       return [offsetX + x * scale + inset, offsetY + y * scale + inset, scale - inset * 2, scale - inset * 2] as const;
     };
 
-    // Elevation shading: lighter = higher, darker = water.
+    // Elevation, as Porymap's collision view shows it: each cell in the colour of its
+    // elevation number (0–F), with the number in white (walkable) or red (blocked).
     if (this.overlays.elevation) {
-      const shade = ["rgba(0,20,60,0.35)", "rgba(0,0,0,0)", "rgba(255,255,255,0.25)", "rgba(255,255,255,0.45)", "rgba(255,200,80,0.35)"];
       const elev = map.layers.elevation.data;
+      const terrain = map.layers.terrain.data;
+      ctx.globalAlpha = this.elevationOpacity;
       for (let y = y0; y < y1; y++)
         for (let x = x0; x < x1; x++) {
-          const e = elev[y * map.width + x];
-          if (e === ELEVATION_LEVELS.indexOf("ground")) continue;
-          ctx.fillStyle = shade[e];
+          const i = y * map.width + x;
+          ctx.fillStyle = PORYMAP_ELEVATION_COLORS[cellElevationValue(terrain[i], elev[i])];
           ctx.fillRect(offsetX + x * scale, offsetY + y * scale, scale, scale);
         }
+      ctx.globalAlpha = 1;
+      if (scale >= 10) {
+        ctx.font = `bold ${Math.floor(scale * 0.6)}px system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.lineWidth = Math.max(2, scale / 8);
+        ctx.strokeStyle = "rgba(0,0,0,0.75)";
+        for (let y = y0; y < y1; y++)
+          for (let x = x0; x < x1; x++) {
+            const i = y * map.width + x;
+            const label = hexDigit(cellElevationValue(terrain[i], elev[i]));
+            const cx = offsetX + (x + 0.5) * scale;
+            const cy = offsetY + (y + 0.5) * scale + 1;
+            ctx.strokeText(label, cx, cy);
+            ctx.fillStyle = isImpassable(terrain[i]) ? PORYMAP_BLOCKED_TEXT : PORYMAP_PASSABLE_TEXT;
+            ctx.fillText(label, cx, cy);
+          }
+      }
     }
 
     // Reachability heatmap.

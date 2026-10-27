@@ -4,6 +4,7 @@ const paths: Record<string, string> = {
   pencil: "M4 20l4-1 11-11-3-3L5 16l-1 4zM14 6l3 3",
   erase: "M7 20h12M5 15l8-8 6 6-6 6H9l-4-4zM10 10l6 6",
   pan: "M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3",
+  elevation: "M3 19l6-10 4 6 3-4 5 8H3zM9 9l1.5 2.5",
   pick: "M14 4l6 6-2 2-6-6 2-2zM12 8l-8 8v4h4l8-8",
   undo: "M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3",
   redo: "M15 14l5-5-5-5M20 9H10a6 6 0 000 12h3",

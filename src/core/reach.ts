@@ -8,14 +8,18 @@
 //   • Cut trees, Rock Smash rocks and Strength boulders (entities) need their HM;
 //   • trainers, NPCs and signs (entities) block their cell. Item balls don't
 //     count as blocking, since the player picks them up.
-//   • elevation: water, ground and bridges are the low level; raised1 and
-//     raised2 are plateaus. You can only change level on stairs (one level at
-//     a time), or by jumping down a ledge.
+//   • elevation: water, ground and bridges are the low level; raised1 to
+//     raised4 are plateaus, one above the other. You can only change level on
+//     stairs (one level at a time), or by jumping down a ledge.
+//   • ice: stepping onto ice slides you on in the same direction until the
+//     next cell would stop you (a wall, an object, a ledge, a level change) or
+//     you slide off onto non-ice ground. See pret/pokeemerald
+//     src/field_player_avatar.c (MetatileBehavior_IsIce_2 → ForcedMovement_Slip).
 // Simplification for now: currents are treated as plain Surf water (forced
 // movement is ignored).
 
 import type { Hm } from "./constants";
-import { DIRS } from "./grid";
+import { DIRS, IS_ICE } from "./grid";
 import type { Entity, Opening } from "./model";
 import type { Direction } from "./terrain";
 import { ELEVATION_LEVELS, TERRAIN_TYPES } from "./terrain";
@@ -31,7 +35,7 @@ export interface MapView {
 }
 
 /** Height tier of each elevation level: water, ground and bridges are all tier 0. */
-const TIER: Record<string, number> = { water: 0, ground: 0, bridge: 0, raised1: 1, raised2: 2 };
+const TIER: Record<string, number> = { water: 0, ground: 0, bridge: 0, raised1: 1, raised2: 2, raised3: 3, raised4: 4 };
 const LEVEL_TIER = ELEVATION_LEVELS.map((l) => TIER[l]);
 const STAIRS = TERRAIN_TYPES.findIndex((t) => t.id === "stairs");
 
@@ -118,7 +122,18 @@ export class MoveGraph {
           if (canStand[l] && tier(l) <= tier(i)) this.out[i * 4 + k] = l;
           return;
         }
-        if (canStand[j] && levelOk(i, j)) this.out[i * 4 + k] = j;
+        if (!canStand[j] || !levelOk(i, j)) return;
+        // Ice: keep sliding while the next cell along can be entered the ordinary way.
+        let end = j;
+        while (IS_ICE[terrain[end]]) {
+          const ex = (end % width) + dx;
+          const ey = Math.floor(end / width) + dy;
+          if (ex < 0 || ey < 0 || ex >= width || ey >= height) break;
+          const next = ey * width + ex;
+          if (!canStand[next] || TERRAIN_TYPES[terrain[next]].passability === "one_way" || !levelOk(end, next)) break;
+          end = next;
+        }
+        this.out[i * 4 + k] = end;
       });
     }
   }

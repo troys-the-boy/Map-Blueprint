@@ -14,19 +14,21 @@ import type { Issue, ValidateOptions } from "./validate";
 import { validateMap } from "./validate";
 import { GenContext, LEVEL } from "./generators/context";
 import type { GenInput } from "./generators/context";
-import { hmsFor, readRouteParams, resolveLayout } from "./generators/params";
+import { hmsFor, readRouteParams, resolveBorder, resolveLayout } from "./generators/params";
 import { buildRouteSkeleton } from "./generators/routeSkeleton";
 import { applyLayout, computeGeometry, layoutOpenings } from "./generators/layout";
 import type { Geometry } from "./generators/layout";
-import { addPlateaus } from "./generators/plateaus";
+import { addPlateaus, connectStairs } from "./generators/plateaus";
 import { addGrassShortcut, addPathGrass } from "./generators/shortcut";
 import { fillTerrain } from "./generators/terrainFill";
 import { addHmPockets, addLedges } from "./generators/features";
 import { cleanup } from "./generators/cleanup";
 import { placeEntities } from "./generators/placement";
+import { addSnow } from "./generators/snow";
+import { ELEVATION_LEVELS } from "./terrain";
 
 /** Version of the generators. Bumped when the same seed starts giving different maps. */
-export const GENERATOR_VERSION = 2;
+export const GENERATOR_VERSION = 3;
 
 export interface GenerateResult {
   ok: boolean;
@@ -68,15 +70,19 @@ function runOnce(map: MapBlueprint, input: GenInput, geometry: Geometry, seed: n
   applyLayout(ctx, geometry); // sea, river or open water
   addPlateaus(ctx); // elevation: cliffs, stairs, ledges
   buildRouteSkeleton(ctx); // entrances, main path, branches
+  connectStairs(ctx); // trails up to every flight of stairs
   addGrassShortcut(ctx); // the second way through, in tall grass
   addPathGrass(ctx); // grass across the main path
   fillTerrain(ctx); // trees, open ground, ponds, stream, grass
   addHmPockets(ctx);
   addLedges(ctx); // extra ledge shortcut loops
   cleanup(ctx);
+  addSnow(ctx); // snow from the highest ground down
   placeEntities(ctx);
 
   const elevation = finishElevation(ctx);
+  // Each thing stands at the elevation of its cell (Porymap events need it to match).
+  const levelAt = (x: number, y: number) => ELEVATION_LEVELS[elevation[y * ctx.width + x]];
   const keptZones = map.layers.zones.filter((z) => z.data.generated !== true);
   const zones = [...keptZones, ...ctx.zones];
   const draft: MapBlueprint = {
@@ -90,6 +96,7 @@ function runOnce(map: MapBlueprint, input: GenInput, geometry: Geometry, seed: n
       zones,
     },
   };
+  for (const e of ctx.entities) e.elevation = levelAt(e.x, e.y);
   let issues = validateMap(draft, validate);
   // Quiet dead ends get a hidden item at their far end, then check again.
   const empty = issues.filter((i) => i.code === "empty-dead-end");
@@ -101,7 +108,7 @@ function runOnce(map: MapBlueprint, input: GenInput, geometry: Geometry, seed: n
       const [x, y] = ctx.xy(c);
       if (ctx.entities.some((e) => e.x === x && e.y === y)) continue;
       hidden++;
-      ctx.entities.push({ id: `H${hidden}`, kind: "hidden_item", x, y, elevation: "ground", fields: { item: "ITEM_POTION", tier: "common", flag: `FLAG_HIDDEN_ITEM_${flagBase}_${hidden}` } });
+      ctx.entities.push({ id: `H${hidden}`, kind: "hidden_item", x, y, elevation: levelAt(x, y), fields: { item: "ITEM_POTION", tier: "common", flag: `FLAG_HIDDEN_ITEM_${flagBase}_${hidden}` } });
     }
     issues = validateMap(draft, validate);
   }
@@ -161,6 +168,6 @@ export function applyResult(map: MapBlueprint, result: GenerateResult): void {
   // The border block shows beyond the map edges: water for sea routes, the wall style otherwise.
   const p = readRouteParams(map.params);
   const layout = resolveLayout(p, map.biome);
-  const border = layout === "water" || layout === "coastal" ? "water_deep" : p.borderStyle === "cliff" ? "rock_wall" : "tree";
+  const border = layout === "water" || layout === "coastal" ? "water_deep" : resolveBorder(p, map.biome) === "cliff" ? "rock_wall" : "tree";
   map.layout.borderBlock = [border, border, border, border];
 }

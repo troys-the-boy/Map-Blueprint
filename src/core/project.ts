@@ -54,7 +54,7 @@ import {
 import { ELEVATION_LEVELS, TERRAIN_TYPES, terrainIndex } from "./terrain";
 
 export const FILE_FORMAT_ID = "gen3-map-blueprint-project";
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 /** Safety limits for opened files. Anything bigger is rejected. */
 export const FILE_LIMITS = {
@@ -257,7 +257,7 @@ const connectionCheck: Check<Connection> = object({
   offset: num(-FILE_LIMITS.maxMapSide * 4, FILE_LIMITS.maxMapSide * 4),
 });
 
-const editCheck: Check<Edit> = object({
+const strokeEditCheck = object({
   type: literal("stroke"),
   tool: oneOf(["pencil", "erase"] as const),
   terrain: str(64),
@@ -265,6 +265,18 @@ const editCheck: Check<Edit> = object({
   locked: bool,
   cells: intArray(0, FILE_LIMITS.maxMapSide - 1, FILE_LIMITS.maxCellsPerEdit),
 });
+
+const elevationEditCheck = object({
+  type: literal("elevation"),
+  level: elevation,
+  brush: num(1, 16),
+  locked: bool,
+  cells: intArray(0, FILE_LIMITS.maxMapSide - 1, FILE_LIMITS.maxCellsPerEdit),
+});
+
+/** An edit is a terrain stroke or an elevation stroke, told apart by its "type". */
+const editCheck: Check<Edit> = (v, path) =>
+  v !== null && typeof v === "object" && (v as { type?: unknown }).type === "elevation" ? elevationEditCheck(v, path) : strokeEditCheck(v, path);
 
 const savedZoneCheck = object({
   id: str(64, ID),
@@ -415,6 +427,10 @@ export const MIGRATIONS: Record<number, Migration> = {
     };
     return { ...file, schemaVersion: 3, region: region && maps ? { ...region, maps: maps.map(upgradeMap) } : region };
   },
+  // v3 → v4 (second revision): new terrain types (snow, snowy grass, ice, snowdrift),
+  // elevation levels raised3 and raised4, and elevation-brush edits. Nothing in a
+  // version-3 file needs changing; only the version number moves on.
+  3: (file) => ({ ...file, schemaVersion: 4 }),
 };
 
 /** Upgrade an old file step by step to the target version. */
@@ -466,7 +482,7 @@ function loadMap(saved: ReturnType<typeof savedMapCheck>, path: string): MapBlue
   });
   saved.edits.forEach((e, i) => {
     if (e.cells.length % 2 !== 0) throw new FileFormatError(`${path}.edits[${i}].cells`, "expected pairs of x, y numbers");
-    if (terrainIndex(e.terrain) < 0) throw new FileFormatError(`${path}.edits[${i}].terrain`, `unknown terrain type "${e.terrain}"`);
+    if (e.type === "stroke" && terrainIndex(e.terrain) < 0) throw new FileFormatError(`${path}.edits[${i}].terrain`, `unknown terrain type "${e.terrain}"`);
     for (let k = 0; k < e.cells.length; k += 2) inside(e.cells[k], e.cells[k + 1], `${path}.edits[${i}].cells`);
   });
 

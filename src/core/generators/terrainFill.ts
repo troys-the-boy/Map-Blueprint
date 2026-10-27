@@ -5,11 +5,15 @@
 //   • a clearing, ponds and a stream (with bridges where it meets a path);
 //   • grass patches, mostly near the path;
 //   • biome touches: long grass in rainforest, mud and shallows in wetland,
-//     sand on the coast, flowers in meadows, rock outcrops in alpine areas.
+//     sand on the coast, flowers in meadows;
+//   • alpine routes are mountains: mostly bare rock with small clumps of
+//     conifers, rock walls close along the path (narrow passes), and boulder
+//     fields on the open ground.
 
 import { T, cheapestPath, distanceField } from "../grid";
 import type { GenContext } from "./context";
 import { Role } from "./context";
+import { resolveBorder } from "./params";
 
 /** Open ground grows out from these (paths, and beaches on islands and coasts). */
 const PATH_ROLES = new Set<number>([Role.MainPath, Role.Branch, Role.Opening, Role.Corridor, Role.Bridge, Role.Beach]);
@@ -28,7 +32,8 @@ export function fillTerrain(ctx: GenContext): void {
   for (let i = 0; i < n; i++) if (isPathRole(ctx, i)) pathCells.push(i);
   const dist = distanceField(width, height, pathCells);
   const open = new Uint8Array(n);
-  const spread = (1 - p.treeDensity) * 6;
+  // Alpine passes are tighter: the rock closes in nearer the path.
+  const spread = (1 - p.treeDensity) * (ctx.input.biome === "alpine" ? 3.5 : 6);
   for (let i = 0; i < n; i++) {
     if (ctx.isProtected(i) || ctx.edgeDist(i) < p.borderThickness) continue;
     const [x, y] = ctx.xy(i);
@@ -78,7 +83,7 @@ export function fillTerrain(ctx: GenContext): void {
   }
 
   // --- Apply: walls, border, open ground -------------------------------------
-  const wall = p.borderStyle === "cliff" ? T.rockWall : T.denseForest;
+  const wall = resolveBorder(p, ctx.input.biome) === "cliff" ? T.rockWall : T.denseForest;
   for (let i = 0; i < n; i++) {
     // Paths, entrances, the sea, beaches, cliffs, stairs and the grass shortcut keep what they are.
     if (ctx.isProtected(i)) continue;
@@ -90,9 +95,7 @@ export function fillTerrain(ctx: GenContext): void {
     }
     if (open[i]) ctx.set(i, T.ground);
     else {
-      // Alpine maps get rock outcrops inside the tree cover.
-      const rocky = ctx.input.biome === "alpine" && ctx.noise.fractal(x + 900, y + 900, 5, 2) > 0.58;
-      ctx.set(i, rocky ? T.rockWall : T.tree);
+      ctx.set(i, ctx.input.biome === "alpine" && !conifer(ctx, x, y) ? T.rockWall : T.tree);
     }
   }
 
@@ -190,6 +193,36 @@ function addBiomeDetail(ctx: GenContext) {
     if (biome === "coastal" && v > 0.6) ctx.set(i, T.sand);
     else if (biome === "wetland" && v > 0.66) ctx.set(i, T.mud);
     else if (biome === "meadow" && v > 0.68) ctx.set(i, T.flowers);
+  }
+  if (biome === "alpine") addBoulders(ctx);
+}
+
+/** Alpine: is this wooded cell part of a conifer clump (else bare rock)? */
+function conifer(ctx: GenContext, x: number, y: number): boolean {
+  return ctx.noise.fractal(x + 900, y + 900, 4, 2) > 0.5;
+}
+
+/**
+ * Alpine boulder fields: single rocks scattered over patches of open ground, well
+ * off the path. A boulder only goes where all eight neighbours are open, so it
+ * never pinches a gap shut or touches another wall corner to corner.
+ */
+function addBoulders(ctx: GenContext) {
+  const pathCells: number[] = [];
+  for (let i = 0; i < ctx.n; i++) if (isPathRole(ctx, i) || ctx.role[i] === Role.GrassRoute || ctx.role[i] === Role.Stairs) pathCells.push(i);
+  const dist = distanceField(ctx.width, ctx.height, pathCells);
+  for (let i = 0; i < ctx.n; i++) {
+    if (ctx.terrain[i] !== T.ground || ctx.isProtected(i) || dist[i] < 3) continue;
+    const [x, y] = ctx.xy(i);
+    if (ctx.noise.fractal(x + 2300, y + 2900, 7, 2) < 0.55 || !ctx.rng.chance(0.3)) continue;
+    let clear = true;
+    for (let dy = -1; dy <= 1 && clear; dy++)
+      for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        const j = ctx.inside(x + dx, y + dy) ? ctx.idx(x + dx, y + dy) : -1;
+        if (j < 0 || !ctx.isWalkable(j) || ctx.role[j] === Role.Cliff) clear = false;
+      }
+    if (clear) ctx.set(i, T.rockWall);
   }
 }
 

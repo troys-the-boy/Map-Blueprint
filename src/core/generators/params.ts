@@ -8,7 +8,8 @@ import type { Hm } from "../constants";
 import { HMS } from "../constants";
 import type { Biome } from "../model";
 
-export type BorderStyle = "forest" | "cliff";
+/** "auto" = cliff for alpine routes, forest otherwise. */
+export type BorderStyle = "auto" | "forest" | "cliff";
 /** The overall shape of a route. "auto" = coastal for the coastal biome, land otherwise. */
 export type LayoutSetting = "auto" | "land" | "coastal" | "river" | "water";
 export type Layout = Exclude<LayoutSetting, "auto">;
@@ -22,6 +23,8 @@ export interface RouteParams {
   layout: LayoutSetting;
   /** How hilly: 0 = flat, 1 = several raised plateaus with cliffs, stairs and ledges. */
   elevation: number;
+  /** How much of the route is under snow, 0 … 1. Snow covers the highest ground first. */
+  snow: number;
   /** A shorter second way through that's mostly tall grass, so players choose trainers or wild Pokémon. */
   grassShortcut: boolean;
   /** How much grass crosses the main path itself (grass you can't avoid on the path), 0 … 1. */
@@ -72,6 +75,7 @@ export interface RouteParams {
 export const DEFAULT_ROUTE_PARAMS: RouteParams = {
   layout: "auto",
   elevation: 0.35,
+  snow: 0,
   grassShortcut: true,
   pathGrass: 0.5,
   surfEntrances: true,
@@ -86,7 +90,7 @@ export const DEFAULT_ROUTE_PARAMS: RouteParams = {
   water: 0.25,
   treeDensity: 0.55,
   borderThickness: 2,
-  borderStyle: "forest",
+  borderStyle: "auto",
   stream: "auto",
   clearing: true,
   hmPockets: 1,
@@ -102,6 +106,7 @@ export const DEFAULT_ROUTE_PARAMS: RouteParams = {
 /** Allowed range for each number setting: [min, max, whole numbers only]. */
 export const PARAM_RANGES: Record<string, [number, number, boolean]> = {
   elevation: [0, 1, false],
+  snow: [0, 1, false],
   pathGrass: [0, 1, false],
   pathWidthMin: [1, 4, true],
   pathWidthMax: [1, 5, true],
@@ -150,7 +155,7 @@ export function readRouteParams(params: Record<string, string | number | boolean
   p.surfEntrances = typeof params.surfEntrances === "boolean" ? params.surfEntrances : d.surfEntrances;
   p.layout = (LAYOUTS as readonly unknown[]).includes(params.layout) ? (params.layout as LayoutSetting) : d.layout;
   p.clearing = typeof params.clearing === "boolean" ? params.clearing : d.clearing;
-  p.borderStyle = params.borderStyle === "cliff" ? "cliff" : "forest";
+  p.borderStyle = params.borderStyle === "cliff" || params.borderStyle === "forest" ? params.borderStyle : "auto";
   p.stream = params.stream === "yes" || params.stream === "no" ? params.stream : "auto";
   p.hmPocketTypes = parseList(params.hmPocketTypes, POCKET_HMS, d.hmPocketTypes);
   p.availableHms = parseList(params.availableHms, HMS, d.availableHms);
@@ -184,4 +189,16 @@ export function hmsFor(p: RouteParams, biome: Biome): Hm[] {
   const hms = [...p.availableHms];
   if (resolveLayout(p, biome) === "water" && !hms.includes("surf")) hms.push("surf");
   return hms;
+}
+
+/** The border wall actually used: "auto" means a cliff border on alpine routes, forest otherwise. */
+export function resolveBorder(p: RouteParams, biome: Biome): Exclude<BorderStyle, "auto"> {
+  if (p.borderStyle !== "auto") return p.borderStyle;
+  return biome === "alpine" ? "cliff" : "forest";
+}
+
+/** How hilly the route really is. Alpine routes are mountains: any elevation above 0 is lifted well up. */
+export function effectiveElevation(p: RouteParams, biome: Biome): number {
+  if (p.elevation <= 0 || biome !== "alpine") return p.elevation;
+  return Math.min(1, 0.3 + p.elevation);
 }

@@ -34,6 +34,10 @@
     "building": "#5d6772",
     "cave_entrance": "#23201d",
     "sign_tile": "#9c7f58",
+    "snow": "#d4dadd",
+    "snow_grass": "#9fb0a8",
+    "ice": "#a9c6d2",
+    "snowdrift": "#eef2f4",
     "void": "#121517"
   }
 }

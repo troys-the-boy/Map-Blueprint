@@ -47,7 +47,8 @@ Double-click **`start.command`**. If macOS refuses to open it:
 | --- | --- | --- |
 | Paint | Left-drag with the Pencil tool (**B**) | Apple Pencil, or one finger (see below) |
 | Erase to plain ground | Eraser tool (**E**) | Eraser tool |
-| Copy a cell's terrain | **Alt**+click, or the eyedropper (**I**) | Tap the eyedropper, then tap a cell |
+| Paint elevation | Elevation brush (**L**) | Elevation brush in the tool strip |
+| Copy a cell's terrain (or its elevation, with the elevation brush) | **Alt**+click, or the eyedropper (**I**) | Tap the eyedropper, then tap a cell |
 | Move the view | Space+drag, right-drag, or the Move tool (**H**) | Two-finger drag |
 | Zoom | Mouse wheel, **+** / **−**, **0** to fit | Pinch |
 | Undo / redo | **Ctrl+Z** / **Ctrl+Y** | Two-finger tap, or the arrow buttons |
@@ -61,6 +62,16 @@ Double-click **`start.command`**. If macOS refuses to open it:
 - A dashed **15×10 screen frame** follows your pointer. It shows how much one GBA screen displays.
 - The status bar shows the cell (x, y), which screen it is in (**A1, B1, A2…**), its terrain, and the map-memory budget.
 
+**Elevation, as in Porymap.** Turn on **Show → Elevation (as in Porymap)**. Every cell shows the elevation number you'll set in Porymap's collision tab, in Porymap's own colours:
+
+- **1** water (blue), **3** ground (green), **4–7** raised ground (yellow to brown, higher is darker), **0** stairs (grey, Porymap's "transition"), **F** bridges (dark grey, "multi-level").
+- The number is **white** where the player can walk and **red** where they can't (trees, cliffs, rocks).
+- **Elevation opacity** sets how strongly the colours cover the map, like Porymap's slider.
+
+**Elevation brush.** Pick a number in the Paint tab's **Elevation brush** list (or press **L**) and paint. It changes only the elevation, never the terrain, and turns the Elevation view on so you can see what you're doing. Stairs always show 0: paint them with the **Stairs** terrain.
+
+**On the map** (Paint tab) lists what each marker means: trainers, items, hidden items, signs, people, Cut trees, Rock Smash rocks, Strength boulders, warps, sight lines and entrances. Placing, moving and erasing them by hand comes in Milestone 3.
+
 **Locked cells:** everything you paint is *locked* (turn this off with **Lock what I paint**). Locked cells will be left alone by the generators that arrive in Milestone 2. Turn on **Show → Locked cells** to see them.
 
 ---
@@ -73,7 +84,9 @@ Double-click **`start.command`**. If macOS refuses to open it:
 4. Open the setting groups on the **Generate** tab to change the map:
    - **Basic:** biome, path winding, path width.
    - **Entrances:** which edges, where, and how wide.
-   - **Terrain:** grass, water, tree cover, border, stream, clearing.
+   - **Terrain:** grass, water, tree cover, border (Auto = cliffs on alpine routes), stream, clearing.
+
+   Sliders run from 0 to 100.
    - **Structure:** side branches, ledge shortcuts, HM-gated areas.
    - **Gameplay:** trainers, items, hidden items, and which HMs the player has by now.
 
@@ -88,7 +101,18 @@ Double-click **`start.command`**. If macOS refuses to open it:
 - **River:** a river runs the length of the route. The path follows the banks and crosses on bridges, and there are surf entrances on the river at both ends.
 - **Open water:** sea or lake with islands. It's a surfing route with swimmers on the water and items on the islands, and the checks assume the player has Surf.
 
-**Elevation** (Basic → Elevation) adds raised plateaus like Hoenn's. Each has a cliff face, stairs up, and ledges you jump down. At 0% the route is flat. Higher values give more and bigger plateaus, sometimes a second level on top. The **Elevation** overlay shades raised ground.
+**Elevation** (Basic → Elevation, 0–100) adds raised plateaus like Hoenn's. Each has a cliff face, stairs up, and ledges you jump down, and a path leads to every flight of stairs. At 0 the route is flat. Higher values give more and bigger plateaus, sometimes a second level on top.
+
+**Alpine routes are mountains.** The route runs up a valley and the ground on both sides climbs in terraces toward the map edges: up to 4 levels (Porymap 4–7) on wide maps, 2–3 on a 30–40 wide route. Each terrace has its own stairs, set away from the stairs below so the climb switches back. Alpine routes also get cliff borders, mostly bare rock with small clumps of conifers, narrow passes, and boulder fields. Any Elevation above 0 counts as quite hilly on alpine routes.
+
+**Snow** (Basic → Snow, 0–100) is roughly the share of the route under snow, highest ground first, so a hilly route can be white on top and green below. In the snow:
+
+- open ground becomes **Snow**, and grass becomes **Snowy grass** (still wild encounters);
+- ponds freeze into **Slippery ice**: the player slides until something stops them, and the checks follow the slide;
+- some trees become **Snowdrifts**, which block like trees;
+- paths stay paths, as a trodden trail.
+
+Gen 3 has no snow tiles, so these four need custom tiles in your tileset.
 
 **Two ways through** (Structure → Grass shortcut). Every route offers a choice:
 
@@ -139,7 +163,7 @@ The **Paint** tab's **Show** list toggles:
 - **Trainer sight lines** (red).
 - **Problems** (outlined cells).
 - **Reachability:** cells coloured by which HM you need to reach them. Red means unreachable.
-- **Elevation shading.**
+- **Elevation (as in Porymap):** numbers and colours from Porymap's collision tab.
 
 Entrances are outlined in yellow. Things on the map are coloured squares; zoom in to see their IDs (T1 = trainer 1, I2 = item 2, H1 = hidden item, S1 = sign, C1 = Cut tree, R1 = Rock Smash rock).
 
@@ -152,7 +176,8 @@ Click **Export** in the top bar (blocked while the map has errors):
   - Rulers every 5 cells, with numbers every 10.
   - Numbered things and trainer sight lines.
   - A colour legend.
-- **Screen tiles (ZIP):** one PNG per 15×10 GBA screen, named A1, B1, A2… (letters go across, numbers go down), with real coordinates. Use these to rebuild the map in Porymap one screen at a time.
+- **Elevation (PNG):** the map as Porymap's collision tab shows it, with each cell's elevation number (white = walkable, red = blocked) and a key. Keep it beside Porymap while you set elevations.
+- **Screen tiles (ZIP):** one PNG per 15×10 GBA screen, plus an elevation version of each in the `elevation` folder, named A1, B1, A2… (letters go across, numbers go down), with real coordinates. Use these to rebuild the map in Porymap one screen at a time.
 - **Placement table (CSV, or a printable page):** one row per thing, with its position and suggested Porymap fields:
   - `graphics_id`, `movement_type`, `trainer_type`, sight range, `script`, `flag` and `item`.
   - The Porymap list it belongs in, and its number in that list.

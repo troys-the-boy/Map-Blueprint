@@ -3,6 +3,7 @@
 //   • fill 1-cell notches in tree edges, and open up 1-cell tree spikes;
 //   • fix diagonal "checkerboard" tree patterns no tileset can draw;
 //   • remove grass patches smaller than 6 cells and single water cells;
+//   • widen paths pinched to one cell between two walls (rock or trees);
 //   • fill open ground that can't be reached at all (even with every HM).
 // Paths, entrances, ledges, bridges, pockets and locked cells are never touched.
 
@@ -66,6 +67,8 @@ export function cleanup(ctx: GenContext): void {
     if (!changed) break;
   }
 
+  widenPinches(ctx);
+
   // Open ground nobody can ever reach becomes trees.
   const starts = ctx.input.openings.flatMap((o) => openingCells(o, width, height));
   if (starts.length) {
@@ -105,5 +108,26 @@ export function cleanup(ctx: GenContext): void {
     const [x, y] = ctx.xy(i);
     const near = DIRS.filter(({ dx, dy }) => ctx.inside(x + dx, y + dy)).map(({ dx, dy }) => ctx.terrain[ctx.idx(x + dx, y + dy)]);
     if (!near.includes(t) && near.includes(other)) ctx.set(i, other);
+  }
+}
+
+/** A path cell walled in on both sides: open one side (same level, not a cliff), unless it's next to stairs. */
+function widenPinches(ctx: GenContext) {
+  const blocked = (x: number, y: number) => !ctx.inside(x, y) || !IS_WALKABLE[ctx.terrain[ctx.idx(x, y)]];
+  for (let i = 0; i < ctx.n; i++) {
+    if (ctx.terrain[i] !== T.path) continue;
+    const [x, y] = ctx.xy(i);
+    for (const [dx, dy] of [[1, 0], [0, 1]]) {
+      if (!blocked(x - dx, y - dy) || !blocked(x + dx, y + dy)) continue;
+      for (const side of [1, -1]) {
+        const xx = x + side * dx;
+        const yy = y + side * dy;
+        if (!ctx.inside(xx, yy)) continue;
+        const j = ctx.idx(xx, yy);
+        if (ctx.isProtected(j) || !IS_WALL[ctx.terrain[j]] || ctx.elevation[j] !== ctx.elevation[i] || ctx.edgeDist(j) < ctx.params.borderThickness) continue;
+        ctx.set(j, T.ground);
+        break;
+      }
+    }
   }
 }

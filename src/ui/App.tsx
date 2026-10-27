@@ -208,6 +208,7 @@ function useKeyboardShortcuts(openNewMap: () => void) {
       else if (mod) return;
       else if (key === "b") store.setTool("pencil");
       else if (key === "e") store.setTool("erase");
+      else if (key === "l") store.setTool("elevation");
       else if (key === "h") store.setTool("pan");
       else if (key === "i") store.setTool("pick");
       else if (key === "n") openNewMap();

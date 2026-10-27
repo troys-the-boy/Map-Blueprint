@@ -11,9 +11,12 @@
   "elevation": {
     "water": 1,
     "ground": 3,
-    "raised1": null,
-    "raised2": null,
-    "bridge": null
+    "raised1": 4,
+    "raised2": 5,
+    "raised3": 6,
+    "raised4": 7,
+    "bridge": 15,
+    "transition": 0
   },
   "terrain": {}
 }

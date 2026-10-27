@@ -5,7 +5,7 @@ import { strToU8, zipSync } from "fflate";
 import { SCREEN_HEIGHT_METATILES, SCREEN_WIDTH_METATILES } from "../constants";
 import { ENTITY_PREFIX, PORYMAP_GROUP } from "../entities";
 import type { MapBlueprint } from "../model";
-import vanillaProfile from "../../../profiles/tilesets/vanilla-emerald-general.json";
+import { ELEVATION_VALUES } from "../porymap";
 import { renderBlueprint, screenName } from "./blueprint";
 
 export interface ExportContext {
@@ -46,10 +46,21 @@ export const blueprintPng: Exporter = {
   },
 };
 
+export const elevationPng: Exporter = {
+  id: "elevation-png",
+  label: "Elevation (PNG)",
+  description:
+    "The map as Porymap's collision tab shows it: each cell in its elevation colour with its number (white = walkable, red = blocked). Keep it beside Porymap while setting elevations.",
+  run(map, ctx) {
+    const img = renderBlueprint(map, { paletteId: ctx.paletteId, title: `${map.name} elevation`, subtitle: subtitle(map, ctx), legend: true, labelEvery: 10, mode: "elevation" });
+    return { name: `${fileBase(map)}-elevation.png`, mime: "image/png", data: img.toPng() };
+  },
+};
+
 export const screenTilesZip: Exporter = {
   id: "screen-tiles",
   label: "Screen tiles (ZIP of PNGs)",
-  description: "The map cut into 15×10 GBA screens named A1, B1, A2… with real coordinates, for rebuilding cell by cell.",
+  description: "The map cut into 15×10 GBA screens named A1, B1, A2… with real coordinates, for rebuilding cell by cell. Each screen also comes as an elevation sheet.",
   run(map, ctx) {
     const files: Record<string, Uint8Array> = {};
     const cols = Math.ceil(map.width / SCREEN_WIDTH_METATILES);
@@ -59,6 +70,7 @@ export const screenTilesZip: Exporter = {
       `${map.name} - screen tiles`,
       `Map ${map.width} x ${map.height} cells. Each tile is one GBA screen (15 x 10 cells).`,
       `Columns are letters (A = x 0-14, B = x 15-29, ...); rows are numbers (1 = y 0-9, 2 = y 10-19, ...).`,
+      `The elevation folder has the same screens the way Porymap's collision tab shows them.`,
       "",
     ];
     for (let r = 0; r < rows; r++)
@@ -76,6 +88,15 @@ export const screenTilesZip: Exporter = {
           labelEvery: 5,
         });
         files[`${base}-screens/${name}.png`] = img.toPng();
+        const elev = renderBlueprint(map, {
+          paletteId: ctx.paletteId,
+          area: { x, y, width: w, height: h },
+          title: `${map.name} ${name} elevation`,
+          subtitle: `X ${x}-${x + w - 1}  Y ${y}-${y + h - 1}`,
+          labelEvery: 5,
+          mode: "elevation",
+        });
+        files[`${base}-screens/elevation/${name}.png`] = elev.toPng();
         index.push(`${name}.png  x ${x}-${x + w - 1}, y ${y}-${y + h - 1}`);
       }
     files[`${base}-screens/index.txt`] = strToU8(index.join("\r\n") + "\r\n");
@@ -86,9 +107,6 @@ export const screenTilesZip: Exporter = {
 };
 
 // --- Placement table --------------------------------------------------------------------
-
-/** Suggested numeric elevation for each abstract level (from the vanilla tileset profile). */
-const ELEVATION_VALUES = vanillaProfile.elevation as Record<string, number | null | string>;
 
 /** Field columns in a readable order; any other fields follow alphabetically. */
 const FIELD_ORDER = [
@@ -141,7 +159,7 @@ export function placementRows(map: MapBlueprint): { rows: PlacementRow[]; fieldN
       a.id.localeCompare(b.id, "en", { numeric: true }),
   );
   const elevationValue = (e: string) => {
-    const v = ELEVATION_VALUES[e];
+    const v = (ELEVATION_VALUES as Record<string, number>)[e];
     return typeof v === "number" ? String(v) : "";
   };
   for (const e of entities) {
@@ -249,4 +267,4 @@ ${body}
   },
 };
 
-export const EXPORTERS: readonly Exporter[] = [blueprintPng, screenTilesZip, placementCsv, placementHtml];
+export const EXPORTERS: readonly Exporter[] = [blueprintPng, elevationPng, screenTilesZip, placementCsv, placementHtml];

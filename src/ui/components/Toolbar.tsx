@@ -2,7 +2,8 @@
 
 import type { Tool } from "../store";
 import { useStore } from "../store";
-import { getPalette, TERRAIN_TYPES } from "../../core/terrain";
+import { ELEVATION_LEVELS, getPalette, TERRAIN_TYPES } from "../../core/terrain";
+import { LEVEL_VALUE, PORYMAP_ELEVATION_COLORS, hexDigit } from "../../core/porymap";
 import { Icon } from "./icons";
 import { canvasRef } from "./MapCanvas";
 import type { SideTab } from "./SidePanel";
@@ -10,6 +11,7 @@ import type { SideTab } from "./SidePanel";
 const TOOLS: Array<{ tool: Tool; icon: string; label: string; key: string; tip: string }> = [
   { tool: "pencil", icon: "pencil", label: "Pencil", key: "B", tip: "Pencil (B): paint the selected terrain. Painted cells are locked so Generate keeps them." },
   { tool: "erase", icon: "erase", label: "Eraser", key: "E", tip: "Eraser (E): set cells back to plain ground and unlock them." },
+  { tool: "elevation", icon: "elevation", label: "Elevation brush", key: "L", tip: "Elevation brush (L): paint the elevation numbers you'll set in Porymap's collision tab. Terrain stays as it is." },
   { tool: "pan", icon: "pan", label: "Move view", key: "H", tip: "Move view (H): drag to pan. You can also hold Space and drag, or drag with two fingers." },
 ];
 
@@ -17,6 +19,7 @@ export function Toolbar({ onShowTab }: { onShowTab: (tab: SideTab) => void }) {
   const s = useStore();
   const palette = getPalette(s.prefs.paletteId);
   const current = TERRAIN_TYPES[s.terrain];
+  const elevationValue = LEVEL_VALUE[s.elevationLevel] ?? LEVEL_VALUE[ELEVATION_LEVELS.indexOf("ground")];
   const r = () => canvasRef.renderer;
 
   return (
@@ -35,19 +38,27 @@ export function Toolbar({ onShowTab }: { onShowTab: (tab: SideTab) => void }) {
       ))}
       <button
         className={`tool ${s.tool === "pick" ? "active" : ""}`}
-        title="Pick terrain (I, or Alt+click): the next tap copies a cell's terrain into the pencil. This is the on-screen modifier for touch."
+        title="Pick (I, or Alt+click): the next tap copies a cell's terrain into the pencil (or its elevation into the elevation brush). This is the on-screen modifier for touch."
         aria-label="Pick terrain from map"
         aria-pressed={s.tool === "pick"}
         onClick={() => s.setTool(s.tool === "pick" ? "pencil" : "pick")}
       >
         <Icon name="pick" />
       </button>
-      <button className="tool swatch-button" title={`Terrain: ${current.label}. Tap to choose another terrain type.`} aria-label={`Choose terrain (current: ${current.label})`} onClick={() => onShowTab("terrain")}>
-        <span className="swatch big" style={{ background: palette.colors[current.id] }}>
-          {current.glyph ?? ""}
-        </span>
-      </button>
-      <div className="brush" title="Brush size: how many cells wide the pencil and eraser paint.">
+      {s.tool === "elevation" ? (
+        <button className="tool swatch-button" title={`Elevation ${hexDigit(elevationValue)}. Tap to choose another.`} aria-label={`Choose elevation (current: ${hexDigit(elevationValue)})`} onClick={() => onShowTab("terrain")}>
+          <span className="swatch big elevation-swatch" style={{ background: PORYMAP_ELEVATION_COLORS[elevationValue] }}>
+            {hexDigit(elevationValue)}
+          </span>
+        </button>
+      ) : (
+        <button className="tool swatch-button" title={`Terrain: ${current.label}. Tap to choose another terrain type.`} aria-label={`Choose terrain (current: ${current.label})`} onClick={() => onShowTab("terrain")}>
+          <span className="swatch big" style={{ background: palette.colors[current.id] }}>
+            {current.glyph ?? ""}
+          </span>
+        </button>
+      )}
+      <div className="brush" title="Brush size: how many cells wide the pencil, eraser and elevation brush paint.">
         <button className="tool small" aria-label="Smaller brush" onClick={() => s.setBrush(s.brush - 1)}>
           −
         </button>

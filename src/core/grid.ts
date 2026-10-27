@@ -23,6 +23,10 @@ export const T = {
   tallGrass: requireTerrain("tall_grass"),
   longGrass: requireTerrain("long_grass"),
   sand: requireTerrain("sand"),
+  snow: requireTerrain("snow"),
+  snowGrass: requireTerrain("snow_grass"),
+  ice: requireTerrain("ice"),
+  snowdrift: requireTerrain("snowdrift"),
   mud: requireTerrain("mud"),
   flowers: requireTerrain("flowers"),
   tree: requireTerrain("tree"),
@@ -47,6 +51,8 @@ export const IS_WALKABLE: readonly boolean[] = TERRAIN_TYPES.map((t) => t.passab
 export const IS_WALL: readonly boolean[] = TERRAIN_TYPES.map((t) => t.category === "blocking");
 /** True for grass you can get encounters in. */
 export const IS_GRASS: readonly boolean[] = TERRAIN_TYPES.map((t) => t.encounters === "land");
+/** True for ice the player slides across. */
+export const IS_ICE: readonly boolean[] = TERRAIN_TYPES.map((t) => t.slide === true);
 /** True for water types. */
 export const IS_WATER: readonly boolean[] = TERRAIN_TYPES.map((t) => t.category === "water");
 

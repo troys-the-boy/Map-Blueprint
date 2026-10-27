@@ -4,7 +4,7 @@
 import { HMS } from "../../core/constants";
 import type { Hm } from "../../core/constants";
 import { canGenerate } from "../../core/generate";
-import { DEFAULT_ROUTE_PARAMS, PARAM_RANGES, POCKET_HMS, readRouteParams, resolveLayout, writeRouteParams } from "../../core/generators/params";
+import { DEFAULT_ROUTE_PARAMS, PARAM_RANGES, POCKET_HMS, readRouteParams, resolveBorder, resolveLayout, writeRouteParams } from "../../core/generators/params";
 import type { Layout, LayoutSetting } from "../../core/generators/params";
 import type { RouteParams } from "../../core/generators/params";
 import { BIOMES, EDGES } from "../../core/model";
@@ -58,7 +58,7 @@ export function GeneratePanel() {
       return (
         <label className="slider" title={tip}>
           <span>
-            {label} <b>{Math.round(value * 100)}%</b>
+            {label} <b>{Math.round(value * 100)}</b>
           </span>
           <input type="range" min={min} max={max} step={0.05} value={value} onChange={(e) => set({ [key]: Number(e.target.value) })} />
         </label>
@@ -137,8 +137,9 @@ export function GeneratePanel() {
           </select>
         </label>
         {layout === "water" && <p className="hint">Open-water routes are crossed by surfing, so the checks assume the player has Surf.</p>}
-        {num("elevation", "Elevation", "How hilly the route is: raised plateaus with cliffs, stairs up and ledges down. 0% = flat.")}
-        {num("winding", "Path winding", "0% = straight, 100% = wanders a lot.")}
+        {num("elevation", "Elevation", "How hilly the route is: raised plateaus with cliffs, stairs up and ledges down. 0 = flat. Alpine routes are mountains: terraces climb from a valley toward the map edges, up to 4 levels on wide maps.")}
+        {num("snow", "Snow", "How much of the route is under snow, highest ground first. 0 = none, 100 = snowed in. Grass becomes snowy grass, ponds freeze into slippery ice, some trees become snowdrifts.")}
+        {num("winding", "Path winding", "0 = straight, 100 = wanders a lot.")}
         {num("pathWidthMin", "Narrowest path", "Narrowest the main path gets, in cells.")}
         {num("pathWidthMax", "Widest path", "Widest the main path gets, in cells.")}
       </details>
@@ -202,9 +203,10 @@ export function GeneratePanel() {
         {num("water", "Water", "Ponds and streams.")}
         {num("treeDensity", "Tree cover", "How much of the map is trees rather than open ground.")}
         {num("borderThickness", "Border thickness", "Cells of wall around the map edge.")}
-        <label className="field" title="What the wall around the map is made of.">
+        <label className="field" title="What the wall around the map is made of. Auto = cliffs on alpine routes, dense forest otherwise.">
           <span>Border style</span>
           <select value={p.borderStyle} onChange={(e) => set({ borderStyle: e.target.value })}>
+            <option value="auto">Auto ({resolveBorder(p, map.biome) === "cliff" ? "cliffs" : "dense forest"})</option>
             <option value="forest">Dense forest</option>
             <option value="cliff">Cliffs</option>
           </select>

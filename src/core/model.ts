@@ -168,7 +168,18 @@ export interface StrokeEdit {
   /** Flat list of cell coordinates: [x0, y0, x1, y1, …]. */
   cells: number[];
 }
-export type Edit = StrokeEdit;
+/** An elevation-brush stroke: sets the elevation level of cells, leaving their terrain alone. */
+export interface ElevationEdit {
+  type: "elevation";
+  /** Elevation level painted (a name from ELEVATION_LEVELS). */
+  level: ElevationLevel;
+  brush: number;
+  /** Whether the stroke locked the cells it painted. */
+  locked: boolean;
+  /** Flat list of cell coordinates: [x0, y0, x1, y1, …]. */
+  cells: number[];
+}
+export type Edit = StrokeEdit | ElevationEdit;
 
 export interface MapBlueprint {
   /** Internal id, unique in the project (e.g. "map_3"). Not the MAP_* constant. */

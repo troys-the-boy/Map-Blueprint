@@ -56,7 +56,7 @@ describe("exports", () => {
     expect(names).toContain("Route-1-screens/A1.png");
     expect(names).toContain("Route-1-screens/B4.png");
     expect(names).toContain("Route-1-screens/index.txt");
-    expect(names.filter((n) => n.endsWith(".png"))).toHaveLength(8);
+    expect(names.filter((n) => n.endsWith(".png") && !n.includes("/elevation/"))).toHaveLength(8);
     for (const n of names.filter((x) => x.endsWith(".png"))) readPng(files[n]);
   });
 

@@ -13,8 +13,11 @@
     "ground": 3,
     "raised1": 4,
     "raised2": 5,
-    "bridge": null,
-    "todo": "water=1 (ELEVATION_SURF) and ground=3 (ELEVATION_DEFAULT) are from include/global.fieldmap.h. Verify raised1, raised2 and bridge on a vanilla map in Porymap."
+    "raised3": 6,
+    "raised4": 7,
+    "bridge": 15,
+    "transition": 0,
+    "note": "From include/global.fieldmap.h: ELEVATION_TRANSITION 0 (stairs), ELEVATION_SURF 1 (water), ELEVATION_DEFAULT 3 (ground), ELEVATION_MULTI_LEVEL 15 (bridges). Porymap's manual uses 4 for raised ground above 3 (Route 114 cliffs); each higher plateau is one more."
   },
   "terrain": {
     "path": {

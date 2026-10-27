@@ -6,7 +6,7 @@
 // the canvas listens for cell changes through onCells().
 
 import { useSyncExternalStore } from "react";
-import type { Entity, MapBlueprint, NewMapOptions, Opening, Region, StrokeEdit, Zone } from "../core/model";
+import type { Edit, Entity, MapBlueprint, NewMapOptions, Opening, Region, Zone } from "../core/model";
 import type { GenerateResult } from "../core/generate";
 import { applyResult, canGenerate } from "../core/generate";
 import { hmsFor, readRouteParams } from "../core/generators/params";
@@ -15,15 +15,16 @@ import { validateMap } from "../core/validate";
 import { runGenerate } from "./generation";
 import { addNewMap, newRegion } from "../core/model";
 import type { CellDiff } from "../core/paint";
-import { applyDiff, brushCells, emptyDiff, lineCells, paintCell } from "../core/paint";
+import { applyDiff, brushCells, emptyDiff, lineCells, paintCell, paintElevation } from "../core/paint";
 import { parseProject, serializeProject } from "../core/project";
-import { DEFAULT_FILL_TERRAIN, TERRAIN_TYPES, requireTerrain } from "../core/terrain";
+import { DEFAULT_FILL_TERRAIN, ELEVATION_LEVELS, TERRAIN_TYPES, requireTerrain } from "../core/terrain";
 import type { Overlays, Prefs } from "./prefs";
 import { loadPrefs, savePrefs } from "./prefs";
 
 export const APP_VERSION = "0.1.0";
 
-export type Tool = "pencil" | "erase" | "pan" | "pick";
+/** "elevation" is the elevation brush: it paints elevation levels, leaving terrain alone. */
+export type Tool = "pencil" | "erase" | "pan" | "pick" | "elevation";
 
 /** Everything Generate can change on a map, for undoing it. */
 interface MapSnapshot {
@@ -37,7 +38,7 @@ interface MapSnapshot {
 
 /** One undoable action: a paint stroke, or a whole-map change such as Generate. */
 type Command =
-  | { type: "stroke"; mapId: string; diff: CellDiff; edit: StrokeEdit }
+  | { type: "stroke"; mapId: string; diff: CellDiff; edit: Edit }
   | { type: "snapshot"; mapId: string; before: MapSnapshot; after: MapSnapshot };
 
 function cloneZones(zones: Zone[]): Zone[] {
@@ -66,9 +67,10 @@ function restore(map: MapBlueprint, snap: MapSnapshot) {
 
 interface Stroke {
   map: MapBlueprint;
-  terrain: number;
+  /** Terrain index, or elevation level index for the elevation brush. */
+  value: number;
   lock: 0 | 1;
-  tool: "pencil" | "erase";
+  tool: "pencil" | "erase" | "elevation";
   diff: CellDiff;
   seen: Map<number, number>;
   cells: number[];
@@ -90,6 +92,8 @@ class EditorStore {
   /** The tool to go back to after a one-off "pick" (eyedropper). */
   private toolBeforePick: Tool = "pencil";
   terrain = requireTerrain("tree");
+  /** Level the elevation brush paints (index into ELEVATION_LEVELS). */
+  elevationLevel = ELEVATION_LEVELS.indexOf("raised1");
   brush = 1;
   prefs: Prefs = loadPrefs();
   /** True when there are changes not yet saved to a file. */
@@ -267,6 +271,7 @@ class EditorStore {
   setTool(tool: Tool) {
     if (tool === "pick" && this.tool !== "pick") this.toolBeforePick = this.tool;
     this.tool = tool;
+    this.showElevationFor(tool);
     this.changed();
   }
 
@@ -274,6 +279,19 @@ class EditorStore {
     this.terrain = index;
     if (this.tool === "erase" || this.tool === "pan" || this.tool === "pick") this.tool = "pencil";
     this.changed();
+  }
+
+  /** Pick an elevation level and switch to the elevation brush. */
+  setElevationLevel(level: number) {
+    this.elevationLevel = level;
+    this.tool = "elevation";
+    this.showElevationFor("elevation");
+    this.changed();
+  }
+
+  /** Painting elevation blind is no use: the elevation brush turns the Elevation overlay on. */
+  private showElevationFor(tool: Tool) {
+    if (tool === "elevation" && !this.prefs.overlays.elevation) this.setOverlay("elevation", true);
   }
 
   setBrush(size: number) {
@@ -348,12 +366,12 @@ class EditorStore {
   /** Start a pencil/eraser stroke at a cell. */
   beginStroke(x: number, y: number) {
     const map = this.currentMap;
-    if (!map || (this.tool !== "pencil" && this.tool !== "erase")) return;
+    if (!map || (this.tool !== "pencil" && this.tool !== "erase" && this.tool !== "elevation")) return;
     const erase = this.tool === "erase";
     this.stroke = {
       map,
-      tool: erase ? "erase" : "pencil",
-      terrain: erase ? requireTerrain(DEFAULT_FILL_TERRAIN) : this.terrain,
+      tool: this.tool,
+      value: this.tool === "elevation" ? this.elevationLevel : erase ? requireTerrain(DEFAULT_FILL_TERRAIN) : this.terrain,
       lock: erase ? 0 : this.prefs.lockWhenPainting ? 1 : 0,
       diff: emptyDiff(),
       seen: new Map(),
@@ -372,7 +390,9 @@ class EditorStore {
     for (const [px, py] of path) {
       for (const [cx, cy] of brushCells(px, py, this.brush)) {
         if (cx < 0 || cy < 0 || cx >= s.map.width || cy >= s.map.height) continue;
-        if (paintCell(s.map, cx, cy, s.terrain, s.lock, s.diff, s.seen)) {
+        const painted =
+          s.tool === "elevation" ? paintElevation(s.map, cx, cy, s.value, s.lock, s.diff, s.seen) : paintCell(s.map, cx, cy, s.value, s.lock, s.diff, s.seen);
+        if (painted) {
           changed.push(cy * s.map.width + cx);
           s.cells.push(cx, cy);
         }
@@ -387,14 +407,10 @@ class EditorStore {
     const s = this.stroke;
     this.stroke = null;
     if (!s || s.diff.index.length === 0) return;
-    const edit: StrokeEdit = {
-      type: "stroke",
-      tool: s.tool,
-      terrain: TERRAIN_TYPES[s.terrain].id,
-      brush: this.brush,
-      locked: s.lock === 1,
-      cells: s.cells,
-    };
+    const edit: Edit =
+      s.tool === "elevation"
+        ? { type: "elevation", level: ELEVATION_LEVELS[s.value], brush: this.brush, locked: s.lock === 1, cells: s.cells }
+        : { type: "stroke", tool: s.tool, terrain: TERRAIN_TYPES[s.value].id, brush: this.brush, locked: s.lock === 1, cells: s.cells };
     s.map.edits.push(edit);
     this.pushUndo({ type: "stroke", mapId: s.map.id, diff: s.diff, edit });
     this.markDirty();
@@ -418,7 +434,9 @@ class EditorStore {
   pickAt(x: number, y: number) {
     const map = this.currentMap;
     if (!map || x < 0 || y < 0 || x >= map.width || y >= map.height) return;
-    this.terrain = map.layers.terrain.data[y * map.width + x];
+    // Picking for the elevation brush takes the cell's elevation; otherwise its terrain.
+    if (this.toolBeforePick === "elevation") this.elevationLevel = map.layers.elevation.data[y * map.width + x];
+    else this.terrain = map.layers.terrain.data[y * map.width + x];
     this.tool = this.toolBeforePick === "pick" || this.toolBeforePick === "pan" ? "pencil" : this.toolBeforePick;
     this.changed();
   }

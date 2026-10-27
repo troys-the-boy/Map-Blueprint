@@ -37,8 +37,13 @@ export const LEVEL = {
   ground: ELEVATION_LEVELS.indexOf("ground"),
   raised1: ELEVATION_LEVELS.indexOf("raised1"),
   raised2: ELEVATION_LEVELS.indexOf("raised2"),
+  raised3: ELEVATION_LEVELS.indexOf("raised3"),
+  raised4: ELEVATION_LEVELS.indexOf("raised4"),
   bridge: ELEVATION_LEVELS.indexOf("bridge"),
 };
+
+/** Plateau levels from the lowest up: RAISED[0] is raised1. */
+export const RAISED = [LEVEL.raised1, LEVEL.raised2, LEVEL.raised3, LEVEL.raised4];
 
 export interface GenInput {
   width: number;
@@ -77,6 +82,8 @@ export class GenContext {
   deadEnds: number[] = [];
   /** Centre cell of each HM pocket, and the HM sealing it. */
   pockets: Array<{ center: number; hm: string; zoneId: string }> = [];
+  /** Every flight of stairs: the stairs cell, the cell at its foot and the cell at its top. */
+  stairs: Array<{ cell: number; front: number; back: number }> = [];
   /** The stretch of main path (indices into mainLine) that the grass shortcut bypasses. */
   shortcut: { from: number; to: number } | null = null;
   /** True when the route runs top-to-bottom. */

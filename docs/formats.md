@@ -4,7 +4,7 @@ This document defines the tool's file formats. The terrain vocabulary and the ti
 
 | File | Identifier (`format`) | Version field | Current |
 | --- | --- | --- | --- |
-| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 3 |
+| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 4 |
 | Terrain vocabulary (`profiles/terrain.json`) | `gen3-terrain-vocabulary` | `formatVersion` | 1 |
 | Terrain palette (`profiles/palettes/*.json`) | `gen3-terrain-palette` | `formatVersion` | 1 |
 | Tileset profile (`profiles/tilesets/*.json`) | `gen3-tileset-profile` | `formatVersion` | 1 (draft) |
@@ -13,7 +13,7 @@ Coordinates are in **metatiles** (16×16 px). The origin (0, 0) is the top-left 
 
 ---
 
-## Project file, schemaVersion 3
+## Project file, schemaVersion 4
 
 A project is a single JSON file holding one region and all of its maps. The app treats it as untrusted data when opening it:
 
@@ -29,11 +29,12 @@ When the format changes, `schemaVersion` goes up and a migration in `src/core/pr
 | 1 | 1 | First version. |
 | 2 | 2 | Each map gains `openings` (edge entrances). Version-1 files are upgraded with `openings: []`. |
 | 3 | 2 (revision) | Each opening gains `kind`: `walk` or `surf`. Version-2 openings become `walk`. |
+| 4 | 2 (second revision) | New terrain types `snow`, `snow_grass`, `ice`, `snowdrift`; elevation levels `raised3`, `raised4`; elevation-brush edits (`"type": "elevation"`). Version-3 files need no changes. |
 
 ```jsonc
 {
   "format": "gen3-map-blueprint-project",
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "appVersion": "0.1.0",
   "savedAt": "2026-10-26T20:00:00.000Z",
   "region": {
@@ -156,7 +157,8 @@ Every value is optional. Missing or out-of-range values fall back to the default
 | Key | Default | Range / values |
 | --- | --- | --- |
 | `layout` | `auto` | `auto` (coastal for the coastal biome, else land), `land`, `coastal`, `river`, `water` |
-| `elevation` | 0.35 | 0–1 (how many and how big the plateaus are) |
+| `elevation` | 0.35 | 0–1 (how many and how big the plateaus are; alpine routes treat any value above 0 as at least 0.3 higher) |
+| `snow` | 0 | 0–1 (share of the route under snow, highest ground first) |
 | `grassShortcut` | true | true / false (the "two ways through" grass route) |
 | `pathGrass` | 0.5 | 0–1 (grass stretches across the main path) |
 | `surfEntrances` | true | true / false (coastal and river: surf entrances on the water) |
@@ -168,7 +170,7 @@ Every value is optional. Missing or out-of-range values fall back to the default
 | `ledges` | 1 | 0–4 |
 | `grass`, `water`, `treeDensity` | 0.65, 0.25, 0.55 | 0–1 |
 | `borderThickness` | 2 | 1–4 |
-| `borderStyle` | `forest` | `forest`, `cliff` |
+| `borderStyle` | `auto` | `auto` (cliff on alpine routes, forest otherwise), `forest`, `cliff` |
 | `stream` | `auto` | `auto`, `yes`, `no` |
 | `clearing` | true | true / false |
 | `hmPockets` | 1 | 0–3 |
@@ -183,9 +185,9 @@ The same map, settings and seed always produce exactly the same result. If the g
 
 #### Elevation
 
-The `elevation` layer stores one level per cell: `water`, `ground`, `raised1`, `raised2` or `bridge`. For movement:
+The `elevation` layer stores one level per cell: `water`, `ground`, `raised1`, `raised2`, `raised3`, `raised4` or `bridge`. The Porymap number for each is in `profiles/tilesets/vanilla-emerald-general.json` (water 1, ground 3, raised 4–7, bridge 15; stairs show 0, "transition"). For movement:
 
-- `water`, `ground` and `bridge` are one low level. `raised1` and `raised2` are plateaus.
+- `water`, `ground` and `bridge` are one low level. `raised1` to `raised4` are plateaus, each one above the last.
 - The player can only change level by stepping onto or off **stairs**, one level at a time.
 - The player can also drop down a level by jumping a **ledge**.
 
@@ -203,11 +205,13 @@ The next Generate replaces zones with `data.generated: true`. Any other zone is 
 
 #### Edits
 
-Edits are user actions, recorded so they can be replayed when the map is regenerated. Version 1 has one edit type:
+Edits are user actions, recorded so they can be replayed when the map is regenerated. There are two edit types: terrain strokes (pencil and eraser) and, from version 4, elevation-brush strokes:
 
 ```jsonc
 { "type": "stroke", "tool": "pencil", "terrain": "tree", "brush": 1, "locked": true,
   "cells": [x0, y0, x1, y1, …] }     // every cell the stroke painted, in order
+{ "type": "elevation", "level": "raised2", "brush": 2, "locked": true,
+  "cells": [x0, y0, …] }             // sets the elevation level only; terrain is unchanged
 ```
 
 Replaying the strokes in order on a fresh map gives exactly the same cells.
@@ -233,6 +237,7 @@ Replaying the strokes in order on a fresh map gives exactly the same cells.
 | `encounters` | `land`, `water`, `cave` or `null` |
 | `elevation` | the usual abstract level for this terrain |
 | `glyph` | optional symbol drawn over the color |
+| `slide` | optional `true` for ice: the player slides across it until something stops them |
 
 To add a terrain type, add an entry here and a color for it in **every** palette. The app checks this when it loads.
 

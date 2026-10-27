@@ -263,6 +263,10 @@ fieldset.checks .check { min-height: 38px; }
 .heat-key { list-style: none; margin: 4px 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 12px; color: var(--muted); }
 .heat-key li { display: flex; align-items: center; gap: 6px; }
 .swatch.small { width: 14px; height: 14px; border-radius: 3px; }
+.swatch.marker { width: 18px; height: 18px; border-radius: 3px; font-size: 11px; color: #fff; border-color: rgba(0,0,0,.7); }
+.swatch.marker.outline { background: transparent; border-width: 2px; }
+.swatch.elevation-swatch { color: #fff; text-shadow: 0 0 2px #000, 0 0 2px #000; font-family: system-ui, sans-serif; }
+.legend { grid-template-columns: 1fr; }
 
 .status-check { min-height: 24px; min-width: 0; padding: 0 8px; font-size: 13px; background: var(--panel-2); }
 

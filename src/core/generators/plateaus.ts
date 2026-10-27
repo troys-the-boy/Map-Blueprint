@@ -3,25 +3,38 @@
 // A plateau is a raised area ringed by a cliff (rock wall). Stairs in the rim
 // lead up; parts of the south rim (and sometimes the east or west rim) are
 // ledges, so the player can jump back down. The interior is ordinary ground,
-// grass and trees, one level up. At high elevation settings a smaller second
-// plateau can sit on top of a big one.
+// grass and trees, one level up.
 //
-// The "Elevation" setting controls how many plateaus there are and how big.
+// Most routes get separate plateaus dotted along the route. At high elevation
+// settings a smaller plateau can stack on a big one (2 raised levels, 3 at the
+// very top of the setting).
+//
+// Alpine routes are mountains instead: the route runs up a valley, and the
+// ground on either side rises in terraces toward the map edges, up to 4 levels
+// (Porymap elevations 4–7). The stairs of each terrace sit away from the stairs
+// below, so a climb switches back and forth.
+//
+// The "Elevation" setting controls how many plateaus there are, how big and how
+// tall. Alpine routes count as more mountainous (see effectiveElevation).
 
-import { DIRS, T, components } from "../grid";
+import { DIRS, T, components, distanceField } from "../grid";
 import type { GenContext } from "./context";
-import { LEVEL, Role } from "./context";
+import { LEVEL, RAISED, Role } from "./context";
+import { effectiveElevation } from "./params";
 
 export function addPlateaus(ctx: GenContext): void {
-  const amount = ctx.params.elevation;
+  const amount = effectiveElevation(ctx.params, ctx.input.biome);
   if (amount <= 0 || ctx.layout === "water") return;
-  const area = ctx.width * ctx.height;
-  const count = Math.max(1, Math.round(amount * (area / 700)));
+  const alpine = ctx.input.biome === "alpine";
+  const crossLength = ctx.vertical ? ctx.width : ctx.height;
   // Cells too close to entrances stay flat, so every entrance starts on the ground.
+  // Entrances in a long side get a flat way all the way to the middle of the route.
   const nearEntrance = new Uint8Array(ctx.n);
   for (const o of ctx.input.openings) {
+    const side = ctx.vertical ? o.edge === "east" || o.edge === "west" : o.edge === "north" || o.edge === "south";
+    const depth = side ? Math.ceil(crossLength / 2) + 2 : 9;
     for (let k = -4; k < o.width + 4; k++)
-      for (let d = 0; d < 9; d++) {
+      for (let d = 0; d < depth; d++) {
         const along = o.start + k;
         let x: number, y: number;
         if (o.edge === "north") [x, y] = [along, d];
@@ -31,30 +44,144 @@ export function addPlateaus(ctx: GenContext): void {
         if (ctx.inside(x, y)) nearEntrance[ctx.idx(x, y)] = 1;
       }
   }
-  const eligible = (i: number) =>
-    !nearEntrance[i] && ctx.role[i] === Role.None && !ctx.locks[i] && ctx.elevation[i] === LEVEL.ground && ctx.edgeDist(i) >= ctx.params.borderThickness + 1;
+  // Separate plateaus keep a cell of ground inside the border; terraces run right up to it.
+  const eligibleFrom = (edge: number) => (i: number) =>
+    !nearEntrance[i] && ctx.role[i] === Role.None && !ctx.locks[i] && ctx.elevation[i] === LEVEL.ground && ctx.edgeDist(i) >= edge;
+  const bt = ctx.params.borderThickness;
+  if (alpine) addTerraces(ctx, amount, eligibleFrom(bt));
+  else addSeparatePlateaus(ctx, amount, eligibleFrom(bt + 1));
+}
 
+/** Where a level may be built on top of the level below: away from its stairs, and two cells from
+ *  its cliff edge, so the ledge of ground left between the two cliffs is 2 cells wide. */
+function onTopOf(ctx: GenContext, level: number) {
+  return (i: number) =>
+    ctx.elevation[i] === level &&
+    !ctx.locks[i] &&
+    (ctx.role[i] === Role.None || ctx.role[i] === Role.Clearing) &&
+    !nearRole(ctx, i, Role.Cliff, 2) &&
+    !nearRole(ctx, i, Role.Stairs, 2);
+}
+
+/** Separate plateaus along the route, sometimes with a second level on top. */
+function addSeparatePlateaus(ctx: GenContext, amount: number, eligible: (i: number) => boolean) {
+  const count = Math.max(1, Math.round(amount * ((ctx.width * ctx.height) / 700)));
+  // The setting each extra level needs.
+  const tiers = [0, 0.6, 0.9];
   for (let k = 0; k < count; k++) {
     const big = 3 + amount * 5;
-    const rx = ctx.rng.range(big * 0.7, big * 1.3);
-    const ry = ctx.rng.range(big * 0.6, big * 1.1);
+    const wantCross = ctx.rng.range(big * 0.7, big * 1.2);
+    const along = ctx.rng.range(big * 0.8, big * 1.2);
     for (let attempt = 0; attempt < 25; attempt++) {
       const c = ctx.rng.int(0, ctx.n - 1);
       if (!eligible(c)) continue;
-      const cells = blob(ctx, c, rx, ry, eligible);
-      if (cells && buildPlateau(ctx, cells, LEVEL.raised1)) {
-        // A second tier on top of large plateaus when elevation is high.
-        if (amount > 0.6 && cells.length > 90) {
-          const inner = cells.filter((i) => ctx.role[i] === Role.None && ctx.elevation[i] === LEVEL.raised1);
-          const top = inner.length ? inner[Math.floor(inner.length / 2)] : -1;
-          const onTop = (i: number) => ctx.role[i] === Role.None && ctx.elevation[i] === LEVEL.raised1 && !ctx.locks[i];
-          const second = top >= 0 ? blob(ctx, top, rx * 0.45, ry * 0.45, onTop) : null;
-          if (second) buildPlateau(ctx, second, LEVEL.raised2);
+      // Size it to the open land across the route at this spot (less on coasts
+      // and rivers), keeping 8 cells free to walk past.
+      const cross = Math.min(wantCross, (crossRun(ctx, c, eligible) - 8) / 2 - 0.5);
+      if (cross < 3) continue;
+      const cells = blob(ctx, c, ctx.vertical ? cross : along, ctx.vertical ? along : cross, eligible);
+      const stairs = cells ? buildPlateau(ctx, cells, RAISED[0], []) : null;
+      if (!stairs) continue;
+      // Higher levels, each smaller and on top of the one below.
+      let below = cells!;
+      let belowStairs = stairs;
+      for (let t = 1; t < tiers.length && amount > tiers[t]; t++) {
+        const onTop = onTopOf(ctx, RAISED[t - 1]);
+        const tops = below.filter(onTop);
+        if (tops.length < 30) break;
+        // Centre it where the level below is widest, sized to fit inside.
+        const runs = tops.map((i) => crossRun(ctx, i, onTop));
+        const widest = Math.max(...runs);
+        const centres = tops.filter((_, j) => runs[j] >= widest - 1);
+        let next: number[] | null = null;
+        let nextStairs: number[] | null = null;
+        for (let tries = 0; tries < 8 && !nextStairs; tries++) {
+          const centre = centres[Math.floor(((tries + 0.5) / 8) * centres.length)];
+          const r = Math.min(cross * 0.7 ** t, widest / 2 - 0.8 - tries * 0.15);
+          if (r < 2.6) break;
+          const a = along * 0.65 ** t * (1 - tries * 0.06);
+          next = blob(ctx, centre, ctx.vertical ? r : a, ctx.vertical ? a : r, onTop);
+          nextStairs = next ? buildPlateau(ctx, next, RAISED[t], belowStairs) : null;
         }
-        break;
+        if (!nextStairs) break;
+        below = next!;
+        belowStairs = nextStairs;
       }
+      break;
     }
   }
+}
+
+/**
+ * Alpine terraces. A height is worked out for every cell: zero along a valley
+ * down the middle of the route, rising toward the map edges, with noise so the
+ * valley wanders and the mountainsides are uneven. Each whole step of height is
+ * one more level. Every terrace is built like a plateau (cliff rim, stairs,
+ * ledges), with each level inside the one below.
+ */
+function addTerraces(ctx: GenContext, amount: number, eligible: (i: number) => boolean) {
+  const bt = ctx.params.borderThickness;
+  const crossLength = ctx.vertical ? ctx.width : ctx.height;
+  const alongLength = ctx.vertical ? ctx.height : ctx.width;
+  const halfOpen = (crossLength - 2 * bt) / 2;
+  const maxLevel = amount > 0.7 ? 4 : amount > 0.45 ? 3 : amount > 0.2 ? 2 : 1;
+  // Half-width of the valley floor, and the width of each terrace step.
+  const valley = Math.max(4.5, halfOpen * (0.6 - 0.35 * amount));
+  const step = Math.max(3.5, (halfOpen - valley + 1) / maxLevel);
+  const centre = (crossLength - 1) / 2;
+
+  const height = new Float32Array(ctx.n);
+  for (let i = 0; i < ctx.n; i++) {
+    const [x, y] = ctx.xy(i);
+    const across = ctx.vertical ? x : y;
+    const along = ctx.vertical ? y : x;
+    const side = across < centre ? 0 : 1;
+    // The valley wanders, and each side rises at its own pace.
+    const wander = (ctx.noise.at(along * 0.05 + 6100, 0.5) - 0.5) * valley;
+    const offset = Math.abs(across - centre - wander);
+    const bumps = (ctx.noise.fractal(x + 6300 + side * 400, y + 6700, 9, 3) - 0.5) * 1.4;
+    // Ends of the route (near the entrances) stay lower.
+    const ends = Math.min(along, alongLength - 1 - along) < 6 ? -1 : 0;
+    height[i] = (offset - valley) / step + bumps + ends;
+  }
+
+  // Build level by level. Each terrace is one connected piece of high-enough ground.
+  let stairsBelow: number[] = [];
+  for (let level = 1; level <= maxLevel; level++) {
+    const ok = level === 1 ? eligible : onTopOf(ctx, RAISED[level - 2]);
+    const high = new Uint8Array(ctx.n);
+    for (let i = 0; i < ctx.n; i++) if (height[i] >= level && ok(i)) high[i] = 1;
+    const comp = components(ctx.width, ctx.height, (i) => high[i] === 1);
+    const pieces: number[][] = comp.sizes.map(() => []);
+    for (let i = 0; i < ctx.n; i++) if (high[i]) pieces[comp.ids[i]].push(i);
+    const built: number[] = [];
+    for (const piece of pieces) {
+      if (piece.length < 30) continue;
+      const cells = tidy(ctx, piece, ok, false);
+      const stairs = cells ? buildPlateau(ctx, cells, RAISED[level - 1], stairsBelow, true) : null;
+      if (stairs) built.push(...stairs);
+    }
+    if (!built.length) break;
+    stairsBelow = built;
+  }
+}
+
+/** How many eligible cells in a row run across the route through a cell. */
+function crossRun(ctx: GenContext, c: number, eligible: (i: number) => boolean): number {
+  const [x, y] = ctx.xy(c);
+  const [dx, dy] = ctx.vertical ? [1, 0] : [0, 1];
+  let run = 1;
+  for (const sign of [1, -1])
+    for (let k = 1; ctx.inside(x + sign * k * dx, y + sign * k * dy) && eligible(ctx.idx(x + sign * k * dx, y + sign * k * dy)); k++) run++;
+  return run;
+}
+
+/** True if a cell within `r` steps (square) has this role. */
+function nearRole(ctx: GenContext, i: number, role: number, r: number): boolean {
+  const [x, y] = ctx.xy(i);
+  for (let dy = -r; dy <= r; dy++)
+    for (let dx = -r; dx <= r; dx++) if (ctx.inside(x + dx, y + dy) && ctx.role[ctx.idx(x + dx, y + dy)] === role) return true;
+  return false;
 }
 
 /** A noisy ellipse of eligible cells around a centre, or null if it doesn't fit. */
@@ -72,7 +199,19 @@ function blob(ctx: GenContext, centre: number, rx: number, ry: number, eligible:
         inShape[i] = 1;
       }
     }
-  // Keep the largest connected piece, then smooth away thin spurs.
+  for (let i = 0; i < ctx.n; i++) if (inShape[i]) cells.push(i);
+  return tidy(ctx, cells, eligible, true);
+}
+
+/**
+ * Clean up a plateau shape: keep its largest connected piece, fill diagonal-only
+ * joins, and drop one-cell spurs. With `spanCheck`, refuse shapes that would
+ * stretch across the route. Returns null if what's left is too small.
+ */
+function tidy(ctx: GenContext, shape: number[], eligible: (i: number) => boolean, spanCheck: boolean): number[] | null {
+  const inShape = new Uint8Array(ctx.n);
+  for (const i of shape) inShape[i] = 1;
+  const cells: number[] = [];
   const comp = components(ctx.width, ctx.height, (i) => inShape[i] === 1);
   let best = -1;
   comp.sizes.forEach((s, id) => (best < 0 || s > comp.sizes[best] ? (best = id) : 0));
@@ -105,6 +244,7 @@ function blob(ctx: GenContext, centre: number, rx: number, ry: number, eligible:
     return DIRS.filter(({ dx, dy }) => set.has(ctx.idx(x + dx, y + dy))).length >= 2;
   });
   if (solid.length < 30) return null;
+  if (!spanCheck) return solid;
   // Never span the route's width: there must always be low ground beside a plateau to walk past it.
   const xs = solid.map((i) => i % ctx.width);
   const ys = solid.map((i) => Math.floor(i / ctx.width));
@@ -114,10 +254,19 @@ function blob(ctx: GenContext, centre: number, rx: number, ry: number, eligible:
   return solid;
 }
 
-/** Turn a set of cells into a plateau at `level`. Returns false if it's too thin. */
-function buildPlateau(ctx: GenContext, cells: number[], level: number): boolean {
+/**
+ * Turn a set of cells into a plateau at `level`. Returns its stairs, or null if it's
+ * too thin or has no room for stairs. Stairs go as far as possible from `avoid`
+ * (the stairs of the level below), so a climb over several tiers switches back.
+ * With `againstBorder`, the map's border counts as part of the plateau, so there's
+ * no cliff along that side (alpine terraces rise straight into the mountains).
+ */
+function buildPlateau(ctx: GenContext, cells: number[], level: number, avoid: number[], againstBorder = false): number[] | null {
   const inside = new Set(cells);
-  const isIn = (x: number, y: number) => ctx.inside(x, y) && inside.has(ctx.idx(x, y));
+  // Terraces lean against the border wall: no cliff is needed on that side.
+  const bt = ctx.params.borderThickness;
+  const isIn = (x: number, y: number) =>
+    againstBorder && (!ctx.inside(x, y) || ctx.edgeDist(ctx.idx(x, y)) < bt) ? true : ctx.inside(x, y) && inside.has(ctx.idx(x, y));
   // The rim: plateau cells with any outside neighbour, including diagonals, so the cliff has no gaps.
   const rim: number[] = [];
   const interior: number[] = [];
@@ -127,7 +276,7 @@ function buildPlateau(ctx: GenContext, cells: number[], level: number): boolean 
     for (let dy = -1; dy <= 1 && !edge; dy++) for (let dx = -1; dx <= 1; dx++) if (!isIn(x + dx, y + dy)) edge = true;
     (edge ? rim : interior).push(i);
   }
-  if (interior.length < 12) return false;
+  if (interior.length < 12) return null;
 
   for (const i of cells) ctx.elevation[i] = level;
   for (const i of rim) ctx.set(i, T.rockWall, Role.Cliff);
@@ -152,12 +301,22 @@ function buildPlateau(ctx: GenContext, cells: number[], level: number): boolean 
     const below = ctx.idx(ox, oy);
     // The cell outside must be open low ground the player can use (not sea, not another cliff).
     if (ctx.role[below] === Role.Sea || ctx.role[below] === Role.Cliff || ctx.locks[below]) return null;
+    // …and not where the border wall will go.
+    if (ctx.edgeDist(below) < ctx.params.borderThickness + 1) return null;
     return out;
   };
 
   // Stairs: one or two places in the rim, preferring the north, east and west faces.
-  const stairSpots = ctx.rng.shuffle(rim.filter((i) => facing(i) !== null)).sort((a, b) => Number(facing(a)!.dir === "s") - Number(facing(b)!.dir === "s"));
-  const stairsWanted = cells.length > 120 ? 2 : 1;
+  const farFromBelow = (i: number) => {
+    const [x, y] = ctx.xy(i);
+    return avoid.length ? Math.min(...avoid.map((a) => Math.abs((a % ctx.width) - x) + Math.abs(Math.floor(a / ctx.width) - y))) : 0;
+  };
+  const stairSpots = ctx.rng
+    .shuffle(rim.filter((i) => facing(i) !== null))
+    .map((i) => ({ i, south: facing(i)!.dir === "s", far: farFromBelow(i) }))
+    .sort((a, b) => (avoid.length ? b.far - a.far : Number(a.south) - Number(b.south)))
+    .map((s) => s.i);
+  const stairsWanted = Math.min(4, 1 + Math.floor(cells.length / 120));
   const placed: number[] = [];
   for (const i of stairSpots) {
     if (placed.length >= stairsWanted) break;
@@ -173,6 +332,7 @@ function buildPlateau(ctx: GenContext, cells: number[], level: number): boolean 
     const front = ctx.idx(x + f.dx, y + f.dy);
     const back = ctx.idx(x - f.dx, y - f.dy);
     for (const c of [front, back]) if (!ctx.locks[c]) ctx.set(c, T.ground, Role.Stairs);
+    ctx.stairs.push({ cell: i, front, back });
     placed.push(i);
   }
   if (!placed.length) {
@@ -181,8 +341,9 @@ function buildPlateau(ctx: GenContext, cells: number[], level: number): boolean 
       ctx.set(i, T.tree, Role.None);
       ctx.role[i] = Role.None;
     }
-    for (const i of cells) ctx.elevation[i] = level === LEVEL.raised2 ? LEVEL.raised1 : LEVEL.ground;
-    return false;
+    const k = RAISED.indexOf(level);
+    for (const i of cells) ctx.elevation[i] = k > 0 ? RAISED[k - 1] : LEVEL.ground;
+    return null;
   }
 
   // Ledges: runs of the south face (sometimes east or west) become one-way drops.
@@ -196,5 +357,54 @@ function buildPlateau(ctx: GenContext, cells: number[], level: number): boolean 
       if (ctx.noise.at(x * 0.3 + 3000, y * 0.3) > 0.42) ctx.set(i, ledgeFor[dir], Role.Cliff);
     }
   }
-  return true;
+  return placed;
+}
+
+/**
+ * Make sure every flight of stairs can be reached: lay a narrow trail from the
+ * foot of each flight to the nearest path on the same level (the main path,
+ * a branch, or the top of the flight below). Lower levels go first, so a climb
+ * over several terraces joins up flight by flight.
+ */
+export function connectStairs(ctx: GenContext): void {
+  const trailRoles = new Set<number>([Role.MainPath, Role.Branch, Role.Opening, Role.Bridge]);
+  const flights = [...ctx.stairs].sort((a, b) => levelRank(ctx.elevation[a.front]) - levelRank(ctx.elevation[b.front]));
+  const tops: number[] = [];
+  for (const f of flights) {
+    if (ctx.terrain[f.cell] !== T.stairs) continue;
+    const level = ctx.elevation[f.front];
+    const sources: number[] = [];
+    for (let i = 0; i < ctx.n; i++) if (ctx.elevation[i] === level && trailRoles.has(ctx.role[i])) sources.push(i);
+    for (const t of tops) if (ctx.elevation[t] === level) sources.push(t);
+    const passable = (i: number) =>
+      ctx.elevation[i] === level &&
+      !ctx.locks[i] &&
+      ctx.edgeDist(i) >= ctx.params.borderThickness &&
+      ctx.role[i] !== Role.Cliff &&
+      ctx.role[i] !== Role.Sea &&
+      ctx.role[i] !== Role.Pocket &&
+      (ctx.role[i] !== Role.Stairs || i === f.front || tops.includes(i));
+    const dist = distanceField(ctx.width, ctx.height, sources, passable);
+    if (dist[f.front] === Infinity) continue;
+    // Walk downhill from the foot of the stairs to the nearest path, paving as we go.
+    let c = f.front;
+    while (dist[c] > 0) {
+      const [x, y] = ctx.xy(c);
+      let next = -1;
+      for (const { dx, dy } of DIRS) {
+        if (!ctx.inside(x + dx, y + dy)) continue;
+        const j = ctx.idx(x + dx, y + dy);
+        if (dist[j] < dist[c] && (next < 0 || dist[j] < dist[next])) next = j;
+      }
+      if (next < 0) break;
+      c = next;
+      // As wide as the narrowest path setting, where the ground allows.
+      if (dist[c] > 0) ctx.stamp(c, ctx.params.pathWidthMin, T.path, Role.Branch, (j) => passable(j) && ctx.role[j] !== Role.Stairs && ctx.role[j] !== Role.Opening);
+    }
+    tops.push(f.back);
+  }
+}
+
+function levelRank(level: number): number {
+  return level === LEVEL.ground || level === LEVEL.water ? 0 : RAISED.indexOf(level) + 1;
 }

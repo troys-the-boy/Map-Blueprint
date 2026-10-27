@@ -7,6 +7,7 @@ import { trainerSight } from "../entities";
 import type { EntityKind, MapBlueprint } from "../model";
 import { openingCells } from "../reach";
 import { TERRAIN_TYPES, getPalette } from "../terrain";
+import { PORYMAP_ELEVATION_COLORS, cellElevationValue, hexDigit, isImpassable } from "../porymap";
 import type { RGBA } from "./raster";
 import { Raster, hexToRgba, textWidth } from "./raster";
 
@@ -44,6 +45,12 @@ export interface BlueprintOptions {
   legend?: boolean;
   /** Label the ruler every N cells. */
   labelEvery?: number;
+  /**
+   * "terrain" (default): terrain colours, things and sight lines.
+   * "elevation": Porymap's collision view, each cell in its elevation colour with the
+   * number in white (walkable) or red (blocked), for use beside Porymap's collision tab.
+   */
+  mode?: "terrain" | "elevation";
 }
 
 export function renderBlueprint(map: MapBlueprint, opts: BlueprintOptions): Raster {
@@ -52,12 +59,17 @@ export function renderBlueprint(map: MapBlueprint, opts: BlueprintOptions): Rast
   const palette = getPalette(opts.paletteId);
   const colors = TERRAIN_TYPES.map((t) => hexToRgba(palette.colors[t.id]));
   const terrain = map.layers.terrain.data;
+  const elevationMode = opts.mode === "elevation";
+  const elevation = map.layers.elevation.data;
+  const valueAt = (i: number) => cellElevationValue(terrain[i], elevation[i]);
 
   const titleH = opts.title ? (opts.subtitle ? 34 : 22) : 0;
-  const used = [...new Set(Array.from(terrain))].sort((a, b) => a - b);
-  const kinds = [...new Set(map.entities.map((e) => e.kind))];
+  const used = elevationMode
+    ? [...new Set(Array.from(terrain, (_, i) => valueAt(i)))].sort((a, b) => a - b)
+    : [...new Set(Array.from(terrain))].sort((a, b) => a - b);
+  const kinds = elevationMode ? [] : [...new Set(map.entities.map((e) => e.kind))];
   const legendW = opts.legend ? 190 : 0;
-  const legendRows = used.length + kinds.length + (map.warps.length ? 1 : 0) + 4;
+  const legendRows = used.length + kinds.length + (map.warps.length && !elevationMode ? 1 : 0) + 6;
   const mapW = area.width * C;
   const mapH = area.height * C;
   const width = RULER_LEFT + mapW + 8 + legendW;
@@ -74,10 +86,18 @@ export function renderBlueprint(map: MapBlueprint, opts: BlueprintOptions): Rast
     if (opts.subtitle) img.text(4, 23, opts.subtitle, MUTED);
   }
 
-  // Terrain and glyphs.
+  // Terrain and glyphs, or elevation colours and numbers.
   for (let y = area.y; y < area.y + area.height; y++)
     for (let x = area.x; x < area.x + area.width; x++) {
       const t = terrain[y * map.width + x];
+      if (elevationMode) {
+        const v = valueAt(y * map.width + x);
+        img.fillRect(px(x), py(y), C, C, hexToRgba(PORYMAP_ELEVATION_COLORS[v]));
+        // A dark shadow keeps the number readable on light colours.
+        img.text(px(x) + 6, py(y) + 5, hexDigit(v), [0, 0, 0, 200]);
+        img.text(px(x) + 5, py(y) + 4, hexDigit(v), isImpassable(t) ? [255, 0, 0, 255] : [255, 255, 255, 255]);
+        continue;
+      }
       img.fillRect(px(x), py(y), C, C, colors[t]);
       const glyph = TERRAIN_TYPES[t].glyph;
       if (glyph) img.text(px(x) + 5, py(y) + 4, glyph, [255, 255, 255, 220]);
@@ -111,7 +131,7 @@ export function renderBlueprint(map: MapBlueprint, opts: BlueprintOptions): Rast
 
   // Trainer sight lines: tinted cells plus a line from the trainer.
   for (const e of map.entities) {
-    if (e.kind !== "trainer") continue;
+    if (e.kind !== "trainer" || elevationMode) continue;
     const sight = trainerSight(e, map.width, map.height, terrain);
     for (const c of sight) {
       const x = c % map.width;
@@ -135,11 +155,28 @@ export function renderBlueprint(map: MapBlueprint, opts: BlueprintOptions): Rast
     if (w <= C) img.text(px(x) + Math.floor((C - w) / 2) + 1, py(y) + 5, label, [255, 255, 255, 255]);
     else img.text(px(x) + 2, py(y) + 5, label.slice(0, 2), [255, 255, 255, 255]);
   };
-  for (const e of map.entities) marker(e.x, e.y, ENTITY_COLORS[e.kind], e.id);
-  map.warps.forEach((w, k) => marker(w.x, w.y, ENTITY_COLORS.warp, `W${k}`));
+  if (!elevationMode) {
+    for (const e of map.entities) marker(e.x, e.y, ENTITY_COLORS[e.kind], e.id);
+    map.warps.forEach((w, k) => marker(w.x, w.y, ENTITY_COLORS.warp, `W${k}`));
+  }
 
   // Legend.
-  if (opts.legend) {
+  if (opts.legend && elevationMode) {
+    let ly = titleH + 4;
+    const lx = ox + mapW + 12;
+    img.text(lx, ly, "ELEVATION", INK);
+    ly += 12;
+    const meaning: Record<number, string> = { 0: "stairs (any level)", 1: "water (surf)", 3: "ground", 15: "bridge (multi-level)" };
+    for (const v of used) {
+      img.fillRect(lx, ly, 10, 10, hexToRgba(PORYMAP_ELEVATION_COLORS[v]));
+      img.strokeRect(lx, ly, 10, 10, INK);
+      img.text(lx + 14, ly + 2, `${hexDigit(v)} ${meaning[v] ?? `raised (${v - 3} up)`}`, INK);
+      ly += 14;
+    }
+    ly += 6;
+    img.text(lx, ly, "WHITE = WALKABLE", INK);
+    img.text(lx, ly + 12, "RED = BLOCKED", [200, 0, 0, 255]);
+  } else if (opts.legend) {
     let ly = titleH + 4;
     const lx = ox + mapW + 12;
     img.text(lx, ly, "TERRAIN", INK);
