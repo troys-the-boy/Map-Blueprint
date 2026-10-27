@@ -7,7 +7,9 @@
 // example a painted wall across the only way through), the best attempt is
 // returned along with the validation errors that explain why.
 
-import type { Entity, MapBlueprint, Opening, Zone } from "./model";
+import type { CellRect, Entity, MapBlueprint, Opening, Zone } from "./model";
+import { inRect } from "./selection";
+import { cloneThing } from "./things";
 import { Rng, deriveSeed } from "./rng";
 import { IS_WATER, T } from "./grid";
 import type { Issue, ValidateOptions } from "./validate";
@@ -65,8 +67,26 @@ function labelBase(map: MapBlueprint): string {
   return map.header.name.replace(/[^A-Za-z0-9]/g, "") || map.name.replace(/[^A-Za-z0-9]/g, "") || "Map";
 }
 
+/** Give a generated thing a fresh ID if a thing placed by hand already uses its ID. */
+function renumberClashes(entities: Entity[]): void {
+  const used = new Set(entities.filter((e) => e.locked).map((e) => e.id));
+  for (const e of entities) {
+    if (e.locked || !used.has(e.id)) {
+      used.add(e.id);
+      continue;
+    }
+    const prefix = e.id.replace(/\d+$/, "");
+    let n = 1;
+    while (used.has(prefix + n)) n++;
+    e.id = prefix + n;
+    used.add(e.id);
+  }
+}
+
 function runOnce(map: MapBlueprint, input: GenInput, geometry: Geometry, seed: number, validate: ValidateOptions): GenerateResult {
   const ctx = new GenContext(input, new Rng(seed));
+  // Things placed by hand stay put; the generator works around them.
+  for (const e of map.entities) if (e.locked) ctx.entities.push(cloneThing(e));
   applyLayout(ctx, geometry); // sea, river or open water
   addPlateaus(ctx); // elevation: cliffs, stairs, ledges
   buildRouteSkeleton(ctx); // entrances, main path, branches
@@ -113,6 +133,7 @@ function runOnce(map: MapBlueprint, input: GenInput, geometry: Geometry, seed: n
     }
     issues = validateMap(draft, validate);
   }
+  renumberClashes(ctx.entities);
   return {
     ok: !issues.some((i) => i.severity === "error"),
     terrain: ctx.terrain,
@@ -171,4 +192,69 @@ export function applyResult(map: MapBlueprint, result: GenerateResult): void {
   const layout = resolveLayout(p, map.biome);
   const border = layout === "water" || layout === "coastal" ? "water_deep" : resolveBorder(p, map.biome) === "cliff" ? "rock_wall" : "tree";
   map.layout.borderBlock = [border, border, border, border];
+}
+
+// ---------------------------------------------------------------------------
+// Regenerating part of a map, or all of it
+// ---------------------------------------------------------------------------
+
+/** A copy of a map with every cell and thing outside `area` locked, for regenerating just that area. */
+export function areaInput(map: MapBlueprint, area: CellRect, seed: number): MapBlueprint {
+  const locks = map.layers.locks.data.slice();
+  for (let y = 0; y < map.height; y++)
+    for (let x = 0; x < map.width; x++) if (!inRect(area, x, y)) locks[y * map.width + x] = 1;
+  return {
+    ...map,
+    seed: seed >>> 0,
+    layers: { ...map.layers, locks: { ...map.layers.locks, data: locks } },
+    entities: map.entities.map((e) => (inRect(area, e.x, e.y) ? { ...e } : { ...e, locked: true })),
+  };
+}
+
+/**
+ * Copy the result of regenerating an area back into the map. Only cells inside the
+ * area change; things outside it stay as they were, and only new things inside it
+ * are added. HM-area zones that overlapped the area are replaced by the new ones.
+ */
+export function applyAreaResult(map: MapBlueprint, area: CellRect, result: GenerateResult): void {
+  for (let y = area.y; y < area.y + area.h; y++)
+    for (let x = area.x; x < area.x + area.w; x++) {
+      const i = y * map.width + x;
+      map.layers.terrain.data[i] = result.terrain[i];
+      map.layers.elevation.data[i] = result.elevation[i];
+    }
+  const touches = (z: Zone) => {
+    for (let y = area.y; y < area.y + area.h; y++) for (let x = area.x; x < area.x + area.w; x++) if (z.mask.data[y * map.width + x]) return true;
+    return false;
+  };
+  const inside = (z: Zone) => z.mask.data.every((v, i) => !v || inRect(area, i % map.width, Math.floor(i / map.width)));
+  map.layers.zones = [
+    ...map.layers.zones.filter((z) => z.data.generated !== true || !touches(z)),
+    ...result.zones.filter((z) => z.data.generated === true && inside(z) && !map.layers.zones.some((k) => k.id === z.id)),
+  ];
+  const keep = map.entities.filter((e) => !inRect(area, e.x, e.y) || e.locked);
+  const added = result.entities.filter((e) => inRect(area, e.x, e.y) && !e.locked && !keep.some((k) => k.x === e.x && k.y === e.y));
+  map.entities = [...keep, ...added];
+  // New IDs must not clash with any kept thing, hand-placed or not.
+  const used = new Set(keep.map((e) => e.id));
+  for (const e of added) {
+    if (!used.has(e.id)) {
+      used.add(e.id);
+      continue;
+    }
+    const prefix = e.id.replace(/\d+$/, "");
+    let n = 1;
+    while (used.has(prefix + n)) n++;
+    e.id = prefix + n;
+    used.add(e.id);
+  }
+}
+
+/** A copy of a map with nothing locked, for regenerating the whole map from scratch. */
+export function wholeMapInput(map: MapBlueprint): MapBlueprint {
+  return {
+    ...map,
+    layers: { ...map.layers, locks: { ...map.layers.locks, data: new Uint8Array(map.width * map.height) } },
+    entities: map.entities.map((e) => ({ ...e, locked: false })),
+  };
 }

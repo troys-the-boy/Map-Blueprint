@@ -1,14 +1,14 @@
 // Pointer input for the map canvas: mouse, Apple Pencil and touch, all through
 // Pointer Events.
 //
-//   Pencil (pen)       → always uses the current tool (paint).
+//   Pencil (pen)       → always uses the current tool (paint, select, move things).
 //   Mouse left button  → current tool. Middle/right button or Space+drag → pan.
 //   One finger         → paint or pan, from the "finger" setting. In "auto" a
 //                        finger paints until an Apple Pencil is seen, then pans.
 //   Two fingers        → drag to pan, pinch to zoom. A quick two-finger tap undoes.
 //   Mouse wheel        → zoom at the cursor.
 
-import type { EditorStore } from "./store";
+import type { EditorStore, Tool } from "./store";
 import type { MapRenderer } from "./renderer";
 
 const TAP_MAX_MS = 280;
@@ -31,6 +31,8 @@ export class CanvasInput {
   private gesture: { dist: number; mid: [number, number]; start: number; moved: number } | null = null;
   private spaceHeld = false;
   private firstTouchAt = 0;
+  /** The tool a press started with (the Select and Things tools drag rather than paint). */
+  private pressTool: Tool = "pencil";
   private detach: Array<() => void> = [];
 
   constructor(
@@ -114,7 +116,7 @@ export class CanvasInput {
 
     // A second finger: switch to pan/zoom, and throw away any stroke the first finger started.
     if (e.pointerType === "touch" && this.touchCount() === 2) {
-      if (this.mode === "paint") this.store.cancelStroke();
+      if (this.mode === "paint") this.endPress(true);
       // Only fingers that land together count as a two-finger tap (undo).
       this.startGesture(performance.now() - this.firstTouchAt < TAP_TOGETHER_MS);
       return;
@@ -135,7 +137,10 @@ export class CanvasInput {
         return;
       }
       this.mode = "paint";
-      this.store.beginStroke(cell[0], cell[1]);
+      this.pressTool = this.store.tool;
+      if (this.pressTool === "select") this.store.selectDown(cell[0], cell[1]);
+      else if (this.pressTool === "things") this.store.thingsDown(cell[0], cell[1]);
+      else this.store.beginStroke(cell[0], cell[1]);
       this.setHover(cell);
     } else {
       this.mode = "pan";
@@ -156,7 +161,9 @@ export class CanvasInput {
     }
     const cell = this.renderer.cellAt(x, y);
     if (e.pointerType !== "touch" || this.mode === "paint") this.setHover(cell);
-    if (this.mode === "paint" && p) {
+    if (this.mode === "paint" && p && this.pressTool === "select") this.store.selectMove(cell[0], cell[1]);
+    else if (this.mode === "paint" && p && this.pressTool === "things") this.store.thingsMove(cell[0], cell[1]);
+    else if (this.mode === "paint" && p) {
       // Use coalesced events for smooth Pencil lines when the browser provides them.
       const events = typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : [];
       for (const ce of events.length ? events : [e]) {
@@ -183,15 +190,20 @@ export class CanvasInput {
       }
       return;
     }
-    if (this.mode === "paint") {
-      if (cancelled) this.store.cancelStroke();
-      else this.store.endStroke();
-    }
+    if (this.mode === "paint") this.endPress(cancelled);
     if (this.pointers.size === 0) {
       this.mode = "none";
       this.panLast = null;
       if (e.pointerType === "touch") this.setHover(null);
     }
+  }
+
+  /** Finish a press with the current tool (a cancelled paint stroke is undone). */
+  private endPress(cancelled: boolean) {
+    if (this.pressTool === "select") this.store.selectUp();
+    else if (this.pressTool === "things") this.store.thingsUp();
+    else if (cancelled) this.store.cancelStroke();
+    else this.store.endStroke();
   }
 
   private touchCount() {

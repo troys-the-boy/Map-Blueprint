@@ -68,7 +68,7 @@ function setCell(
   y: number,
   terrain: number | null,
   elevation: number | null,
-  lock: 0 | 1,
+  lock: 0 | 1 | null,
   diff: CellDiff,
   seen: Map<number, number>,
 ): boolean {
@@ -79,7 +79,8 @@ function setCell(
   const l = map.layers.locks.data;
   const nt = terrain ?? t[i];
   const ne = elevation ?? e[i];
-  if (t[i] === nt && e[i] === ne && l[i] === lock) return false;
+  const nl = lock ?? l[i];
+  if (t[i] === nt && e[i] === ne && l[i] === nl) return false;
   const k = seen.get(i);
   if (k === undefined) {
     seen.set(i, diff.index.length);
@@ -89,15 +90,15 @@ function setCell(
     diff.lockBefore.push(l[i]);
     diff.terrainAfter.push(nt);
     diff.elevationAfter.push(ne);
-    diff.lockAfter.push(lock);
+    diff.lockAfter.push(nl);
   } else {
     diff.terrainAfter[k] = nt;
     diff.elevationAfter[k] = ne;
-    diff.lockAfter[k] = lock;
+    diff.lockAfter[k] = nl;
   }
   t[i] = nt;
   e[i] = ne;
-  l[i] = lock;
+  l[i] = nl;
   return true;
 }
 
@@ -111,11 +112,25 @@ export function paintElevation(map: MapBlueprint, x: number, y: number, level: n
   return setCell(map, x, y, null, level, lock, diff, seen);
 }
 
-/** Re-apply a recorded stroke (pencil, eraser or elevation brush) to a map. */
+/** Lock or unlock one cell (lock brush), keeping its terrain and elevation. */
+export function paintLock(map: MapBlueprint, x: number, y: number, lock: 0 | 1, diff: CellDiff, seen: Map<number, number>): boolean {
+  return setCell(map, x, y, null, null, lock, diff, seen);
+}
+
+/**
+ * Re-apply a recorded stroke (pencil, eraser, elevation brush or lock brush) to a map.
+ * Selection and Things-tool edits are records only (their result is in the layers), so
+ * they change nothing here.
+ */
 export function replayStroke(map: MapBlueprint, edit: Edit): CellDiff {
-  const lock = edit.locked ? 1 : 0;
   const diff = emptyDiff();
+  if (edit.type === "area" || edit.type === "entity") return diff;
+  const lock = edit.locked ? 1 : 0;
   const seen = new Map<number, number>();
+  if (edit.type === "lock") {
+    for (let k = 0; k < edit.cells.length; k += 2) paintLock(map, edit.cells[k], edit.cells[k + 1], lock, diff, seen);
+    return diff;
+  }
   if (edit.type === "elevation") {
     const level = ELEVATION_LEVELS.indexOf(edit.level);
     for (let k = 0; k < edit.cells.length; k += 2) paintElevation(map, edit.cells[k], edit.cells[k + 1], level, lock, diff, seen);

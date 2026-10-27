@@ -7,7 +7,8 @@
 // large maps (e.g. 40×170) smooth on an iPad.
 
 import { SCREEN_HEIGHT_METATILES, SCREEN_WIDTH_METATILES, PLAYER_SCREEN_X, PLAYER_SCREEN_Y } from "../core/constants";
-import type { MapBlueprint } from "../core/model";
+import type { CellRect, MapBlueprint } from "../core/model";
+import type { Clip } from "../core/selection";
 import { TERRAIN_TYPES, getPalette } from "../core/terrain";
 import { PORYMAP_BLOCKED_TEXT, PORYMAP_ELEVATION_COLORS, PORYMAP_PASSABLE_TEXT, cellElevationValue, hexDigit, isImpassable } from "../core/porymap";
 import { trainerSight } from "../core/entities";
@@ -81,6 +82,12 @@ export class MapRenderer {
   elevationOpacity = DEFAULT_PREFS.elevationOpacity;
   /** Width of the outline drawn around the hovered cell: the brush size when painting, else 1. */
   brush = 1;
+  /** The Select tool's rectangle. */
+  selection: CellRect | null = null;
+  /** An area being moved or pasted, drawn where it would land. */
+  floating: { clip: Clip; x: number; y: number } | null = null;
+  /** ID of the thing picked with the Things tool. */
+  selectedThing: string | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -377,6 +384,39 @@ export class MapRenderer {
     };
     for (const e of map.entities) marker(e.x, e.y, ENTITY_COLORS[e.kind], e.id);
     map.warps.forEach((w, k) => marker(w.x, w.y, ENTITY_COLORS.warp, `W${k}`));
+
+    // The picked thing: a bright ring.
+    const picked = this.selectedThing ? map.entities.find((e) => e.id === this.selectedThing) : null;
+    if (picked) {
+      ctx.strokeStyle = "#ffd666";
+      ctx.lineWidth = Math.max(2, scale / 6);
+      ctx.strokeRect(offsetX + picked.x * scale - 1, offsetY + picked.y * scale - 1, scale + 2, scale + 2);
+    }
+
+    // An area being moved or pasted: its cells and things where they'd land.
+    const dashed = (r: CellRect) => {
+      const args = [offsetX + r.x * scale + 0.5, offsetY + r.y * scale + 0.5, r.w * scale - 1, r.h * scale - 1] as const;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+      ctx.strokeStyle = "rgba(0,0,0,0.85)";
+      ctx.strokeRect(...args);
+      ctx.setLineDash([6, 4]);
+      ctx.strokeStyle = "#ffffff";
+      ctx.strokeRect(...args);
+      ctx.setLineDash([]);
+    };
+    if (this.floating) {
+      const { clip, x, y } = this.floating;
+      ctx.globalAlpha = 0.9;
+      for (let cy = 0; cy < clip.h; cy++)
+        for (let cx = 0; cx < clip.w; cx++) {
+          ctx.fillStyle = this.colors[clip.terrain[cy * clip.w + cx]] ?? "#ff00ff";
+          ctx.fillRect(offsetX + (x + cx) * scale, offsetY + (y + cy) * scale, scale, scale);
+        }
+      ctx.globalAlpha = 1;
+      for (const e of clip.entities) marker(x + e.x, y + e.y, ENTITY_COLORS[e.kind], e.id);
+      dashed({ x, y, w: clip.w, h: clip.h });
+    } else if (this.selection) dashed(this.selection);
 
     // Validation markers.
     if (this.overlays.issues) {

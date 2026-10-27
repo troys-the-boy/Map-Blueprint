@@ -54,7 +54,7 @@ import {
 import { ELEVATION_LEVELS, TERRAIN_TYPES, terrainIndex } from "./terrain";
 
 export const FILE_FORMAT_ID = "gen3-map-blueprint-project";
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 5;
 
 /** Safety limits for opened files. Anything bigger is rejected. */
 export const FILE_LIMITS = {
@@ -231,7 +231,8 @@ const entityCheck: Check<Entity> = object({
   y: coord,
   elevation,
   fields,
-});
+  locked: bool,
+}, ["locked"]);
 
 const warpCheck: Check<Warp> = object({
   id: str(64, ID),
@@ -274,9 +275,44 @@ const elevationEditCheck = object({
   cells: intArray(0, FILE_LIMITS.maxMapSide - 1, FILE_LIMITS.maxCellsPerEdit),
 });
 
-/** An edit is a terrain stroke or an elevation stroke, told apart by its "type". */
-const editCheck: Check<Edit> = (v, path) =>
-  v !== null && typeof v === "object" && (v as { type?: unknown }).type === "elevation" ? elevationEditCheck(v, path) : strokeEditCheck(v, path);
+const lockEditCheck = object({
+  type: literal("lock"),
+  locked: bool,
+  brush: num(1, 16),
+  cells: intArray(0, FILE_LIMITS.maxMapSide - 1, FILE_LIMITS.maxCellsPerEdit),
+});
+
+const areaEditCheck = object({
+  type: literal("area"),
+  action: oneOf(["move", "paste", "delete", "regenerate"] as const),
+  area: object({ x: coord, y: coord, w: num(1, FILE_LIMITS.maxMapSide), h: num(1, FILE_LIMITS.maxMapSide) }),
+  toX: nullable(coord),
+  toY: nullable(coord),
+});
+
+const entityEditCheck = object({
+  type: literal("entity"),
+  action: oneOf(["place", "move", "turn", "sight", "delete"] as const),
+  id: str(64, ID),
+  kind: oneOf(ENTITY_KINDS),
+  x: coord,
+  y: coord,
+});
+
+const EDIT_CHECKS: Record<string, Check<Edit>> = {
+  stroke: strokeEditCheck,
+  elevation: elevationEditCheck,
+  lock: lockEditCheck,
+  area: areaEditCheck,
+  entity: entityEditCheck,
+};
+
+/** An edit is one of several kinds, told apart by its "type". */
+const editCheck: Check<Edit> = (v, path) => {
+  const type = v !== null && typeof v === "object" ? (v as { type?: unknown }).type : undefined;
+  const check = typeof type === "string" && Object.prototype.hasOwnProperty.call(EDIT_CHECKS, type) ? EDIT_CHECKS[type] : strokeEditCheck;
+  return check(v, path);
+};
 
 const savedZoneCheck = object({
   id: str(64, ID),
@@ -431,6 +467,10 @@ export const MIGRATIONS: Record<number, Migration> = {
   // elevation levels raised3 and raised4, and elevation-brush edits. Nothing in a
   // version-3 file needs changing; only the version number moves on.
   3: (file) => ({ ...file, schemaVersion: 4 }),
+  // v4 → v5 (Milestone 3, part A): things on the map can be "locked" (placed by hand),
+  // and new edit records for the lock brush, selections and the Things tool. Nothing
+  // in a version-4 file needs changing.
+  4: (file) => ({ ...file, schemaVersion: 5 }),
 };
 
 /** Upgrade an old file step by step to the target version. */
@@ -481,6 +521,12 @@ function loadMap(saved: ReturnType<typeof savedMapCheck>, path: string): MapBlue
       throw new FileFormatError(`${path}.openings[${i}]`, `the opening runs past the end of the ${o.edge} edge (${edgeLength} cells long)`);
   });
   saved.edits.forEach((e, i) => {
+    if (e.type === "area") {
+      if (e.area.x + e.area.w > width || e.area.y + e.area.h > height) throw new FileFormatError(`${path}.edits[${i}].area`, "the area runs past the edge of the map");
+      if (e.toX !== null) inside(e.toX, e.toY ?? 0, `${path}.edits[${i}]`);
+      return;
+    }
+    if (e.type === "entity") return inside(e.x, e.y, `${path}.edits[${i}]`);
     if (e.cells.length % 2 !== 0) throw new FileFormatError(`${path}.edits[${i}].cells`, "expected pairs of x, y numbers");
     if (e.type === "stroke" && terrainIndex(e.terrain) < 0) throw new FileFormatError(`${path}.edits[${i}].terrain`, `unknown terrain type "${e.terrain}"`);
     for (let k = 0; k < e.cells.length; k += 2) inside(e.cells[k], e.cells[k + 1], `${path}.edits[${i}].cells`);

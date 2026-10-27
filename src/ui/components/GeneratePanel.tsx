@@ -85,10 +85,26 @@ export function GeneratePanel() {
   return (
     <div className="generate-panel">
       <div className="generate-top">
-        <button className="primary wide big" disabled={!supported || s.generating} onClick={() => void s.generate()} title="Generate this map from its seed and settings. Cells you painted (locked) are kept. You can undo it.">
+        <button className="primary wide big" disabled={!supported || s.generating} onClick={() => void s.generate()} title="Generate this map from its seed and settings. By default, locked cells and things you placed are kept (see Generate changes, below). You can undo it.">
           {s.generating ? "Generating…" : "Generate"}
         </button>
         {!supported && <p className="hint">Only routes can be generated so far. Towns, forests and caves arrive in Milestone 5.</p>}
+        <label className="field" title="What Generate changes. Locked cells are the ones you painted, moved or locked with the lock brush (yellow corner).">
+          <span>Generate changes</span>
+          <select value={s.generateMode} onChange={(e) => s.setGenerateMode(e.target.value as "keep" | "whole")}>
+            <option value="keep">Everything except locked cells and placed things</option>
+            <option value="whole">The whole map (clears every lock)</option>
+          </select>
+        </label>
+        <button
+          className="secondary wide"
+          title="Make only the selected area again (Select tool, V). Everything outside it stays exactly as it is; each try looks different."
+          disabled={!supported || s.generating || !s.selection}
+          onClick={() => s.regenerateSelection()}
+        >
+          Regenerate selected area
+        </button>
+        {!s.selection && <p className="hint">To regenerate just part of the map, select it first with the Select tool (V).</p>}
         <div className="field-row">
           <label className="field grow" title="The seed decides every random choice. Same seed + same settings = the same map.">
             <span>Seed</span>

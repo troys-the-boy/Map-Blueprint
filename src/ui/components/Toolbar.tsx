@@ -4,6 +4,9 @@ import type { Tool } from "../store";
 import { useStore } from "../store";
 import { ELEVATION_LEVELS, getPalette, TERRAIN_TYPES } from "../../core/terrain";
 import { LEVEL_VALUE, PORYMAP_ELEVATION_COLORS, hexDigit } from "../../core/porymap";
+import { ENTITY_PREFIX } from "../../core/entities";
+import { ENTITY_COLORS } from "../../core/exporters/blueprint";
+import { THING_LABELS } from "../../core/things";
 import { Icon } from "./icons";
 import { canvasRef } from "./MapCanvas";
 import type { SideTab } from "./SidePanel";
@@ -12,6 +15,9 @@ const TOOLS: Array<{ tool: Tool; icon: string; label: string; key: string; tip: 
   { tool: "pencil", icon: "pencil", label: "Pencil", key: "B", tip: "Pencil (B): paint the selected terrain. Painted cells are locked so Generate keeps them." },
   { tool: "erase", icon: "erase", label: "Eraser", key: "E", tip: "Eraser (E): set cells back to plain ground and unlock them." },
   { tool: "elevation", icon: "elevation", label: "Elevation brush", key: "L", tip: "Elevation brush (L): paint the elevation numbers you'll set in Porymap's collision tab. Terrain stays as it is." },
+  { tool: "select", icon: "select", label: "Select", key: "V", tip: "Select (V): drag a rectangle. Drag inside it to move it (with the things in it). Copy, cut, paste, delete or regenerate it from the bar at the top." },
+  { tool: "things", icon: "things", label: "Things", key: "T", tip: "Things (T): tap to place the chosen thing (trainer, item…). Drag a thing to move it; tap a picked trainer to turn it." },
+  { tool: "lock", icon: "lock", label: "Lock brush", key: "K", tip: "Lock brush (K): lock cells so Generate keeps them, or unlock them so Generate can change them. Terrain stays as it is." },
   { tool: "pan", icon: "pan", label: "Move view", key: "H", tip: "Move view (H): drag to pan. You can also hold Space and drag, or drag with two fingers." },
 ];
 
@@ -45,7 +51,35 @@ export function Toolbar({ onShowTab }: { onShowTab: (tab: SideTab) => void }) {
       >
         <Icon name="pick" />
       </button>
-      {s.tool === "elevation" ? (
+      {s.tool === "things" ? (
+        <button
+          className="tool swatch-button"
+          title={s.thingKind === "remove" ? "Removing things. Tap to choose a thing to place instead." : `Placing: ${THING_LABELS[s.thingKind]}. Tap to choose another.`}
+          aria-label="Choose what to place"
+          onClick={() => onShowTab("terrain")}
+        >
+          {s.thingKind === "remove" ? (
+            <span className="swatch big">
+              <Icon name="erase" size={18} />
+            </span>
+          ) : (
+            <span className="swatch big marker" style={{ background: ENTITY_COLORS[s.thingKind] }}>
+              {ENTITY_PREFIX[s.thingKind]}
+            </span>
+          )}
+        </button>
+      ) : s.tool === "lock" ? (
+        <button
+          className="tool swatch-button"
+          title={s.lockMode === "lock" ? "Locking cells. Tap to switch to unlocking." : "Unlocking cells. Tap to switch to locking."}
+          aria-label={s.lockMode === "lock" ? "Switch to unlocking" : "Switch to locking"}
+          onClick={() => s.setLockMode(s.lockMode === "lock" ? "unlock" : "lock")}
+        >
+          <span className="swatch big">
+            <Icon name={s.lockMode === "lock" ? "lock" : "unlock"} size={20} />
+          </span>
+        </button>
+      ) : s.tool === "elevation" ? (
         <button className="tool swatch-button" title={`Elevation ${hexDigit(elevationValue)}. Tap to choose another.`} aria-label={`Choose elevation (current: ${hexDigit(elevationValue)})`} onClick={() => onShowTab("terrain")}>
           <span className="swatch big elevation-swatch" style={{ background: PORYMAP_ELEVATION_COLORS[elevationValue] }}>
             {hexDigit(elevationValue)}
@@ -58,7 +92,7 @@ export function Toolbar({ onShowTab }: { onShowTab: (tab: SideTab) => void }) {
           </span>
         </button>
       )}
-      <div className="brush" title="Brush size: how many cells wide the pencil, eraser and elevation brush paint.">
+      {(s.tool === "pencil" || s.tool === "erase" || s.tool === "elevation" || s.tool === "lock") && <div className="brush" title="Brush size: how many cells wide the pencil, eraser, elevation brush and lock brush paint.">
         <button className="tool small" aria-label="Smaller brush" onClick={() => s.setBrush(s.brush - 1)}>
           −
         </button>
@@ -66,7 +100,7 @@ export function Toolbar({ onShowTab }: { onShowTab: (tab: SideTab) => void }) {
         <button className="tool small" aria-label="Larger brush" onClick={() => s.setBrush(s.brush + 1)}>
           +
         </button>
-      </div>
+      </div>}
       <hr />
       <button
         className="tool"

@@ -124,6 +124,34 @@ button:focus-visible, summary:focus-visible, input:focus-visible, select:focus-v
 .swatch { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 5px; border: 1px solid rgba(255,255,255,.25); color: rgba(255,255,255,.9); font-size: 13px; font-weight: 700; flex: none; }
 .swatch.big { width: 34px; height: 34px; }
 
+/* ---- edit bar (Select and Things tools) ---- */
+
+.edit-bar {
+  position: absolute;
+  top: 30px;
+  left: 104px;
+  right: 12px;
+  width: max-content;
+  max-width: calc(100% - 116px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: rgba(30, 36, 40, 0.94);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.35);
+  z-index: 10;
+}
+.edit-bar button { min-height: var(--hit); min-width: var(--hit); }
+.edit-bar-label { padding: 0 6px; color: var(--muted); font-size: 14px; white-space: nowrap; }
+.edit-bar-label b { color: var(--text); }
+.edit-bar-group { display: inline-flex; align-items: center; gap: 2px; padding: 0 4px; border-left: 1px solid var(--line); }
+.edit-bar-value { font-size: 14px; min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; }
+.icon-button.facing { font-size: 20px; }
+.icon-button.facing.active { background: var(--accent); color: #0f1a16; }
+
 /* ---- terrain panel ---- */
 
 .terrain-dock { width: 270px; flex: none; border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; }

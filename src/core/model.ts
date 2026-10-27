@@ -75,6 +75,8 @@ export interface Entity {
   elevation: ElevationLevel;
   /** Suggested Porymap field values (graphics_id, script, flag…), all editable. */
   fields: Record<string, string | number | boolean>;
+  /** Placed or moved by hand: Generate keeps it where it is. Absent = false. */
+  locked?: boolean;
 }
 
 export const WARP_KINDS = ["door", "cave_mouth", "ladder", "stairs", "other"] as const;
@@ -179,7 +181,45 @@ export interface ElevationEdit {
   /** Flat list of cell coordinates: [x0, y0, x1, y1, …]. */
   cells: number[];
 }
-export type Edit = StrokeEdit | ElevationEdit;
+/** A lock-brush stroke: locks or unlocks cells, leaving terrain and elevation alone. */
+export interface LockEdit {
+  type: "lock";
+  locked: boolean;
+  brush: number;
+  /** Flat list of cell coordinates: [x0, y0, x1, y1, …]. */
+  cells: number[];
+}
+/** A rectangle of the map, in cells. */
+export interface CellRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+/**
+ * A selection action. move: the area moved to (toX, toY). paste: a copied area put
+ * down at (toX, toY) ("area" is where it was copied from). delete: the area cleared to
+ * plain ground. regenerate: the area made again by the generator. The cells
+ * themselves are in the map's layers; this is the record of what was done.
+ */
+export interface AreaEdit {
+  type: "area";
+  action: "move" | "paste" | "delete" | "regenerate";
+  area: CellRect;
+  toX: number | null;
+  toY: number | null;
+}
+/** A change to one thing on the map, made with the Things tool. */
+export interface EntityEdit {
+  type: "entity";
+  action: "place" | "move" | "turn" | "sight" | "delete";
+  id: string;
+  kind: EntityKind;
+  /** Where it is after the change (where it was, for delete). */
+  x: number;
+  y: number;
+}
+export type Edit = StrokeEdit | ElevationEdit | LockEdit | AreaEdit | EntityEdit;
 
 export interface MapBlueprint {
   /** Internal id, unique in the project (e.g. "map_3"). Not the MAP_* constant. */

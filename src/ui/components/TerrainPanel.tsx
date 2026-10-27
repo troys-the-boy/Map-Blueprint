@@ -1,4 +1,4 @@
-// The Paint tab: terrain picker, elevation brush, legend for things on the map,
+// The Paint tab: terrain picker, elevation brush, things to place, lock brush,
 // and overlay toggles (right-hand panel).
 
 import { useStore } from "../store";
@@ -9,6 +9,8 @@ import { ENTITY_COLORS } from "../../core/exporters/blueprint";
 import type { EntityKind } from "../../core/model";
 import type { Overlays } from "../prefs";
 import { HEAT_COLORS } from "../renderer";
+import { PLACEABLE_KINDS, THING_LABELS } from "../../core/things";
+import { Icon } from "./icons";
 
 const CATEGORY_LABELS: Record<string, string> = {
   ground: "Ground",
@@ -40,16 +42,20 @@ const LEVEL_LABELS: Record<string, string> = {
   bridge: "Bridge",
 };
 
-/** Things on the map and what their markers mean. Painting them comes in Milestone 3. */
+/** Tooltips for the things the Things tool can place. */
+const THING_TIPS: Partial<Record<EntityKind, string>> = {
+  trainer: "Trainer: faces down with a sight line of 3. Tap it again (or use the bar at the top) to turn it.",
+  item_ball: "Item ball (a Poké Ball you pick up).",
+  hidden_item: "Hidden item (found with the Itemfinder, or by pressing A).",
+  npc: "Person who wanders and talks.",
+  sign: "Sign: stand it on a sign tile or the cell in front of one.",
+  cut_tree: "Cut tree: blocks the way until the player uses Cut.",
+  smash_rock: "Rock: blocks the way until the player uses Rock Smash.",
+  strength_boulder: "Boulder: pushed with Strength.",
+};
+
+/** Things on the map the Things tool can't place yet (Milestone 4), and what their markers mean. */
 const LEGEND: Array<{ kind: EntityKind | "warp"; label: string }> = [
-  { kind: "trainer", label: "Trainer" },
-  { kind: "npc", label: "Person (NPC)" },
-  { kind: "item_ball", label: "Item ball" },
-  { kind: "hidden_item", label: "Hidden item" },
-  { kind: "cut_tree", label: "Cut tree (needs Cut)" },
-  { kind: "smash_rock", label: "Rock (needs Rock Smash)" },
-  { kind: "strength_boulder", label: "Boulder (needs Strength)" },
-  { kind: "sign", label: "Sign" },
   { kind: "berry_tree", label: "Berry tree" },
   { kind: "trigger", label: "Trigger (script tile)" },
   { kind: "secret_base", label: "Secret base" },
@@ -96,9 +102,9 @@ export function TerrainPanel({ onPicked }: { onPicked?: () => void }) {
               t.category !== cat ? null : (
                 <button
                   key={t.id}
-                  className={`terrain-item ${s.tool !== "elevation" && s.terrain === i ? "active" : ""}`}
+                  className={`terrain-item ${s.tool === "pencil" && s.terrain === i ? "active" : ""}`}
                   title={`${t.label} (${PASSABILITY_TEXT[t.passability]}). ${t.note}`}
-                  aria-pressed={s.tool !== "elevation" && s.terrain === i}
+                  aria-pressed={s.tool === "pencil" && s.terrain === i}
                   onClick={() => {
                     s.setTerrain(i);
                     onPicked?.();
@@ -147,9 +153,45 @@ export function TerrainPanel({ onPicked }: { onPicked?: () => void }) {
       </section>
 
       <section className="terrain-group">
-        <h3>On the map</h3>
-        <p className="hint">What the markers mean. Placing, moving and erasing them by hand comes in Milestone 3.</p>
-        <ul className="heat-key legend" aria-label="Map markers">
+        <h3>Things on the map</h3>
+        <p className="hint">Pick one, then tap the map to place it (Things tool, T). Drag a thing to move it. Things you place or move are kept when you Generate.</p>
+        <div className="terrain-grid">
+          {PLACEABLE_KINDS.map((kind) => {
+            const active = s.tool === "things" && s.thingKind === kind;
+            return (
+              <button
+                key={kind}
+                className={`terrain-item ${active ? "active" : ""}`}
+                title={THING_TIPS[kind]}
+                aria-pressed={active}
+                onClick={() => {
+                  s.setThingKind(kind);
+                  onPicked?.();
+                }}
+              >
+                <span className="swatch marker" style={{ background: ENTITY_COLORS[kind] }}>
+                  {ENTITY_PREFIX[kind]}
+                </span>
+                <span className="terrain-label">{THING_LABELS[kind]}</span>
+              </button>
+            );
+          })}
+          <button
+            className={`terrain-item ${s.tool === "things" && s.thingKind === "remove" ? "active" : ""}`}
+            title="Tap things on the map to remove them."
+            aria-pressed={s.tool === "things" && s.thingKind === "remove"}
+            onClick={() => {
+              s.setThingKind("remove");
+              onPicked?.();
+            }}
+          >
+            <span className="swatch">
+              <Icon name="erase" size={16} />
+            </span>
+            <span className="terrain-label">Remove things</span>
+          </button>
+        </div>
+        <ul className="heat-key legend" aria-label="Other map markers">
           {LEGEND.map((l) => (
             <li key={l.kind}>
               <span className="swatch marker" style={{ background: ENTITY_COLORS[l.kind] }}>
@@ -171,6 +213,33 @@ export function TerrainPanel({ onPicked }: { onPicked?: () => void }) {
             Entrance (Surf)
           </li>
         </ul>
+      </section>
+
+      <section className="terrain-group">
+        <h3>Lock brush</h3>
+        <p className="hint">Locked cells (marked with a yellow corner) are kept when you Generate. Lock what you want to keep; unlock what Generate may change.</p>
+        <div className="terrain-grid">
+          {(["lock", "unlock"] as const).map((mode) => {
+            const active = s.tool === "lock" && s.lockMode === mode;
+            return (
+              <button
+                key={mode}
+                className={`terrain-item ${active ? "active" : ""}`}
+                title={mode === "lock" ? "Lock cells (K)" : "Unlock cells (K, then tap the swatch to switch)"}
+                aria-pressed={active}
+                onClick={() => {
+                  s.setLockMode(mode);
+                  onPicked?.();
+                }}
+              >
+                <span className="swatch">
+                  <Icon name={mode} size={16} />
+                </span>
+                <span className="terrain-label">{mode === "lock" ? "Lock" : "Unlock"}</span>
+              </button>
+            );
+          })}
+        </div>
       </section>
 
       <section className="overlay-group">

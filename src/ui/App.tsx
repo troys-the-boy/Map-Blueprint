@@ -12,6 +12,7 @@ import { SidePanel } from "./components/SidePanel";
 import type { SideTab } from "./components/SidePanel";
 import { ExportDialog } from "./components/ExportDialog";
 import { Toolbar } from "./components/Toolbar";
+import { EditBar } from "./components/EditBar";
 import { Icon } from "./components/icons";
 import { openProject, saveProject } from "./files";
 import { screenLabel } from "./renderer";
@@ -124,6 +125,7 @@ export function App() {
         <div className="canvas-wrap">
           <MapCanvas onHover={setHover} />
           {map && <Toolbar onShowTab={showTab} />}
+          {map && <EditBar />}
           {!map && (
             <div className="welcome">
               <h1>Gen 3 Map Blueprint</h1>
@@ -202,13 +204,29 @@ function useKeyboardShortcuts(openNewMap: () => void) {
       if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT") return;
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
-      if (mod && key === "z" && !e.shiftKey) store.undo();
+      const selecting = store.tool === "select";
+      const centre = () => {
+        const r = canvasRef.renderer;
+        return r ? r.cellAt(r.size.width / 2, r.size.height / 2) : null;
+      };
+      if (mod && key === "c" && selecting) store.copySelection();
+      else if (mod && key === "x" && selecting) store.cutSelection();
+      else if (mod && key === "v") store.paste(canvasRef.renderer?.hover ?? centre());
+      else if ((key === "delete" || key === "backspace") && selecting && store.selection) store.deleteSelection();
+      else if ((key === "delete" || key === "backspace") && store.tool === "things" && store.selectedThing) store.deleteThing();
+      else if (key === "escape" && selecting) store.clearSelection();
+      else if (key === "enter" && store.floating) store.dropFloating();
+      else if (key === "r" && !mod && store.tool === "things" && store.selectedEntity?.kind === "trainer") store.turnClockwise();
+      else if (mod && key === "z" && !e.shiftKey) store.undo();
       else if (mod && (key === "y" || (key === "z" && e.shiftKey))) store.redo();
       else if (mod && key === "s") void saveProject(store);
       else if (mod) return;
       else if (key === "b") store.setTool("pencil");
       else if (key === "e") store.setTool("erase");
       else if (key === "l") store.setTool("elevation");
+      else if (key === "v") store.setTool("select");
+      else if (key === "t") store.setTool("things");
+      else if (key === "k") store.setTool("lock");
       else if (key === "h") store.setTool("pan");
       else if (key === "i") store.setTool("pick");
       else if (key === "n") openNewMap();
