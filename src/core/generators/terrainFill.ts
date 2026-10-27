@@ -5,7 +5,7 @@
 //   • a clearing, ponds and a stream (with bridges where it meets a path);
 //   • grass patches, mostly near the path;
 //   • biome touches: long grass in rainforest, mud and shallows in wetland,
-//     sand on the coast, flowers in meadows;
+//     sand on the coast, flowers in meadows (cell by cell, so biome zones work);
 //   • alpine routes are mountains: mostly bare rock with small clumps of
 //     conifers, rock walls close along the path (narrow passes), and boulder
 //     fields on the open ground.
@@ -33,10 +33,10 @@ export function fillTerrain(ctx: GenContext): void {
   const dist = distanceField(width, height, pathCells);
   const open = new Uint8Array(n);
   // Alpine passes are tighter: the rock closes in nearer the path.
-  const spread = (1 - p.treeDensity) * (ctx.input.biome === "alpine" ? 3.5 : 6);
   for (let i = 0; i < n; i++) {
     if (ctx.isProtected(i) || ctx.edgeDist(i) < p.borderThickness) continue;
     const [x, y] = ctx.xy(i);
+    const spread = (1 - p.treeDensity) * (ctx.biomeAt(i) === "alpine" ? 3.5 : 6);
     const reach = 0.6 + spread * ctx.noise.fractal(x + 101, y + 57, 6, 3);
     if (dist[i] <= reach) open[i] = 1;
   }
@@ -95,7 +95,7 @@ export function fillTerrain(ctx: GenContext): void {
     }
     if (open[i]) ctx.set(i, T.ground);
     else {
-      ctx.set(i, ctx.input.biome === "alpine" && !conifer(ctx, x, y) ? T.rockWall : T.tree);
+      ctx.set(i, ctx.biomeAt(i) === "alpine" && !conifer(ctx, x, y) ? T.rockWall : T.tree);
     }
   }
 
@@ -174,10 +174,10 @@ function addGrass(ctx: GenContext, dist: Float64Array) {
   if (!candidates.length || p.grass <= 0) return;
   candidates.sort((a, b) => b.score - a.score || a.i - b.i);
   const count = Math.round(candidates.length * p.grass);
-  const biome = ctx.input.biome;
   for (let k = 0; k < count; k++) {
     const { i } = candidates[k];
     const [x, y] = ctx.xy(i);
+    const biome = ctx.biomeAt(i);
     const tall = ctx.noise.at(x * 0.4 + 77, y * 0.4 + 11);
     const long = biome === "wetland" || (biome === "temperate_rainforest" && tall > 0.55);
     ctx.set(i, long ? T.longGrass : T.tallGrass);
@@ -185,8 +185,10 @@ function addGrass(ctx: GenContext, dist: Float64Array) {
 }
 
 function addBiomeDetail(ctx: GenContext) {
-  const biome = ctx.input.biome;
+  let anyAlpine = false;
   for (let i = 0; i < ctx.n; i++) {
+    const biome = ctx.biomeAt(i);
+    if (biome === "alpine") anyAlpine = true;
     if (ctx.terrain[i] !== T.ground || ctx.isProtected(i)) continue;
     const [x, y] = ctx.xy(i);
     const v = ctx.noise.fractal(x + 1300, y + 1700, 4, 2);
@@ -194,7 +196,7 @@ function addBiomeDetail(ctx: GenContext) {
     else if (biome === "wetland" && v > 0.66) ctx.set(i, T.mud);
     else if (biome === "meadow" && v > 0.68) ctx.set(i, T.flowers);
   }
-  if (biome === "alpine") addBoulders(ctx);
+  if (anyAlpine) addBoulders(ctx);
 }
 
 /** Alpine: is this wooded cell part of a conifer clump (else bare rock)? */
@@ -212,7 +214,7 @@ function addBoulders(ctx: GenContext) {
   for (let i = 0; i < ctx.n; i++) if (isPathRole(ctx, i) || ctx.role[i] === Role.GrassRoute || ctx.role[i] === Role.Stairs) pathCells.push(i);
   const dist = distanceField(ctx.width, ctx.height, pathCells);
   for (let i = 0; i < ctx.n; i++) {
-    if (ctx.terrain[i] !== T.ground || ctx.isProtected(i) || dist[i] < 3) continue;
+    if (ctx.terrain[i] !== T.ground || ctx.isProtected(i) || dist[i] < 3 || ctx.biomeAt(i) !== "alpine") continue;
     const [x, y] = ctx.xy(i);
     if (ctx.noise.fractal(x + 2300, y + 2900, 7, 2) < 0.55 || !ctx.rng.chance(0.3)) continue;
     let clear = true;

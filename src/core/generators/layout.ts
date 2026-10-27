@@ -137,14 +137,14 @@ function coast(ctx: GenContext, g: Geometry, nz: ValueNoise) {
   beachAround(ctx, seaCells, 2);
 }
 
-/** Sand along the shore: 1–3 cells wide, wandering with noise. */
-function beachAround(ctx: GenContext, waterCells: number[], baseWidth: number) {
+/** Sand along the shore: 1–3 cells wide, wandering with noise (mud in wetland). */
+export function beachAround(ctx: GenContext, waterCells: number[], baseWidth: number) {
   const dist = distanceField(ctx.width, ctx.height, waterCells);
   for (let i = 0; i < ctx.n; i++) {
     if (dist[i] === 0 || dist[i] === Infinity || ctx.role[i] !== Role.None) continue;
     const [x, y] = ctx.xy(i);
     const width = baseWidth + Math.round((ctx.noise.at(x * 0.35 + 500, y * 0.35) - 0.5) * 2);
-    if (dist[i] <= width) ctx.set(i, T.sand, Role.Beach);
+    if (dist[i] <= width) ctx.set(i, ctx.biomeAt(i) === "wetland" ? T.mud : T.sand, Role.Beach);
   }
 }
 
@@ -162,14 +162,18 @@ function river(ctx: GenContext, g: Geometry, nz: ValueNoise) {
   if (!line) return;
   const cells: number[] = [];
   for (const c of line) ctx.stamp(c, g.riverWidth, T.waterDeep, Role.Sea);
-  for (let i = 0; i < ctx.n; i++) if (ctx.role[i] === Role.Sea) cells.push(i);
+  for (let i = 0; i < ctx.n; i++)
+    if (ctx.role[i] === Role.Sea) {
+      cells.push(i);
+      ctx.crossable[i] = 1;
+    }
   // Short stretches of muddy or sandy bank.
   const dist = distanceField(ctx.width, ctx.height, cells);
   for (let i = 0; i < ctx.n; i++) {
     if (dist[i] !== 1 || ctx.role[i] !== Role.None) continue;
     const [x, y] = ctx.xy(i);
     const v = ctx.noise.at(x * 0.4 + 900, y * 0.4);
-    if (v > 0.62) ctx.set(i, ctx.input.biome === "wetland" ? T.mud : T.sand, Role.Beach);
+    if (v > 0.62) ctx.set(i, ctx.biomeAt(i) === "wetland" ? T.mud : T.sand, Role.Beach);
   }
 }
 

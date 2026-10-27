@@ -132,8 +132,9 @@ function addTerraces(ctx: GenContext, amount: number, eligible: (i: number) => b
   const alongLength = ctx.vertical ? ctx.height : ctx.width;
   // On coastal and river routes the low ground runs along the water, so hills are
   // measured from the shore, and only the land counts as room for them.
+  // (Only the layout's own sea or river counts: water zones elsewhere don't reshape the hills.)
   const sea: number[] = [];
-  for (let i = 0; i < ctx.n; i++) if (ctx.role[i] === Role.Sea) sea.push(i);
+  if (ctx.layout === "coastal" || ctx.layout === "river") for (let i = 0; i < ctx.n; i++) if (ctx.role[i] === Role.Sea) sea.push(i);
   const fromSea = sea.length ? distanceField(ctx.width, ctx.height, sea) : null;
   let halfOpen = (crossLength - 2 * bt) / 2;
   if (fromSea) {
@@ -329,7 +330,7 @@ function buildPlateau(ctx: GenContext, cells: number[], level: number, avoid: nu
     if (!ctx.inside(ox, oy)) return null;
     const below = ctx.idx(ox, oy);
     // The cell outside must be open low ground the player can use (not sea, not another cliff).
-    if (ctx.role[below] === Role.Sea || ctx.role[below] === Role.Cliff || ctx.locks[below]) return null;
+    if (ctx.role[below] === Role.Sea || ctx.role[below] === Role.Cliff || ctx.role[below] === Role.Border || ctx.role[below] === Role.Keep || ctx.locks[below]) return null;
     // …and not where the border wall will go.
     if (ctx.edgeDist(below) < ctx.params.borderThickness + 1) return null;
     return out;
@@ -410,6 +411,7 @@ export function connectStairs(ctx: GenContext): void {
       !ctx.locks[i] &&
       ctx.edgeDist(i) >= ctx.params.borderThickness &&
       ctx.role[i] !== Role.Cliff &&
+      ctx.role[i] !== Role.Border &&
       ctx.role[i] !== Role.Sea &&
       ctx.role[i] !== Role.Pocket &&
       (ctx.role[i] !== Role.Stairs || i === f.front || tops.includes(i));

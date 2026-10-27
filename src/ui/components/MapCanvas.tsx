@@ -39,7 +39,7 @@ export function MapCanvas({ onHover }: { onHover: (cell: [number, number] | null
     // Overlay toggles that don't change cells (grid, rulers, frame) only need a redraw.
     // So do brush size and tool changes (the hover outline shows the brush footprint).
     const brushFor = () =>
-      store.tool === "pencil" || store.tool === "erase" || store.tool === "elevation" || store.tool === "lock"
+      store.tool === "pencil" || store.tool === "erase" || store.tool === "elevation" || store.tool === "lock" || store.tool === "zones"
         ? store.brush
         : store.tool === "strokes" && !AREA_KINDS.has(store.smartKind)
           ? store.smartWidth
@@ -70,6 +70,7 @@ export function MapCanvas({ onHover }: { onHover: (cell: [number, number] | null
       // Selection, an area being placed, and the picked thing.
       const floating = store.floating ? { clip: store.floating.clip, x: store.floating.x, y: store.floating.y } : null;
       if (
+        renderer.activeZoneId !== store.activeZoneId ||
         renderer.selection !== store.selection ||
         renderer.selectedThing !== store.selectedThing ||
         renderer.floating?.clip !== floating?.clip ||
@@ -81,6 +82,7 @@ export function MapCanvas({ onHover }: { onHover: (cell: [number, number] | null
         lassoLength = store.lassoPoints?.length ?? 0;
         renderer.lassoPoints = store.lassoPoints;
         renderer.selection = store.selection;
+        renderer.activeZoneId = store.activeZoneId;
         renderer.selectedThing = store.selectedThing;
         renderer.floating = floating;
         redraw = true;

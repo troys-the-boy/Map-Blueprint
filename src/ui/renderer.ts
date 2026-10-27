@@ -17,6 +17,7 @@ import { ENTITY_COLORS, screenName } from "../core/exporters/blueprint";
 import { openingCells } from "../core/reach";
 import type { Issue } from "../core/validate";
 import type { Overlays } from "./prefs";
+import { zoneColor } from "./zoneColors";
 import { DEFAULT_PREFS } from "./prefs";
 
 /** Heatmap colours: index = heatmap value + 1 (see hmHeatmap in core/reach.ts). */
@@ -93,6 +94,8 @@ export class MapRenderer {
   floating: { clip: Clip; x: number; y: number } | null = null;
   /** ID of the thing picked with the Things tool. */
   selectedThing: string | null = null;
+  /** The zone being painted (drawn stronger, with an outline). */
+  activeZoneId: string | null = null;
 
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -300,6 +303,37 @@ export class MapRenderer {
             ctx.fillStyle = isImpassable(terrain[i]) ? PORYMAP_BLOCKED_TEXT : PORYMAP_PASSABLE_TEXT;
             ctx.fillText(label, cx, cy);
           }
+      }
+    }
+
+    // The user's zones: a wash of each zone's colour, the one being painted stronger and outlined.
+    if (this.overlays.zones) {
+      for (const z of map.layers.zones) {
+        if (z.data.generated === true) continue;
+        const active = z.id === this.activeZoneId;
+        ctx.fillStyle = zoneColor(z);
+        ctx.globalAlpha = active ? 0.45 : 0.28;
+        for (let y = y0; y < y1; y++)
+          for (let x = x0; x < x1; x++) if (z.mask.data[y * map.width + x]) ctx.fillRect(offsetX + x * scale, offsetY + y * scale, scale, scale);
+        ctx.globalAlpha = 1;
+        // Outline round the zone's edge.
+        ctx.beginPath();
+        const inZ = (x: number, y: number) => x >= 0 && y >= 0 && x < map.width && y < map.height && z.mask.data[y * map.width + x] === 1;
+        for (let y = y0; y < y1; y++)
+          for (let x = x0; x < x1; x++) {
+            if (!inZ(x, y)) continue;
+            const sx = offsetX + x * scale;
+            const sy = offsetY + y * scale;
+            if (!inZ(x, y - 1)) (ctx.moveTo(sx, sy), ctx.lineTo(sx + scale, sy));
+            if (!inZ(x, y + 1)) (ctx.moveTo(sx, sy + scale), ctx.lineTo(sx + scale, sy + scale));
+            if (!inZ(x - 1, y)) (ctx.moveTo(sx, sy), ctx.lineTo(sx, sy + scale));
+            if (!inZ(x + 1, y)) (ctx.moveTo(sx + scale, sy), ctx.lineTo(sx + scale, sy + scale));
+          }
+        ctx.strokeStyle = zoneColor(z);
+        ctx.lineWidth = active ? 3 : 1.5;
+        if (!z.hard) ctx.setLineDash([5, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
       }
     }
 

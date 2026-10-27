@@ -46,9 +46,10 @@ function pathCost(ctx: GenContext, margin: number) {
     if (ctx.locks[i]) return IS_WALKABLE[ctx.terrain[i]] ? 1 : Infinity;
     const r = ctx.role[i];
     if (r === Role.Opening || r === Role.Stairs) return 1;
-    if (r === Role.Cliff) return Infinity;
+    // Cliffs, and walls from the user's edge zones, can't be crossed.
+    if (r === Role.Cliff || r === Role.Border) return Infinity;
     // Rivers are crossed on bridges (expensive, so crossings are short); the sea can't be crossed on foot.
-    if (r === Role.Sea) return ctx.layout === "river" ? 14 : Infinity;
+    if (r === Role.Sea) return ctx.crossable[i] ? 14 : Infinity;
     if (r === Role.Beach) return 1.5;
     // Never through the border wall; near it only when there's no other way.
     if (ctx.edgeDist(i) < ctx.params.borderThickness) return Infinity;
@@ -106,10 +107,14 @@ export function buildRouteSkeleton(ctx: GenContext): void {
       }, mainLine[0]);
     }
     const stops = [from, ...waypoints(ctx, from, target, margin), target];
-    for (let s = 0; s + 1 < stops.length; s++) {
-      const leg = cheapestPath(ctx.width, ctx.height, stops[s], stops[s + 1], cost);
-      if (!leg) continue; // Blocked by locked cells; validation will report it.
+    // A waypoint that can't be reached (inside a lake zone, say) is skipped: the
+    // next leg starts from the last stop actually reached.
+    let at = stops[0];
+    for (let s = 1; s < stops.length; s++) {
+      const leg = cheapestPath(ctx.width, ctx.height, at, stops[s], cost);
+      if (!leg) continue; // Blocked by locked cells or water; validation will report it if the end can't be reached.
       mainLine.push(...(mainLine.length && mainLine[mainLine.length - 1] === leg[0] ? leg.slice(1) : leg));
+      at = stops[s];
     }
   }
   ctx.mainLine = mainLine;
@@ -157,10 +162,10 @@ function buildBranches(ctx: GenContext, cost: (i: number) => number, margin: num
  */
 function canPave(ctx: GenContext, j: number, centre: boolean): boolean {
   const r = ctx.role[j];
-  if (r === Role.Opening || r === Role.Cliff || r === Role.Stairs || r === Role.Bridge) return false;
+  if (r === Role.Opening || r === Role.Cliff || r === Role.Stairs || r === Role.Bridge || r === Role.Border) return false;
   if (ctx.edgeDist(j) < ctx.params.borderThickness) return false;
   if (r === Role.Sea) {
-    if (centre && ctx.layout === "river") ctx.set(j, T.bridge, Role.Bridge);
+    if (centre && ctx.crossable[j]) ctx.set(j, T.bridge, Role.Bridge);
     return false;
   }
   return true;

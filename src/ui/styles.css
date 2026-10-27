@@ -309,3 +309,11 @@ fieldset.checks .check { min-height: 38px; }
 .segmented { display: flex; gap: 4px; margin-top: 8px; }
 .segmented button { flex: 1; min-height: var(--hit); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; }
 .segmented button.active { background: var(--accent); color: #0f1a16; }
+.zone-row { border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
+.zone-row.active { border-color: var(--accent); }
+.zone-head { display: flex; align-items: center; gap: 8px; }
+.zone-head .hint { margin: 0; }
+.zone-row select { min-height: 40px; }
+.icon-button.active { background: var(--accent); color: #0f1a16; }
+.field-row.wrap { flex-wrap: wrap; }
+.field.small { max-width: 90px; }

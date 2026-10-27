@@ -30,6 +30,9 @@ import {
 import type { Direction } from "../core/terrain";
 import { entityAt, newThing, setFacing, setSight, sightOf, turnClockwise } from "../core/things";
 import type { SmartKind } from "../core/strokes";
+import type { ZoneKind } from "../core/zones";
+import { edgeBand, newZone, zoneLabel } from "../core/zones";
+import type { Edge } from "../core/model";
 import { AREA_KINDS, applySmartStroke, strokeWidth } from "../core/strokes";
 import { hmsFor, readRouteParams } from "../core/generators/params";
 import type { Issue } from "../core/validate";
@@ -51,8 +54,9 @@ export const APP_VERSION = "0.1.0";
  * "lasso" draws any shape for the same; "wand" picks every joined cell of one terrain.
  * "things" places, drags, turns and removes trainers, items and so on.
  * "strokes" draws smart strokes: paths, streams, tree walls, grass, water, ledges.
+ * "zones" paints the chosen zone (biome, water, edge, keep-clear) onto the map.
  */
-export type Tool = "pencil" | "erase" | "pan" | "pick" | "elevation" | "lock" | "select" | "lasso" | "wand" | "things" | "strokes";
+export type Tool = "pencil" | "erase" | "pan" | "pick" | "elevation" | "lock" | "select" | "lasso" | "wand" | "things" | "strokes" | "zones";
 
 /** How a new rectangle, lasso or wand pick changes the selection. */
 export type SelectMode = "new" | "add" | "subtract";
@@ -83,7 +87,7 @@ interface MapSnapshot {
 /** One undoable action: a paint stroke, or a whole-map change such as Generate. */
 type Command =
   | { type: "stroke"; mapId: string; diff: CellDiff; edit: Edit }
-  | { type: "snapshot"; mapId: string; before: MapSnapshot; after: MapSnapshot; edits?: Edit[] };
+  | { type: "snapshot"; mapId: string; before: MapSnapshot; after: MapSnapshot; edits?: Edit[]; tag?: string };
 
 function cloneZones(zones: Zone[]): Zone[] {
   return zones.map((z) => ({ ...z, mask: { ...z.mask, data: z.mask.data.slice() }, data: { ...z.data } }));
@@ -141,6 +145,10 @@ class EditorStore {
   /** Level the elevation brush paints (index into ELEVATION_LEVELS). */
   elevationLevel = ELEVATION_LEVELS.indexOf("raised1");
   brush = 1;
+  /** The zone the Zones tool paints into. */
+  activeZoneId: string | null = null;
+  /** Whether the Zones tool adds cells to the zone or takes them away. */
+  zoneErase = false;
   /** What the Smart strokes tool draws. */
   smartKind: SmartKind = "path";
   /** Which way ledges drawn with Smart strokes jump ("auto" = from the line). */
@@ -443,6 +451,8 @@ class EditorStore {
     this.selectAnchor = null;
     this.lassoPoints = null;
     this.smartPoints = null;
+    this.zonePaint = null;
+    this.activeZoneId = null;
     this.selectedThing = null;
     this.thingDrag = null;
   }
@@ -879,6 +889,129 @@ class EditorStore {
     this.markDirty();
     this.changed();
     this.cellsChanged(map.id, cells);
+  }
+
+  // ----- Zones -------------------------------------------------------------
+
+  get activeZone(): Zone | null {
+    return this.currentMap?.layers.zones.find((z) => z.id === this.activeZoneId) ?? null;
+  }
+
+  /** Make a zone change undoable. Repeated changes with the same tag (e.g. dragging a slider) are one step. */
+  private zoneStep(map: MapBlueprint, before: MapSnapshot, tag?: string) {
+    const undo = this.undoStacks.get(map.id);
+    const prev = undo?.[undo.length - 1];
+    const join = !!tag && prev?.type === "snapshot" && prev.tag === tag;
+    this.pushUndo({ type: "snapshot", mapId: map.id, before, after: snapshot(map), tag }, join);
+    this.markDirty();
+    this.changed();
+    this.cellsChanged(map.id, []);
+  }
+
+  /** Start a new zone and pick it for painting. With `cells`, it starts with those cells. */
+  addZone(kind: ZoneKind, data: Zone["data"] = {}, cells: number[] = []) {
+    const map = this.currentMap;
+    if (!map) return null;
+    const before = snapshot(map);
+    const z = newZone(map, kind, data);
+    for (const i of cells) z.mask.data[i] = 1;
+    map.layers.zones.push(z);
+    this.activeZoneId = z.id;
+    this.zoneErase = false;
+    if (!this.prefs.overlays.zones) this.setOverlay("zones", true);
+    if (!cells.length) this.setTool("zones");
+    this.zoneStep(map, before);
+    return z;
+  }
+
+  /** A boundary along part of a map edge, e.g. "east edge is coast from y 10 to y 40, 8 deep". */
+  addEdgeZone(boundary: string, edge: Edge, from: number, to: number, depth: number) {
+    const map = this.currentMap;
+    if (!map) return;
+    this.addZone("edge", { boundary }, edgeBand(map, edge, from, to, depth));
+  }
+
+  /** Change a zone's settings (soft/hard, fuzziness, biome, water type…). */
+  updateZone(id: string, patch: Partial<Pick<Zone, "hard" | "fuzziness">> & { data?: Zone["data"] }) {
+    const map = this.currentMap;
+    const z = map?.layers.zones.find((k) => k.id === id);
+    if (!map || !z) return;
+    const before = snapshot(map);
+    if (patch.hard !== undefined) z.hard = patch.hard;
+    if (patch.fuzziness !== undefined) z.fuzziness = Math.max(0, Math.min(1, patch.fuzziness));
+    if (patch.data) {
+      z.data = { ...z.data, ...patch.data };
+      z.name = zoneLabel(z);
+    }
+    this.zoneStep(map, before, `zone:${id}:${Object.keys(patch).join(",")}`);
+  }
+
+  deleteZone(id: string) {
+    const map = this.currentMap;
+    if (!map) return;
+    const before = snapshot(map);
+    map.layers.zones = map.layers.zones.filter((z) => z.id !== id);
+    if (this.activeZoneId === id) this.activeZoneId = null;
+    this.zoneStep(map, before);
+  }
+
+  /** Pick a zone to paint into (Zones tool). */
+  setActiveZone(id: string | null) {
+    this.activeZoneId = id;
+    if (id) this.setTool("zones");
+    this.changed();
+  }
+
+  setZoneErase(erase: boolean) {
+    this.zoneErase = erase;
+    this.changed();
+  }
+
+  /** Add the selected cells to the zone being painted (or take them away, in erase mode). */
+  selectionToZone() {
+    const map = this.currentMap;
+    const z = this.activeZone;
+    if (!map || !z || !this.selection) return;
+    const before = snapshot(map);
+    for (const i of areaCells(map, this.selection)) z.mask.data[i] = this.zoneErase ? 0 : 1;
+    this.zoneStep(map, before);
+  }
+
+  private zonePaint: { before: MapSnapshot; last: [number, number] | null } | null = null;
+
+  zoneDown(x: number, y: number) {
+    const map = this.currentMap;
+    if (!map || !this.activeZone) {
+      this.setNotice({ kind: "info", text: "Pick a zone in the Zones tab first (or start a new one), then paint it on the map." });
+      return;
+    }
+    this.zonePaint = { before: snapshot(map), last: null };
+    this.zoneMove(x, y);
+  }
+
+  zoneMove(x: number, y: number) {
+    const map = this.currentMap;
+    const z = this.activeZone;
+    const p = this.zonePaint;
+    if (!map || !z || !p) return;
+    const path = p.last ? lineCells(p.last[0], p.last[1], x, y) : [[x, y] as [number, number]];
+    for (const [px, py] of path)
+      for (const [cx, cy] of brushCells(px, py, this.brush)) if (cx >= 0 && cy >= 0 && cx < map.width && cy < map.height) z.mask.data[cy * map.width + cx] = this.zoneErase ? 0 : 1;
+    p.last = [x, y];
+    this.cellsChanged(map.id, []);
+  }
+
+  zoneUp(cancelled = false) {
+    const map = this.currentMap;
+    const p = this.zonePaint;
+    this.zonePaint = null;
+    if (!map || !p) return;
+    if (cancelled) {
+      restore(map, p.before);
+      this.cellsChanged(map.id, []);
+      return;
+    }
+    this.zoneStep(map, p.before);
   }
 
   // ----- Smart strokes tool ------------------------------------------------

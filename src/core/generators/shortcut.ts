@@ -41,6 +41,8 @@ export function addGrassShortcut(ctx: GenContext): void {
       r === Role.Cliff ||
       r === Role.Sea ||
       r === Role.Bridge ||
+      r === Role.Border ||
+      r === Role.Keep ||
       ctx.edgeDist(c) < ctx.params.borderThickness + 1
     );
   };
@@ -63,6 +65,8 @@ export function addGrassShortcut(ctx: GenContext): void {
       if (ctx.elevation[j] !== ctx.elevation[c]) return false;
       return !blocked(j) && r !== Role.MainPath && r !== Role.Branch && r !== Role.Stairs && r !== Role.Beach;
     });
+  // Wetland grass is long grass.
+  for (let i = 0; i < ctx.n; i++) if (ctx.role[i] === Role.GrassRoute && ctx.terrain[i] === T.tallGrass && ctx.biomeAt(i) === "wetland") ctx.set(i, T.longGrass);
   ctx.shortcut = { from: best.i, to: best.j };
 }
 
@@ -84,7 +88,7 @@ export function addPathGrass(ctx: GenContext): void {
         for (let dx = -2; dx <= 2; dx++) {
           if (!ctx.inside(x + dx, y + dy)) continue;
           const j = ctx.idx(x + dx, y + dy);
-          if (ctx.role[j] === Role.MainPath && ctx.terrain[j] === T.path) ctx.set(j, T.tallGrass);
+          if (ctx.role[j] === Role.MainPath && ctx.terrain[j] === T.path) ctx.set(j, ctx.biomeAt(j) === "wetland" ? T.longGrass : T.tallGrass);
         }
     }
   }

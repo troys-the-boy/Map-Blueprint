@@ -50,7 +50,7 @@ export function addLedgeRows(ctx: GenContext): void {
 /** Roles a ledge row may not cross: they must fall in the gap instead. */
 const KEEP_OPEN = new Set<number>([Role.Opening, Role.Stairs, Role.Bridge, Role.Pocket, Role.Branch, Role.Corridor]);
 /** Roles a detour may not pass through. */
-const NO_DETOUR = new Set<number>([Role.Pocket, Role.Sea, Role.Cliff, Role.Stairs, Role.Corridor, Role.Opening]);
+const NO_DETOUR = new Set<number>([Role.Pocket, Role.Sea, Role.Cliff, Role.Stairs, Role.Corridor, Role.Opening, Role.Border]);
 
 function tryLedgeRow(ctx: GenContext, along: number): boolean {
   const crossLength = ctx.vertical ? ctx.width : ctx.height;

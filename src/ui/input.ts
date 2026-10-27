@@ -142,6 +142,7 @@ export class CanvasInput {
       if (this.store.selecting) this.store.selectDown(cell[0], cell[1], { add: e.shiftKey, subtract: e.altKey });
       else if (this.pressTool === "things") this.store.thingsDown(cell[0], cell[1]);
       else if (this.pressTool === "strokes") this.store.smartDown(cell[0], cell[1]);
+      else if (this.pressTool === "zones") this.store.zoneDown(cell[0], cell[1]);
       else this.store.beginStroke(cell[0], cell[1]);
       this.setHover(cell);
     } else {
@@ -165,6 +166,7 @@ export class CanvasInput {
     if (e.pointerType !== "touch" || this.mode === "paint") this.setHover(cell);
     if (this.mode === "paint" && p && isSelectTool(this.pressTool)) this.store.selectMove(cell[0], cell[1]);
     else if (this.mode === "paint" && p && this.pressTool === "things") this.store.thingsMove(cell[0], cell[1]);
+    else if (this.mode === "paint" && p && this.pressTool === "zones") this.store.zoneMove(cell[0], cell[1]);
     else if (this.mode === "paint" && p && this.pressTool === "strokes") {
       const events = typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : [];
       for (const ce of events.length ? events : [e]) {
@@ -213,6 +215,7 @@ export class CanvasInput {
     if (isSelectTool(this.pressTool)) this.store.selectUp();
     else if (this.pressTool === "things") this.store.thingsUp();
     else if (this.pressTool === "strokes") this.store.smartUp(cancelled);
+    else if (this.pressTool === "zones") this.store.zoneUp(cancelled);
     else if (cancelled) this.store.cancelStroke();
     else this.store.endStroke();
   }

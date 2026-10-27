@@ -7,6 +7,7 @@
 import type { Rng } from "../rng";
 import { ValueNoise } from "../noise";
 import type { Biome, Entity, Opening, Zone } from "../model";
+import { BIOMES } from "../model";
 import type { Layout, RouteParams } from "./params";
 import { IS_WALKABLE, IS_WALL, T } from "../grid";
 import { ELEVATION_LEVELS } from "../terrain";
@@ -28,6 +29,7 @@ export const Role = {
   Cliff: 12, // the rim of a plateau (cliff faces and ledges)
   Stairs: 13, // stairs up a plateau, and the cells in front of and behind them
   GrassRoute: 14, // the grass shortcut ("two ways through")
+  Keep: 15, // a zone's keep-clear or open ground: stays walkable ground
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];
 
@@ -54,6 +56,8 @@ export interface GenInput {
   locks: Uint8Array;
   openings: Opening[];
   biome: Biome;
+  /** The user's zones (not the generator's own). */
+  zones: Zone[];
   layout: Layout;
   params: RouteParams;
   /** Used for suggested script labels and flags (e.g. "Route1"). */
@@ -74,6 +78,12 @@ export class GenContext {
   readonly noise: ValueNoise;
   readonly entities: Entity[] = [];
   readonly zones: Zone[] = [];
+  /** Biome of each cell (index into BIOMES): the map's biome, or a biome zone's. */
+  readonly biomeIndex: Uint8Array;
+  /** Water cells the path may cross on a bridge (rivers). */
+  readonly crossable: Uint8Array;
+  /** Which cells each of the user's zones covers this time (see generators/zones.ts). */
+  zoneCells: Array<{ zone: Zone; cells: Uint8Array }> = [];
   /** Centre-line cells of the main path, entrance to exit (the surfing lane on open water). */
   mainLine: number[] = [];
   /** Cell just inside each walk entrance, where the path starts. */
@@ -98,6 +108,8 @@ export class GenContext {
     this.n = this.width * this.height;
     this.locks = input.locks;
     this.role = new Uint8Array(this.n);
+    this.biomeIndex = new Uint8Array(this.n).fill(Math.max(0, BIOMES.indexOf(input.biome)));
+    this.crossable = new Uint8Array(this.n);
     this.noise = new ValueNoise(rng.fork("noise"));
     // Locked cells keep the user's terrain and elevation. Everything else starts as trees on the ground.
     this.terrain = new Uint8Array(this.n);
@@ -112,6 +124,11 @@ export class GenContext {
     const ns = o.filter((x) => x.edge === "north" || x.edge === "south").length;
     const ew = o.length - ns;
     this.vertical = ns === ew ? this.height >= this.width : ns > ew;
+  }
+
+  /** The biome of a cell. */
+  biomeAt(i: number): Biome {
+    return BIOMES[this.biomeIndex[i]];
   }
 
   get params() {

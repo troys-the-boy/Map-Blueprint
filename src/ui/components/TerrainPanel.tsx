@@ -69,6 +69,7 @@ const OVERLAYS: Array<{ key: keyof Overlays; label: string; tip: string }> = [
   { key: "grid", label: "Grid", tip: "Cell grid. Lighter lines every 5 cells, brighter every 10." },
   { key: "rulers", label: "Rulers", tip: "Coordinate rulers along the top and left edges." },
   { key: "screenFrame", label: "Screen frame", tip: "The 15×10 area one GBA screen shows, around the cell under the pointer." },
+  { key: "zones", label: "Zones", tip: "Your zones (Zones tab): biome areas, water, edges and keep-clear ground. A dashed outline is a soft zone, solid is hard." },
   { key: "locks", label: "Locked cells", tip: "Mark cells you painted. Generate never changes locked cells." },
   { key: "sight", label: "Trainer sight lines", tip: "The cells each trainer can see, up to the first tree or wall." },
   { key: "issues", label: "Problems", tip: "Outline cells with errors (red) and warnings (amber) from the Check tab." },

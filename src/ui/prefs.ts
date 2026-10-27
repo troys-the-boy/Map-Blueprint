@@ -17,6 +17,8 @@ export interface Overlays {
   reach: boolean;
   /** Elevation, drawn like Porymap's collision view. */
   elevation: boolean;
+  /** The user's zones (biome, water, edges, keep-clear). */
+  zones: boolean;
 }
 
 export interface Prefs {
@@ -40,7 +42,7 @@ export const DEFAULT_PREFS: Prefs = {
   fingerMode: "auto",
   penSeen: false,
   paletteId: "pnw",
-  overlays: { grid: true, rulers: true, screenFrame: true, locks: false, sight: true, issues: true, reach: false, elevation: false },
+  overlays: { grid: true, rulers: true, screenFrame: true, locks: false, sight: true, issues: true, reach: false, elevation: false, zones: true },
   lockWhenPainting: true,
   elevationOpacity: 0.6,
   gapFill: "regenerate",
@@ -64,6 +66,7 @@ export function loadPrefs(): Prefs {
         issues: p.overlays?.issues !== false,
         reach: p.overlays?.reach === true,
         elevation: p.overlays?.elevation === true,
+        zones: p.overlays?.zones !== false,
       },
       lockWhenPainting: p.lockWhenPainting !== false,
       gapFill: p.gapFill === "ground" ? "ground" : "regenerate",

@@ -8,6 +8,7 @@ import { ENTITY_PREFIX } from "../../core/entities";
 import { ENTITY_COLORS } from "../../core/exporters/blueprint";
 import { THING_LABELS } from "../../core/things";
 import { SMART_LABELS, SMART_TERRAIN } from "../../core/strokes";
+import { zoneColor } from "../zoneColors";
 import { Icon } from "./icons";
 import { canvasRef } from "./MapCanvas";
 import type { SideTab } from "./SidePanel";
@@ -20,6 +21,7 @@ const TOOLS: Array<{ tool: Tool; icon: string; label: string; key: string; tip: 
   { tool: "select", icon: "select", label: "Select", key: "V", tip: "Select (V): drag a rectangle. Drag inside it to move it (with the things in it). Copy, cut, paste, delete, fill, lock or regenerate it from the bar at the top." },
   { tool: "lasso", icon: "lasso", label: "Lasso", key: "Q", tip: "Lasso (Q): draw around any shape to select it. Then use it like a rectangle selection: drag inside to move it, or use the bar at the top." },
   { tool: "wand", icon: "wand", label: "Magic wand", key: "W", tip: "Magic wand (W): tap a cell to select every joined cell of the same terrain, such as a whole pond or grass patch. Tick Everywhere in the top bar to pick that terrain all over the map." },
+  { tool: "zones", icon: "zones", label: "Zones", key: "Z", tip: "Zones (Z): paint the zone picked in the Zones tab (a biome area, water, a boundary or keep-clear ground). The generator follows your zones." },
   { tool: "things", icon: "things", label: "Things", key: "T", tip: "Things (T): tap to place the chosen thing (trainer, item…). Drag a thing to move it; tap a picked trainer to turn it." },
 ];
 
@@ -94,6 +96,12 @@ export function Toolbar({ onShowTab }: { onShowTab: (tab: SideTab) => void }) {
             {TERRAIN_TYPES[SMART_TERRAIN[s.smartKind]].glyph ?? ""}
           </span>
         </button>
+      ) : s.tool === "zones" ? (
+        <button className="tool swatch-button" title={s.activeZone ? `Painting: ${s.activeZone.name}${s.zoneErase ? " (erasing)" : ""}. Tap to open the Zones tab.` : "No zone picked. Tap to open the Zones tab."} aria-label="Choose a zone" onClick={() => onShowTab("zones")}>
+          <span className="swatch big" style={{ background: s.activeZone ? zoneColor(s.activeZone) : "transparent" }}>
+            {s.zoneErase ? "−" : ""}
+          </span>
+        </button>
       ) : s.tool === "elevation" ? (
         <button className="tool swatch-button" title={`Elevation ${hexDigit(elevationValue)}. Tap to choose another.`} aria-label={`Choose elevation (current: ${hexDigit(elevationValue)})`} onClick={() => onShowTab("terrain")}>
           <span className="swatch big elevation-swatch" style={{ background: PORYMAP_ELEVATION_COLORS[elevationValue] }}>
@@ -107,7 +115,7 @@ export function Toolbar({ onShowTab }: { onShowTab: (tab: SideTab) => void }) {
           </span>
         </button>
       )}
-      {(s.tool === "pencil" || s.tool === "erase" || s.tool === "elevation" || s.tool === "lock" || s.tool === "strokes") && <div className="brush" title="Brush size: how many cells wide the pencil, eraser, elevation brush and lock brush paint.">
+      {(s.tool === "pencil" || s.tool === "erase" || s.tool === "elevation" || s.tool === "lock" || s.tool === "strokes" || s.tool === "zones") && <div className="brush" title="Brush size: how many cells wide the pencil, eraser, elevation brush and lock brush paint.">
         <button className="tool small" aria-label="Smaller brush" onClick={() => s.setBrush(s.brush - 1)}>
           −
         </button>

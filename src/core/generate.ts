@@ -28,10 +28,11 @@ import { addHmPockets, addLedgeRows } from "./generators/features";
 import { cleanup, closeLedgeTraps } from "./generators/cleanup";
 import { placeEntities } from "./generators/placement";
 import { addSnow } from "./generators/snow";
+import { applyMarsh, applyZones, prepareZones, shiftOpeningsOutOfZones } from "./generators/zones";
 import { ELEVATION_LEVELS } from "./terrain";
 
 /** Version of the generators. Bumped when the same seed starts giving different maps. */
-export const GENERATOR_VERSION = 4;
+export const GENERATOR_VERSION = 5;
 
 export interface GenerateResult {
   ok: boolean;
@@ -88,13 +89,16 @@ function runOnce(map: MapBlueprint, input: GenInput, geometry: Geometry, seed: n
   const ctx = new GenContext(input, new Rng(seed));
   // Things placed by hand stay put; the generator works around them.
   for (const e of map.entities) if (e.locked) ctx.entities.push(cloneThing(e));
+  prepareZones(ctx); // which cells each of the user's zones covers; biome per cell
   applyLayout(ctx, geometry); // sea, river or open water
+  applyZones(ctx); // the user's water, boundaries and keep-clear areas
   addPlateaus(ctx); // elevation: cliffs, stairs, ledges
   buildRouteSkeleton(ctx); // entrances, main path, branches
   connectStairs(ctx); // trails up to every flight of stairs
   addGrassShortcut(ctx); // the second way through, in tall grass
   addPathGrass(ctx); // grass across the main path
   fillTerrain(ctx); // trees, open ground, ponds, stream, grass
+  applyMarsh(ctx); // marsh zones: shallow pools, long grass, mud
   addHmPockets(ctx);
   addLedgeRows(ctx); // ledges across the route: wind round one way, jump down the other
   cleanup(ctx);
@@ -153,7 +157,9 @@ export function generateRoute(map: MapBlueprint, validate: Omit<ValidateOptions,
   const layout = resolveLayout(params, map.biome);
   const layoutSeed = deriveSeed(map.seed, "layout");
   const geometry = computeGeometry(map.width, map.height, params, layout, layoutSeed);
-  const openings = map.openings.length ? map.openings : layoutOpenings(geometry, params, layout, new Rng(deriveSeed(map.seed, "openings")));
+  const openings = map.openings.length
+    ? map.openings
+    : shiftOpeningsOutOfZones(map, layoutOpenings(geometry, params, layout, new Rng(deriveSeed(map.seed, "openings"))));
   const input: GenInput = {
     width: map.width,
     height: map.height,
@@ -162,6 +168,7 @@ export function generateRoute(map: MapBlueprint, validate: Omit<ValidateOptions,
     locks: map.layers.locks.data,
     openings,
     biome: map.biome,
+    zones: map.layers.zones.filter((z) => z.data.generated !== true),
     layout,
     params,
     labelBase: labelBase(map),

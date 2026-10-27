@@ -48,6 +48,7 @@ Double-click **`start.command`**. If macOS refuses to open it:
 | Paint | Left-drag with the Pencil tool (**B**) | Apple Pencil, or one finger (see below) |
 | Erase to plain ground | Eraser tool (**E**) | Eraser tool |
 | Draw a path, stream, tree wall, ledge, grass patch or pond | Smart strokes (**S**), pick the kind in the Paint tab | Smart strokes tool, with the Pencil |
+| Plan zones (biome, water, edges, keep clear) | Zones tab; paint with the Zones tool (**Z**) | Zones tab, then the Zones tool |
 | Paint elevation | Elevation brush (**L**) | Elevation brush in the tool strip |
 | Lock / unlock cells | Lock brush (**K**) / Unlock brush (**U**) | The two padlock buttons in the tool strip |
 | Select an area | Select tool (**V**), drag a rectangle; Lasso (**Q**), draw round any shape; Magic wand (**W**), click a terrain | Select, Lasso or Magic wand tool, with the Pencil |
@@ -136,6 +137,27 @@ Things you place, move or turn are kept when you Generate, and generated things 
 All of these can be undone.
 
 ---
+
+## Zones: planning a map before you generate (Milestone 3)
+
+Zones are optional. Without them the generator decides everything; with them it follows your plan and fills in the rest. Open the **Zones** tab.
+
+**Kinds of zone:**
+
+- **Biome area:** part of the map is a different biome, e.g. wetland in the south of a meadow route. A map can have several.
+- **Water:** lake, pond, river, ocean or marsh. Deep water needs Surf; shallow can be walked through. The path goes round lakes, ponds and the sea, and crosses rivers on bridges. Marsh is shallow pools, long grass and mud.
+- **Boundary:** coast (sea with a beach), riverbank, cliff, forest wall, or open ground, along a map edge or as a line you paint.
+- **Keep clear:** walkable ground, no water or trees (a clearing, a town lot, a landmark).
+
+**Making a zone:**
+
+- **New zone** buttons start one; then paint it on the map with the Zones tool (**Z**, brush size applies). **Paint / Erase** switches between adding and removing cells.
+- If something is selected (Select, Lasso or Magic wand), a new zone starts as that area. **Add the selection to this zone** adds more.
+- **Along a map edge** makes a boundary from a form, e.g. east edge, coast, from y 10 to y 40, 8 cells deep.
+
+**Soft or hard:** zones are soft by default: the generator follows their general shape with natural, irregular edges. **Fuzziness** (0–100) sets how loose: at 100 the edge moves up to 4 cells in or out. Tick **Exact edges (hard)** to have a zone followed cell for cell. On the map, soft zones have a dashed outline and hard ones a solid one (**Show → Zones** turns the overlay off).
+
+Zones are saved with the map and kept every time you generate. Locked cells always win over zones. Automatic entrances move along the edge out of water and wall zones.
 
 ## Generate a route (Milestone 2)
 
@@ -339,7 +361,8 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 ## Known limitations
 
 - **Routes only.** Generate works for routes. Towns, forests and caves arrive in Milestone 5, and until then those map types stay blank.
-- **Zones and the variations grid** come in the next parts of Milestone 3.
+- **The variations grid** comes in the last part of Milestone 3.
+- **Mountains follow the map's own biome.** A biome zone changes the ground, trees, grass and detail in its area, but elevation (alpine terraces) still follows the map's main biome.
 - **Generate works around drawn features but doesn't route through them.** A path you draw is kept, but the generated main path may run elsewhere; join them with another stroke if you want one route.
 - **Regenerated gaps are often forest.** Away from the path, the generator mostly grows trees, so a gap filled with generated terrain may come back as forest. Use Fill with… or the pencil if you want open ground there.
 - **Moving across elevation** isn't smoothed: an area moved onto raised ground keeps its own elevation, so check the Elevation view (and the Check tab) afterwards.

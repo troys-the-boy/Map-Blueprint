@@ -197,6 +197,19 @@ The `elevation` layer stores one level per cell: `water`, `ground`, `raised1`, `
 
 Generated plateaus are ringed by `rock_wall` (the cliff face). Parts of the rim are `stairs`, and some stretches are `ledge_s`, `ledge_e` or `ledge_w`.
 
+#### Zones (the user's plan)
+
+Each zone is a mask of cells (`"mask"`, legend `["out", "in"]`) with a `kind`, `hard` (followed exactly) or soft with `fuzziness` 0–1 (the edge moves in or out by up to 4 × fuzziness cells, and a thin zone moves inward by at most half its thickness), and kind-specific `data`:
+
+| `kind` | `data` | What the generator does |
+| --- | --- | --- |
+| `biome` | `biome`: a biome id | That area uses the biome's trees, grass and detail (elevation still follows the map's biome) |
+| `water` | `water`: `lake` \| `pond` \| `river` \| `ocean` \| `marsh`; `depth`: `deep` \| `shallow` | Water laid before the path is planned; rivers are crossed on bridges; oceans get a beach; marsh becomes shallow pools, long grass and mud |
+| `edge` | `boundary`: `coast` \| `riverbank` \| `cliff` \| `forest` \| `open` | Sea + beach, river water + bank, rock wall, dense forest, or plain walkable ground |
+| `keep_clear` | (none) | Walkable ground: no trees or water |
+
+Later zones win where zones overlap. Locked cells always win over zones. Unknown kinds or values are ignored.
+
 #### Zones written by the generator
 
 Each HM-gated area becomes a zone with these values:
