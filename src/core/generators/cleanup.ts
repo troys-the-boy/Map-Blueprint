@@ -138,7 +138,9 @@ function widenPinches(ctx: GenContext) {
  * becomes plain cliff; a ledge in a row on flat ground becomes a tree.
  */
 export function closeLedgeTraps(ctx: GenContext): void {
-  const starts = ctx.input.openings.filter((o) => o.kind === "walk").flatMap((o) => openingCells(o, ctx.width, ctx.height));
+  // A cave has no edge entrances: start from the floor in front of its exits.
+  const edge = ctx.input.openings.filter((o) => o.kind === "walk").flatMap((o) => openingCells(o, ctx.width, ctx.height));
+  const starts = edge.length ? edge : ctx.openingEnds;
   if (!starts.length) return;
   for (let pass = 0; pass < 6; pass++) {
     const graph = new MoveGraph({ width: ctx.width, height: ctx.height, terrain: ctx.terrain, entities: ctx.entities, elevation: ctx.elevation }, new Set());
@@ -152,7 +154,7 @@ export function closeLedgeTraps(ctx: GenContext): void {
       if (!ctx.inside(x + jump.dx, y + jump.dy)) continue;
       const land = ctx.idx(x + jump.dx, y + jump.dy);
       if (forward[land] && !back[land] && !ctx.locks[i]) {
-        ctx.set(i, ctx.role[i] === Role.Cliff ? T.rockWall : T.tree);
+        ctx.set(i, ctx.role[i] === Role.Cliff ? T.rockWall : ctx.wallFill);
         changed = true;
       }
     }

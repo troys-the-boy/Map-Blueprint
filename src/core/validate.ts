@@ -93,7 +93,9 @@ export function validateMap(map: MapBlueprint, opts: ValidateOptions = {}): Issu
   const view: MapView = { width, height, terrain, entities: map.entities, elevation: map.layers.elevation.data };
   const graph = new MoveGraph(view, new Set(hms));
   const everyHm = new MoveGraph(view, new Set(MOVEMENT_HMS));
-  if (map.openings.length === 0) warn("no-entrances", "This map has no entrances yet. Generate it, or add entrances in the Generate panel.");
+  // A cave's ways in and out are its warps (cave mouths, ladders), not openings in the edge.
+  const caveExits = map.mapType === "cave" ? map.warps : [];
+  if (map.openings.length === 0 && !caveExits.length) warn("no-entrances", "This map has no entrances yet. Generate it, or add entrances in the Generate panel.");
   // Surf entrances only count once the player has Surf.
   const canUse = (o: Opening) => openingNeeds(o).every((h) => hms.includes(h));
   const openings = map.openings.filter(canUse).map((o) => ({ o, cells: openingCells(o, width, height).filter((c) => graph.canStand[c]) }));
@@ -111,13 +113,21 @@ export function validateMap(map: MapBlueprint, opts: ValidateOptions = {}): Issu
   }
   if (map.openings.length && !openings.length)
     err("no-usable-entrance", `This map can only be entered by surfing, but the player doesn't have Surf here. Tick Surf under "Player has" if they do.`);
-  const usable = openings.filter((x) => x.cells.length);
+  const usable: Array<{ label: string; cells: number[] }> = openings.filter((x) => x.cells.length).map((x) => ({ label: describeOpening(x.o), cells: x.cells }));
+  // A cave exit counts as a way in from the cells around it (the player steps out of it onto the floor).
+  caveExits.forEach((w, k) => {
+    const cells = [[0, 0], ...DIRS.map((d) => [d.dx, d.dy])]
+      .map(([dx, dy]) => [w.x + dx, w.y + dy])
+      .filter(([x, y]) => x >= 0 && y >= 0 && x < width && y < height)
+      .map(([x, y]) => y * width + x)
+      .filter((c) => graph.canStand[c]);
+    if (cells.length) usable.push({ label: `exit W${k}`, cells });
+  });
   for (const a of usable) {
     const reach = graph.forward(a.cells);
     for (const b of usable) {
       if (a === b) continue;
-      if (!b.cells.some((c) => reach[c]))
-        err("unreachable-exit", `You can't get from the ${describeOpening(a.o)} to the ${describeOpening(b.o)} ${hmList(hms)}.`, b.cells);
+      if (!b.cells.some((c) => reach[c])) err("unreachable-exit", `You can't get from the ${a.label} to the ${b.label} ${hmList(hms)}.`, b.cells);
     }
   }
 

@@ -9,6 +9,7 @@ import { ValueNoise } from "../noise";
 import type { Biome, Entity, MapType, Opening, Warp, Zone } from "../model";
 import type { TownParams } from "./townParams";
 import type { ForestParams } from "./forestParams";
+import type { CaveParams } from "./caveParams";
 import type { TownBuilding } from "./town";
 import { BIOMES } from "../model";
 import type { Layout, RouteParams } from "./params";
@@ -75,6 +76,8 @@ export interface GenInput {
   town?: TownParams;
   /** Forest settings (forests only). */
   forest?: ForestParams;
+  /** Cave settings (caves only). */
+  cave?: CaveParams;
   /** Cells where the last Generate laid a bridge over locked water (they go back to water first). */
   oldBridges?: Uint8Array;
   biome: Biome;
@@ -138,6 +141,10 @@ export class GenContext {
   quietEnds: number[] = [];
   /** Bridges laid over water the user locked (remembered so the next Generate can move them). */
   lockedBridges: number[] = [];
+  /** What plateaus and stair trails are made of: ground, trees and path outdoors; cave floor and rock in caves. */
+  floor: number = T.ground;
+  wallFill: number = T.tree;
+  trail: number = T.path;
 
   constructor(
     readonly input: GenInput,

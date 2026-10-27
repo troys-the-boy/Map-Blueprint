@@ -42,6 +42,7 @@ export const T = {
   signTile: requireTerrain("sign_tile"),
   caveEntrance: requireTerrain("cave_entrance"),
   building: requireTerrain("building"),
+  caveFloor: requireTerrain("cave_floor"),
   fence: requireTerrain("fence"),
   void: requireTerrain("void"),
 } as const;

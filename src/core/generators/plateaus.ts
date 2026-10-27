@@ -223,6 +223,11 @@ function nearRole(ctx: GenContext, i: number, role: number, r: number): boolean 
 }
 
 /** A noisy ellipse of eligible cells around a centre, or null if it doesn't fit. */
+/** A rounded, tidied shape of eligible cells around a centre (for plateaus elsewhere, such as caves). */
+export function blobShape(ctx: GenContext, centre: number, rx: number, ry: number, eligible: (i: number) => boolean): number[] | null {
+  return blob(ctx, centre, rx, ry, eligible);
+}
+
 function blob(ctx: GenContext, centre: number, rx: number, ry: number, eligible: (i: number) => boolean): number[] | null {
   const [cx, cy] = ctx.xy(centre);
   const cells: number[] = [];
@@ -299,7 +304,7 @@ function tidy(ctx: GenContext, shape: number[], eligible: (i: number) => boolean
  * With `againstBorder`, the map's border counts as part of the plateau, so there's
  * no cliff along that side (alpine terraces rise straight into the mountains).
  */
-function buildPlateau(ctx: GenContext, cells: number[], level: number, avoid: number[], againstBorder = false): number[] | null {
+export function buildPlateau(ctx: GenContext, cells: number[], level: number, avoid: number[], againstBorder = false): number[] | null {
   const inside = new Set(cells);
   // Terraces lean against the border wall: no cliff is needed on that side.
   const bt = ctx.params.borderThickness;
@@ -369,14 +374,14 @@ function buildPlateau(ctx: GenContext, cells: number[], level: number, avoid: nu
     // Keep the cells in front of and behind the stairs open.
     const front = ctx.idx(x + f.dx, y + f.dy);
     const back = ctx.idx(x - f.dx, y - f.dy);
-    for (const c of [front, back]) if (!ctx.locks[c]) ctx.set(c, T.ground, Role.Stairs);
+    for (const c of [front, back]) if (!ctx.locks[c]) ctx.set(c, ctx.floor, Role.Stairs);
     ctx.stairs.push({ cell: i, front, back });
     placed.push(i);
   }
   if (!placed.length) {
     // No way up: undo the cliff so the area stays reachable.
     for (const i of rim) {
-      ctx.set(i, T.tree, Role.None);
+      ctx.set(i, ctx.wallFill, Role.None);
       ctx.role[i] = Role.None;
     }
     const k = RAISED.indexOf(level);
@@ -441,7 +446,7 @@ export function connectStairs(ctx: GenContext): void {
       if (next < 0) break;
       c = next;
       // As wide as the narrowest path setting, where the ground allows.
-      if (dist[c] > 0) ctx.stamp(c, ctx.params.pathWidthMin, T.path, Role.Branch, (j) => passable(j) && ctx.role[j] !== Role.Stairs && ctx.role[j] !== Role.Opening);
+      if (dist[c] > 0) ctx.stamp(c, ctx.params.pathWidthMin, ctx.trail, Role.Branch, (j) => passable(j) && ctx.role[j] !== Role.Stairs && ctx.role[j] !== Role.Opening);
     }
     tops.push(f.back);
   }

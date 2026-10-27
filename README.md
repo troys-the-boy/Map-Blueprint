@@ -202,6 +202,19 @@ Make a map of type **Forest** (sizes S 40×40, M 50×50, L 60×60), then press *
 
 The deepest dead ends get item balls (two more than **Extra items**), trainers watch the way between the entrances, long grass grows along the paths (**Grass** sets how much), and there's a sign at the entrance. The biome sets the look: long grass in rainforest and wetland woods (wetland clearings hold a little pool and mud), tall grass and lots of flowers in meadow woods, snowy grass and outcrops of rock in alpine ones. Big clearings sometimes have a clump of trees standing in them. Forests follow your zones too, and their paths cross rivers and water you painted on bridges.
 
+## Generate a cave (Milestone 5)
+
+Make a map of type **Cave floor** (sizes S 30×30, M 40×40, L 50×50), then press **Generate**. You get rounded chambers of cave floor in rock, joined by winding tunnels, like Granite Cave. The **Cave** group in the Generate tab sets:
+
+- **Openness:** narrow tunnels and small chambers (0) up to big caverns (100).
+- **Exits:** cave mouths, the ways out. Each is a warp in the rock with the floor in front of it. To link one to a route, pick it with the Things tool and set where it leads in the Details tab (for example the route's cave mouth warp); it's then kept when you Generate, and Generate only adds the rest.
+- **Raised platforms:** rock platforms with stairs up, off the main way.
+- **Underground water:** pools that need Surf, in the far parts of the cave (never on the main way).
+- **Rock Smash rocks:** each closes a side passage with an item behind it.
+- **Dark (needs Flash):** sets the header's requires_flash.
+
+Trainers watch the main way between the exits, the far corners get items and hidden items, and wild Pokémon use the cave rate (land 10). The checks treat the exits as the cave's entrances: every exit must lead to every other one. More floors, with ladders between them, come next.
+
 ## Generate a route (Milestone 2)
 
 **Water you paint** (a stream, a lake) is kept, and the route's path crosses it on a bridge where it needs to. In meadows the ground is full of flowers.
@@ -465,7 +478,7 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 
 ## Known limitations
 
-- **Routes, towns and forests only.** Caves arrive in the next parts of Milestone 5; until then cave maps stay blank.
+- **One cave floor at a time.** Floors linked by ladders, and a Strength boulder puzzle, come in the last part of Milestone 5.
 - **Bridges over painted water.** Water you paint is locked, but Generate may lay a bridge across it where its path has to cross (routes, towns and forests). It's the one change Generate makes to a locked cell; the next Generate can move the bridge.
 - **Waterfront towns** sometimes get wide patches of road where lanes run side by side.
 - **Mountains follow the map's own biome.** A biome zone changes the ground, trees, grass and detail in its area, but elevation (alpine terraces) still follows the map's main biome.

@@ -44,12 +44,17 @@ export function placeEntities(ctx: GenContext): void {
   const routeOpenings = ctx.input.openings.filter((o) => o.kind === (water ? "surf" : "walk"));
   const hms = new Set<Hm>(water ? ["surf"] : []);
   const view = (terrain: Uint8Array) => ({ width, height, terrain, entities: ctx.entities, elevation: ctx.elevation });
-  const starts = routeOpenings.flatMap((o) => openingCells(o, width, height));
-  const fromOpenings = distanceField(width, height, ctx.input.openings.flatMap((o) => openingCells(o, width, height)));
+  // A cave's ways in are its exits (warps), not edges: start from the floor in front of them.
+  const cave = ctx.input.mapType === "cave";
+  const entrances: number[][] = cave ? ctx.openingEnds.map((c) => [c]) : routeOpenings.map((o) => openingCells(o, width, height));
+  const starts = entrances.flat();
+  const fromOpenings = distanceField(width, height, cave ? starts : ctx.input.openings.flatMap((o) => openingCells(o, width, height)));
   const reachNoHm = new MoveGraph(view(ctx.terrain), hms).forward(starts);
   const lane = new Set(water ? ctx.mainLine : []);
   const pathish = (i: number) => {
     if (water) return lane.has(i);
+    // In a cave all the floor is open: the main way through is the "path" trainers watch.
+    if (ctx.input.mapType === "cave") return ctx.role[i] === Role.MainPath || ctx.role[i] === Role.Opening;
     const r = ctx.role[i];
     return r === Role.MainPath || r === Role.Branch || r === Role.Corridor || r === Role.Opening || r === Role.Bridge || r === Role.GrassRoute;
   };
@@ -64,7 +69,7 @@ export function placeEntities(ctx: GenContext): void {
     const [x, y] = ctx.xy(i);
     return travel ? fromStart(travel, x, y, width, height) : 0;
   };
-  if (ctx.openingEnds.length) {
+  if (ctx.openingEnds.length && !cave) {
     const end = travel ? ctx.openingEnds.reduce((a, b) => (startDist(b) < startDist(a) ? b : a)) : ctx.openingEnds[0];
     const [ex, ey] = ctx.xy(end);
     let best = -1;
@@ -246,13 +251,12 @@ export function placeEntities(ctx: GenContext): void {
   };
   // Can the player still get between the entrances if the trainer's sight line were a wall?
   const avoidable = (sight: number[], standing: number) => {
-    if (routeOpenings.length < 2) return true;
+    if (entrances.length < 2) return true;
     const blocked = ctx.terrain.slice();
     for (const c of sight) blocked[c] = T.tree;
     blocked[standing] = T.tree;
-    const first = openingCells(routeOpenings[0], width, height);
-    const reach = new MoveGraph(view(blocked), hms).forward(first);
-    return routeOpenings.slice(1).every((o) => openingCells(o, width, height).some((c) => reach[c]));
+    const reach = new MoveGraph(view(blocked), hms).forward(entrances[0]);
+    return entrances.slice(1).every((cells) => cells.some((c) => reach[c]));
   };
   let grassWatchers = 0;
   const placedSights: number[][] = [];

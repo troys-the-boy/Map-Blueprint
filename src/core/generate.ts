@@ -34,6 +34,8 @@ import { buildTown } from "./generators/town";
 import { buildingList, readTownParams } from "./generators/townParams";
 import { addForestLedges, addGuaranteedHidden, buildForest } from "./generators/forest";
 import { readForestParams } from "./generators/forestParams";
+import { buildCave } from "./generators/cave";
+import { readCaveParams } from "./generators/caveParams";
 
 /** Version of the generators. Bumped when the same seed starts giving different maps. */
 export const GENERATOR_VERSION = 6;
@@ -56,7 +58,7 @@ export interface GenerateResult {
 
 /** Map types that have a generator so far. */
 export function canGenerate(map: MapBlueprint): boolean {
-  return map.mapType === "route" || map.mapType === "town" || map.mapType === "forest";
+  return map.mapType === "route" || map.mapType === "town" || map.mapType === "forest" || map.mapType === "cave";
 }
 
 /** Final elevation: plateau levels as built, water on the low level marked "water", bridges "bridge". */
@@ -113,12 +115,22 @@ function forestStages(ctx: GenContext) {
   addGuaranteedHidden(ctx);
 }
 
+/** A cave floor: chambers, tunnels, exits, platforms, water, Rock Smash rocks (see generators/cave.ts). */
+function caveStages(ctx: GenContext) {
+  prepareZones(ctx);
+  applyZones(ctx);
+  buildCave(ctx);
+  closeLedgeTraps(ctx); // platforms' ledges never drop the player somewhere they can't leave
+  placeEntities(ctx); // trainers, items at the far ends, hidden items
+}
+
 function runOnce(map: MapBlueprint, input: GenInput, geometry: Geometry, seed: number, validate: ValidateOptions): GenerateResult {
   const ctx = new GenContext(input, new Rng(seed));
   // Things placed by hand stay put; the generator works around them.
   for (const e of map.entities) if (e.locked) ctx.entities.push(cloneThing(e));
   if (map.mapType === "town") townStages(ctx, geometry);
   else if (map.mapType === "forest") forestStages(ctx);
+  else if (map.mapType === "cave") caveStages(ctx);
   else routeStages(ctx, geometry);
   return finish(map, input, ctx, validate);
 }
@@ -221,10 +233,14 @@ export function generateRoute(map: MapBlueprint, validate: Omit<ValidateOptions,
   // Towns share the route settings they use (border, trees, hidden items) but have no trainers,
   // extra items, branches, hills or ledges; a waterfront town is laid out like a coastal route.
   const forest = map.mapType === "forest" ? readForestParams(map.params) : undefined;
+  const cave = map.mapType === "cave" ? readCaveParams(map.params) : undefined;
   const routeParams = readRouteParams(map.params);
   // Forests use the route settings for paths, grass, border, trainers, items, ledge shortcuts and
   // travel direction, without hills, branches (the maze makes its own) or HM areas.
-  const params = forest
+  // Caves use the route settings for the border, trainers and items; their exits are warps, not edges.
+  const params = cave
+    ? { ...routeParams, elevation: 0, branches: 0, hmPockets: 0, ledges: 0, layout: "land" as const, grassShortcut: false, pathGrass: 0, snow: 0, travel: "auto" as const, pathWidthMin: 1 }
+    : forest
     ? { ...routeParams, elevation: 0, branches: 0, hmPockets: 0, layout: "land" as const, grassShortcut: false, pathGrass: 0, snow: 0 }
     : town
     ? {
@@ -245,7 +261,9 @@ export function generateRoute(map: MapBlueprint, validate: Omit<ValidateOptions,
   const layout = resolveLayout(params, map.biome);
   const layoutSeed = deriveSeed(map.seed, "layout");
   const geometry = computeGeometry(map.width, map.height, params, layout, layoutSeed);
-  const openings = map.openings.length
+  const openings = cave
+    ? map.openings
+    : map.openings.length
     ? map.openings
     : shiftOpeningsOutOfZones(map, layoutOpenings(geometry, params, layout, new Rng(deriveSeed(map.seed, "openings"))));
   const input: GenInput = {
@@ -267,6 +285,7 @@ export function generateRoute(map: MapBlueprint, validate: Omit<ValidateOptions,
     mapConstant: map.header.id,
     town,
     forest,
+    cave,
   };
   const opts: ValidateOptions = { ...validate, availableHms: hmsFor(params, map.biome) };
   let best: GenerateResult | null = null;
@@ -293,7 +312,7 @@ export function applyResult(map: MapBlueprint, result: GenerateResult): void {
   // The border block shows beyond the map edges: water for sea routes, the wall style otherwise.
   const p = readRouteParams(map.params);
   const layout = map.mapType === "town" ? (readTownParams(map.params).townLayout === "waterfront" ? "coastal" : "land") : resolveLayout(p, map.biome);
-  const border = layout === "water" || layout === "coastal" ? "water_deep" : resolveBorder(p, map.biome) === "cliff" ? "rock_wall" : "tree";
+  const border = map.mapType === "cave" ? "rock_wall" : layout === "water" || layout === "coastal" ? "water_deep" : resolveBorder(p, map.biome) === "cliff" ? "rock_wall" : "tree";
   map.layout.borderBlock = [border, border, border, border];
 }
 

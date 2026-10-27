@@ -12,6 +12,7 @@ import { TRAVEL_LABELS, TRAVEL_SETTINGS, travelOf, travelVertical } from "../../
 import { BUILDING_TYPES, TOWN_LAYOUTS, TOWN_LAYOUT_LABELS, TOWN_RANGES, buildingList, readTownParams } from "../../core/generators/townParams";
 import type { TownLayout } from "../../core/generators/townParams";
 import { FOREST_RANGES, readForestParams } from "../../core/generators/forestParams";
+import { CAVE_RANGES, readCaveParams } from "../../core/generators/caveParams";
 import type { TravelSetting } from "../../core/generators/travel";
 import { BIOMES, EDGES } from "../../core/model";
 import type { Biome, Edge, Opening, OpeningKind } from "../../core/model";
@@ -32,6 +33,43 @@ const BIOME_LABELS: Record<Biome, string> = {
 };
 
 const LAYOUT_LABELS: Record<Layout, string> = { land: "Land", coastal: "Coastal", river: "River", water: "Open water" };
+
+/** Cave settings: exits, how open, platforms, water, Rock Smash rocks, dark (see generators/cave.ts). */
+function CaveSettings() {
+  const s = useStore();
+  const map = s.currentMap!;
+  const c = readCaveParams(map.params);
+  const set = (patch: Record<string, string | number | boolean>) => s.setParams(patch);
+  const count = (key: "exits" | "platforms" | "rockSmash", label: string, tip: string) => (
+    <label className="field inline" title={tip}>
+      <span>{label}</span>
+      <NumberField min={CAVE_RANGES[key][0]} max={CAVE_RANGES[key][1]} value={c[key]} onChange={(v) => set({ [key]: v })} />
+    </label>
+  );
+  const slider = (key: "openness" | "waterLevel", label: string, tip: string) => (
+    <label className="slider" title={tip}>
+      <span>
+        {label} <b>{Math.round(c[key] * 100)}</b>
+      </span>
+      <input type="range" min={0} max={1} step={0.05} value={c[key]} onChange={(e) => set({ [key]: Number(e.target.value) })} />
+    </label>
+  );
+  return (
+    <details open>
+      <summary title="Chambers, exits, platforms, water">Cave</summary>
+      {slider("openness", "Openness", "0 = narrow tunnels and small chambers; 100 = big caverns.")}
+      {count("exits", "Exits", "Cave mouths: ways out of this floor. Pick one with the Things tool and set where it leads in the Details tab (it's then kept when you Generate).")}
+      {count("platforms", "Raised platforms", "Raised rock platforms with stairs up, off the main way.")}
+      {slider("waterLevel", "Underground water", "Pools that need Surf, in the far parts of the cave (never on the main way).")}
+      {count("rockSmash", "Rock Smash rocks", "Each closes a side passage, with an item behind it.")}
+      <label className="check" title="The cave is dark until the player uses Flash (the header's requires_flash).">
+        <input type="checkbox" checked={map.header.requires_flash} onChange={(e) => s.editMap("header.requires_flash", (m) => (m.header = { ...m.header, requires_flash: e.target.checked }))} />
+        Dark (needs Flash)
+      </label>
+      <p className="hint">Wild Pokémon here use the cave rate (land 10). More floors and ladders come next.</p>
+    </details>
+  );
+}
 
 /** Forest settings: how twisty the maze is, clearings, hidden items (see generators/forest.ts). */
 function ForestSettings() {
@@ -209,6 +247,7 @@ export function GeneratePanel() {
   const supported = canGenerate(map);
   const town = map.mapType === "town";
   const forest = map.mapType === "forest";
+  const cave = map.mapType === "cave";
   const route = map.mapType === "route";
   const last = s.lastGenerate?.mapId === map.id ? s.lastGenerate : null;
   const errors = s.issues.filter((i) => i.severity === "error").length;
@@ -251,7 +290,7 @@ export function GeneratePanel() {
         <button className="primary wide big" disabled={!supported || s.generating} onClick={() => void s.generate()} title="Generate this map from its seed and settings. By default, locked cells and things you placed are kept (see Generate changes, below). You can undo it.">
           {s.generating ? "Generating…" : "Generate"}
         </button>
-        {!supported && <p className="hint">Routes, towns and forests can be generated so far. Caves arrive in the next parts of Milestone 5.</p>}
+        {!supported && <p className="hint">This kind of map can't be generated yet.</p>}
         {last?.notes?.map((n) => (
           <p key={n} className="hint">
             {n}
@@ -327,6 +366,7 @@ export function GeneratePanel() {
 
       {town && <TownSettings />}
       {forest && <ForestSettings />}
+      {cave && <CaveSettings />}
 
       <details open={route}>
         <summary title={route ? "Biome, path shape" : "Biome"}>Basic</summary>
@@ -376,73 +416,77 @@ export function GeneratePanel() {
         )}
       </details>
 
-      <details>
-        <summary title="Where the player enters and leaves the map">Entrances ({map.openings.length || "auto"})</summary>
-        {map.openings.length === 0 && <p className="hint">Picked automatically on the first Generate (at each short end, plus surf entrances on the water for coastal and river layouts). You can then move them here.</p>}
-        {map.openings.some((o) => o.kind === "surf") && !p.availableHms.includes("surf") && layout !== "water" && (
-          <p className="hint">Surf entrances aren't checked until Surf is ticked under Gameplay → Player has.</p>
-        )}
-        {map.openings.map((o, k) => (
-          <div key={o.id} className="opening-row">
-            <select value={o.kind} title="Walk = on land. Surf = on water, needs Surf." onChange={(e) => setOpening(k, { kind: e.target.value as OpeningKind })}>
-              <option value="walk">Walk</option>
-              <option value="surf">Surf</option>
-            </select>
-            <select value={o.edge} title="Which edge of the map" onChange={(e) => setOpening(k, { edge: e.target.value as Edge, start: Math.min(o.start, Math.max(0, edgeLength(e.target.value as Edge) - o.width)) })}>
-              {EDGES.map((e) => (
-                <option key={e} value={e}>
-                  {e}
-                </option>
-              ))}
-            </select>
-            <label title={`First cell along the edge (${o.edge === "north" || o.edge === "south" ? "x" : "y"})`}>
-              at
-              <NumberField min={0} max={edgeLength(o.edge) - o.width} value={o.start} onChange={(v) => setOpening(k, { start: v })} />
-            </label>
-            <label title="How many cells wide">
-              wide
-              <NumberField min={1} max={Math.min(8, edgeLength(o.edge) - o.start)} value={o.width} onChange={(v) => setOpening(k, { width: v })} />
-            </label>
-            <button className="icon-button" title="Remove this entrance" aria-label="Remove entrance" onClick={() => s.setOpenings(map.openings.filter((_, i) => i !== k))}>
-              ✕
-            </button>
-          </div>
-        ))}
-        <div className="field-row">
-          <button
-            className="secondary"
-            title="Add another entrance"
-            onClick={() => {
-              const used = new Set(map.openings.map((o) => o.id));
-              let n = map.openings.length + 1;
-              while (used.has(`o${n}`)) n++;
-              s.setOpenings([...map.openings, { id: `o${n}`, edge: "east", start: Math.max(0, Math.floor(map.height / 2) - 1), width: 3, kind: "walk" }]);
-            }}
-          >
-            Add entrance
-          </button>
-          {map.openings.length > 0 && (
-            <button className="secondary" title="Forget these entrances and let Generate pick them" onClick={() => s.setOpenings([])}>
-              Automatic
-            </button>
+      {!cave && (
+        <details>
+          <summary title="Where the player enters and leaves the map">Entrances ({map.openings.length || "auto"})</summary>
+          {map.openings.length === 0 && <p className="hint">Picked automatically on the first Generate (at each short end, plus surf entrances on the water for coastal and river layouts). You can then move them here.</p>}
+          {map.openings.some((o) => o.kind === "surf") && !p.availableHms.includes("surf") && layout !== "water" && (
+            <p className="hint">Surf entrances aren't checked until Surf is ticked under Gameplay → Player has.</p>
           )}
-        </div>
-      </details>
+          {map.openings.map((o, k) => (
+            <div key={o.id} className="opening-row">
+              <select value={o.kind} title="Walk = on land. Surf = on water, needs Surf." onChange={(e) => setOpening(k, { kind: e.target.value as OpeningKind })}>
+                <option value="walk">Walk</option>
+                <option value="surf">Surf</option>
+              </select>
+              <select value={o.edge} title="Which edge of the map" onChange={(e) => setOpening(k, { edge: e.target.value as Edge, start: Math.min(o.start, Math.max(0, edgeLength(e.target.value as Edge) - o.width)) })}>
+                {EDGES.map((e) => (
+                  <option key={e} value={e}>
+                    {e}
+                  </option>
+                ))}
+              </select>
+              <label title={`First cell along the edge (${o.edge === "north" || o.edge === "south" ? "x" : "y"})`}>
+                at
+                <NumberField min={0} max={edgeLength(o.edge) - o.width} value={o.start} onChange={(v) => setOpening(k, { start: v })} />
+              </label>
+              <label title="How many cells wide">
+                wide
+                <NumberField min={1} max={Math.min(8, edgeLength(o.edge) - o.start)} value={o.width} onChange={(v) => setOpening(k, { width: v })} />
+              </label>
+              <button className="icon-button" title="Remove this entrance" aria-label="Remove entrance" onClick={() => s.setOpenings(map.openings.filter((_, i) => i !== k))}>
+                ✕
+              </button>
+            </div>
+          ))}
+          <div className="field-row">
+            <button
+              className="secondary"
+              title="Add another entrance"
+              onClick={() => {
+                const used = new Set(map.openings.map((o) => o.id));
+                let n = map.openings.length + 1;
+                while (used.has(`o${n}`)) n++;
+                s.setOpenings([...map.openings, { id: `o${n}`, edge: "east", start: Math.max(0, Math.floor(map.height / 2) - 1), width: 3, kind: "walk" }]);
+              }}
+            >
+              Add entrance
+            </button>
+            {map.openings.length > 0 && (
+              <button className="secondary" title="Forget these entrances and let Generate pick them" onClick={() => s.setOpenings([])}>
+                Automatic
+              </button>
+            )}
+          </div>
+        </details>
+      )}
 
       <details>
         <summary title="Grass, water, trees, border">Terrain</summary>
-        {!town && num("grass", "Grass", forest ? "How much long grass grows along the paths (wild encounters)." : "Share of open ground that becomes grass (wild encounters).")}
+        {!town && !cave && num("grass", "Grass", forest ? "How much long grass grows along the paths (wild encounters)." : "Share of open ground that becomes grass (wild encounters).")}
         {route && num("water", "Water", "Ponds and streams.")}
-        {!forest && num("treeDensity", "Tree cover", town ? "How many trees dot the town." : "How much of the map is trees rather than open ground.")}
+        {!forest && !cave && num("treeDensity", "Tree cover", town ? "How many trees dot the town." : "How much of the map is trees rather than open ground.")}
         {num("borderThickness", "Border thickness", "Cells of wall around the map edge.")}
-        <label className="field" title="What the wall around the map is made of. Auto = cliffs on alpine routes, dense forest otherwise.">
-          <span>Border style</span>
-          <select value={p.borderStyle} onChange={(e) => set({ borderStyle: e.target.value })}>
-            <option value="auto">Auto ({resolveBorder(p, map.biome) === "cliff" ? "cliffs" : "dense forest"})</option>
-            <option value="forest">Dense forest</option>
-            <option value="cliff">Cliffs</option>
-          </select>
-        </label>
+        {!cave && (
+          <label className="field" title="What the wall around the map is made of. Auto = cliffs on alpine routes, dense forest otherwise.">
+            <span>Border style</span>
+            <select value={p.borderStyle} onChange={(e) => set({ borderStyle: e.target.value })}>
+              <option value="auto">Auto ({resolveBorder(p, map.biome) === "cliff" ? "cliffs" : "dense forest"})</option>
+              <option value="forest">Dense forest</option>
+              <option value="cliff">Cliffs</option>
+            </select>
+          </label>
+        )}
         {route && (
           <>
             <label className="field" title="A stream crossing the route, with a bridge where it meets the path.">

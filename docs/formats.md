@@ -224,6 +224,16 @@ Forests (Milestone 5) read these keys, and share `pathWidthMin` (path width), `g
 | `mazeDensity` | 0.6 | 0–1 (0 = open with loops, 1 = one long winding way) |
 | `clearings` | 3 | 0–8 |
 | `guaranteedHidden` | 2 | 0–8 |
+
+Caves (Milestone 5) read these keys, and share `borderThickness`, `trainers`, `items` (far-end item balls = this + 2), `hiddenItems` and the levels with routes. Dark is the header's `requires_flash`.
+
+| Key | Default | Range / values |
+| --- | --- | --- |
+| `exits` | 2 | 1–4 (cave mouths; locked cave-mouth warps count toward it) |
+| `openness` | 0.5 | 0–1 |
+| `platforms` | 1 | 0–4 |
+| `waterLevel` | 0.2 | 0–1 |
+| `rockSmash` | 1 | 0–4 |
 | `retries` | 8 | 0–20 |
 | `generatorVersion` | (set by the app) | which generator produced the map |
 | `seedPinned` | absent | `true` when the seed is pinned in the app (New seed and Variations leave it alone); not used by the generator |
