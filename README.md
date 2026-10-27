@@ -83,9 +83,10 @@ Double-click **`start.command`**. If macOS refuses to open it:
 
 **Select, move, copy (Select tool, V).** Drag a rectangle. Then:
 
-- **Move:** drag inside the selection. Trainers, items and other things in it move too. The cells it leaves behind become plain ground.
+- **Move:** drag inside the selection. Trainers, items and other things in it move too.
 - **Copy / Cut / Paste / Delete:** use the bar at the top of the map (or Ctrl+C, Ctrl+X, Ctrl+V, Delete). A paste appears in the middle of the view: drag it where you want it, then **Place** (or Enter). **Cancel** (or Esc) throws it away.
 - **Regenerate area:** makes only the selected area again with the generator. Everything outside it stays exactly as it is. Each try looks different; Undo goes back.
+- **Gaps** (in the same bar) decides what fills the hole a move, cut or delete leaves behind: **Generated terrain** (the default) fills it to match the surroundings, and one Undo takes back both the move and the fill; **Plain ground** leaves it empty. Either way the gap is unlocked, so Generate or Regenerate area can change it later.
 
 Everything moved or pasted is locked, so Generate keeps it.
 

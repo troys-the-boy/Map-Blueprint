@@ -60,7 +60,7 @@ interface MapSnapshot {
 /** One undoable action: a paint stroke, or a whole-map change such as Generate. */
 type Command =
   | { type: "stroke"; mapId: string; diff: CellDiff; edit: Edit }
-  | { type: "snapshot"; mapId: string; before: MapSnapshot; after: MapSnapshot; edit?: Edit };
+  | { type: "snapshot"; mapId: string; before: MapSnapshot; after: MapSnapshot; edits?: Edit[] };
 
 function cloneZones(zones: Zone[]): Zone[] {
   return zones.map((z) => ({ ...z, mask: { ...z.mask, data: z.mask.data.slice() }, data: { ...z.data } }));
@@ -221,7 +221,7 @@ class EditorStore {
    * everything is replaced and all locks are cleared. With `area`, only that rectangle
    * is made again, with a fresh random seed so each try looks different.
    */
-  async generate(area: CellRect | null = null) {
+  async generate(area: CellRect | null = null, joinUndo = false) {
     const map = this.currentMap;
     if (!map || this.generating || this.isStroking) return;
     if (!canGenerate(map)) {
@@ -231,6 +231,8 @@ class EditorStore {
     this.dropFloating();
     const whole = !area && this.generateMode === "whole";
     const input = area ? areaInput(map, area, randomSeed()) : whole ? wholeMapInput(map) : map;
+    // Joining the undo step before only makes sense if nothing else happened meanwhile.
+    const stepBefore = this.undoStacks.get(map.id)?.at(-1);
     this.generating = true;
     this.changed();
     let result: GenerateResult;
@@ -246,6 +248,8 @@ class EditorStore {
     // The map may have been deleted while generating.
     const target = this.region.maps.find((m) => m.id === map.id);
     if (!target) return;
+    // Filling a gap after a move: if the move was undone meanwhile, leave the map alone.
+    if (joinUndo && this.undoStacks.get(target.id)?.at(-1) !== stepBefore) return;
     const before = snapshot(target);
     let edit: Edit | undefined;
     if (area) {
@@ -257,7 +261,7 @@ class EditorStore {
       if (whole) target.layers.locks.data.fill(0);
     }
     this.selectedThing = null;
-    this.pushUndo({ type: "snapshot", mapId: target.id, before, after: snapshot(target), edit });
+    this.pushUndo({ type: "snapshot", mapId: target.id, before, after: snapshot(target), edits: edit ? [edit] : [] }, joinUndo);
     this.lastGenerate = { mapId: target.id, attempts: result.attempts, ok: result.ok };
     this.markDirty();
     this.changed();
@@ -622,10 +626,26 @@ class EditorStore {
     const edit: Edit = { type: "area", action: f.source ? "move" : "paste", area: f.source ?? this.clipboardFrom ?? area, toX: area.x, toY: area.y };
     map.edits.push(edit);
     this.selection = area;
-    this.pushUndo({ type: "snapshot", mapId: map.id, before, after: snapshot(map), edit });
+    this.pushUndo({ type: "snapshot", mapId: map.id, before, after: snapshot(map), edits: [edit] });
     this.markDirty();
     this.changed();
     this.cellsChanged(map.id, null);
+    if (f.source) this.fillGap(f.source);
+  }
+
+  /**
+   * After a move, cut or delete, fill the plain ground left behind with generated
+   * terrain (unless the "Fill gaps with" choice is plain ground). Cells that are
+   * locked, such as the moved area if it overlaps, are kept. One Undo undoes both.
+   */
+  private fillGap(area: CellRect) {
+    const map = this.currentMap;
+    if (!map || this.prefs.gapFill !== "regenerate" || !canGenerate(map)) return;
+    void this.generate({ ...area }, true);
+  }
+
+  setGapFill(fill: "ground" | "regenerate") {
+    this.updatePrefs({ gapFill: fill });
   }
 
   /** Throw away a paste that hasn't been put down (Escape). */
@@ -665,10 +685,11 @@ class EditorStore {
     clearArea(map, area);
     const edit: Edit = { type: "area", action: "delete", area: { ...area }, toX: null, toY: null };
     map.edits.push(edit);
-    this.pushUndo({ type: "snapshot", mapId: map.id, before, after: snapshot(map), edit });
+    this.pushUndo({ type: "snapshot", mapId: map.id, before, after: snapshot(map), edits: [edit] });
     this.markDirty();
     this.changed();
     this.cellsChanged(map.id, null);
+    this.fillGap(area);
   }
 
   /** Start placing the clipboard, centred on a cell (or over the selection). Drag it, then Place. */
@@ -803,7 +824,7 @@ class EditorStore {
 
   private finishThing(map: MapBlueprint, before: MapSnapshot, edit: Edit & { type: "entity" }) {
     map.edits.push(edit);
-    this.pushUndo({ type: "snapshot", mapId: map.id, before, after: snapshot(map), edit });
+    this.pushUndo({ type: "snapshot", mapId: map.id, before, after: snapshot(map), edits: [edit] });
     this.markDirty();
     this.changed();
     this.cellsChanged(map.id, [edit.y * map.width + edit.x]);
@@ -811,8 +832,15 @@ class EditorStore {
 
   // ----- undo / redo -------------------------------------------------------
 
-  private pushUndo(cmd: Command) {
+  /** Add an undo step. With `join`, it merges into the step before (one Undo undoes both). */
+  private pushUndo(cmd: Command, join = false) {
     const undo = this.undoStacks.get(cmd.mapId) ?? [];
+    const prev = undo[undo.length - 1];
+    if (join && prev?.type === "snapshot" && cmd.type === "snapshot") {
+      undo[undo.length - 1] = { ...cmd, before: prev.before, edits: [...(prev.edits ?? []), ...(cmd.edits ?? [])] };
+      this.redoStacks.set(cmd.mapId, []);
+      return;
+    }
     undo.push(cmd);
     if (undo.length > UNDO_LIMIT) undo.shift();
     this.undoStacks.set(cmd.mapId, undo);
@@ -830,8 +858,10 @@ class EditorStore {
       if (i >= 0) map.edits.splice(i, 1);
     } else {
       restore(map, cmd.before);
-      const i = cmd.edit ? map.edits.lastIndexOf(cmd.edit) : -1;
-      if (i >= 0) map.edits.splice(i, 1);
+      for (const e of cmd.edits ?? []) {
+        const i = map.edits.lastIndexOf(e);
+        if (i >= 0) map.edits.splice(i, 1);
+      }
     }
     this.floating = null;
     if (this.selectedThing && !map.entities.some((e) => e.id === this.selectedThing)) this.selectedThing = null;
@@ -851,7 +881,7 @@ class EditorStore {
       map.edits.push(cmd.edit);
     } else {
       restore(map, cmd.after);
-      if (cmd.edit) map.edits.push(cmd.edit);
+      map.edits.push(...(cmd.edits ?? []));
     }
     this.floating = null;
     if (this.selectedThing && !map.entities.some((e) => e.id === this.selectedThing)) this.selectedThing = null;

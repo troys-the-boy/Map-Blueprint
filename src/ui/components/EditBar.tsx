@@ -52,15 +52,22 @@ function SelectBar() {
       <button className="icon-button" title="Copy (Ctrl+C)" aria-label="Copy" disabled={!sel} onClick={() => s.copySelection()}>
         <Icon name="copy" />
       </button>
-      <button className="icon-button" title="Cut: copy, then clear to plain ground (Ctrl+X)" aria-label="Cut" disabled={!sel} onClick={() => s.cutSelection()}>
+      <button className="icon-button" title="Cut: copy, then clear the area (filled as chosen under Gaps) (Ctrl+X)" aria-label="Cut" disabled={!sel} onClick={() => s.cutSelection()}>
         <Icon name="cut" />
       </button>
       <button className="icon-button" title="Paste the last copy (Ctrl+V). It appears in the middle of the view; drag it, then Place." aria-label="Paste" disabled={!s.clipboard} onClick={() => s.paste(viewCentre())}>
         <Icon name="paste" />
       </button>
-      <button className="icon-button" title="Clear the area to plain ground and remove the things in it (Delete)" aria-label="Delete" disabled={!sel} onClick={() => s.deleteSelection()}>
+      <button className="icon-button" title="Clear the area and remove the things in it; it is filled as chosen under Gaps (Delete)" aria-label="Delete" disabled={!sel} onClick={() => s.deleteSelection()}>
         <Icon name="trash" />
       </button>
+      <label className="edit-bar-group" title="What fills the gap a move, cut or delete leaves behind. Generated terrain matches the surroundings (Undo once goes back to before the move); plain ground stays empty and unlocked, so you can regenerate it later.">
+        <span className="edit-bar-value">Gaps:</span>
+        <select value={s.prefs.gapFill} onChange={(e) => s.setGapFill(e.target.value as "ground" | "regenerate")} aria-label="Fill the gap left behind with">
+          <option value="regenerate">Generated terrain</option>
+          <option value="ground">Plain ground</option>
+        </select>
+      </label>
       <button
         className="secondary"
         title="Make this area again with the generator. Everything outside it stays exactly as it is. Each try gives a different result; Undo goes back."

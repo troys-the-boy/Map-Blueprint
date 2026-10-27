@@ -37,13 +37,14 @@ describe("selections", () => {
     expect(entityAt(map, 2, 1)!.id).toBe("T1");
   });
 
-  it("move leaves plain locked ground behind and keeps IDs", () => {
+  it("move leaves plain unlocked ground behind and keeps IDs", () => {
     const { map } = blank();
     map.layers.terrain.data[0] = T.tree;
     map.entities.push(newThing(map, "item_ball", 1, 0));
     moveArea(map, { x: 0, y: 0, w: 2, h: 1 }, 5, 5);
     expect(map.layers.terrain.data[0]).toBe(T.ground);
-    expect(map.layers.locks.data[0]).toBe(1);
+    expect(map.layers.locks.data[0]).toBe(0);
+    expect(map.layers.locks.data[5 * 12 + 5]).toBe(1);
     expect(map.layers.terrain.data[5 * 12 + 5]).toBe(T.tree);
     expect(map.entities).toHaveLength(1);
     expect(map.entities[0]).toMatchObject({ id: "I1", x: 6, y: 5 });

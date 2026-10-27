@@ -302,3 +302,4 @@ fieldset.checks .check { min-height: 38px; }
 @media (max-width: 1000px) {
   .icon-button.labeled span { display: none; }
 }
+.edit-bar select { min-height: var(--hit); }

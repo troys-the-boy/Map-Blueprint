@@ -30,6 +30,8 @@ export interface Prefs {
   elevationOpacity: number;
   /** Lock cells the pencil paints, so later generators keep them. */
   lockWhenPainting: boolean;
+  /** What fills the gap left by a move, cut or delete: plain ground, or terrain made by the generator. */
+  gapFill: "ground" | "regenerate";
 }
 
 const KEY = "g3mb.prefs.v1";
@@ -41,6 +43,7 @@ export const DEFAULT_PREFS: Prefs = {
   overlays: { grid: true, rulers: true, screenFrame: true, locks: false, sight: true, issues: true, reach: false, elevation: false },
   lockWhenPainting: true,
   elevationOpacity: 0.6,
+  gapFill: "regenerate",
 };
 
 export function loadPrefs(): Prefs {
@@ -63,6 +66,7 @@ export function loadPrefs(): Prefs {
         elevation: p.overlays?.elevation === true,
       },
       lockWhenPainting: p.lockWhenPainting !== false,
+      gapFill: p.gapFill === "ground" ? "ground" : "regenerate",
       elevationOpacity:
         typeof p.elevationOpacity === "number" && p.elevationOpacity >= 0.15 && p.elevationOpacity <= 1 ? p.elevationOpacity : DEFAULT_PREFS.elevationOpacity,
     };

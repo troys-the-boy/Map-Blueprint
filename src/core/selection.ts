@@ -2,8 +2,8 @@
 // things standing in it (trainers, items…).
 //
 // Everything put down by hand is locked, so Generate keeps it. Cells left
-// behind by a move, or cleared with Delete, become plain ground (also locked,
-// so they stay clear until you unlock them).
+// behind by a move, or cleared with Delete, become plain ground, unlocked, so
+// Generate (or Regenerate area) can fill them in.
 
 import type { CellRect, Entity, MapBlueprint } from "./model";
 import { cloneThing, nextEntityId } from "./things";
@@ -52,7 +52,7 @@ export function copyArea(map: MapBlueprint, r: CellRect): Clip {
   return { w: r.w, h: r.h, terrain, elevation, entities };
 }
 
-/** Clear an area to plain ground (locked) and remove the things in it. */
+/** Clear an area to plain ground (unlocked) and remove the things in it. */
 export function clearArea(map: MapBlueprint, r: CellRect): void {
   const ground = requireTerrain(DEFAULT_FILL_TERRAIN);
   const level = ELEVATION_LEVELS.indexOf("ground");
@@ -61,7 +61,7 @@ export function clearArea(map: MapBlueprint, r: CellRect): void {
       const i = y * map.width + x;
       map.layers.terrain.data[i] = ground;
       map.layers.elevation.data[i] = level;
-      map.layers.locks.data[i] = 1;
+      map.layers.locks.data[i] = 0;
     }
   map.entities = map.entities.filter((e) => !inRect(r, e.x, e.y));
 }

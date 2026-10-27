@@ -223,7 +223,7 @@ Edits are user actions, recorded in order. Strokes (`stroke`, `elevation`, `lock
   "x": 5, "y": 15 }                  // action: place | move | turn | sight | delete; x, y = where it ends up
 ```
 
-`toX`/`toY` are `null` for delete and regenerate. A move or delete leaves plain ground (locked) behind.
+`toX`/`toY` are `null` for delete and regenerate. A move or delete leaves plain, unlocked ground behind; when the app fills that gap with generated terrain, a `regenerate` edit for the same area follows.
 
 Replaying the strokes in order on a fresh map gives exactly the same cells.
 
