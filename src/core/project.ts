@@ -54,7 +54,7 @@ import {
 import { ELEVATION_LEVELS, TERRAIN_TYPES, terrainIndex } from "./terrain";
 
 export const FILE_FORMAT_ID = "gen3-map-blueprint-project";
-export const CURRENT_SCHEMA_VERSION = 5;
+export const CURRENT_SCHEMA_VERSION = 6;
 
 /** Safety limits for opened files. Anything bigger is rejected. */
 export const FILE_LIMITS = {
@@ -301,7 +301,16 @@ const entityEditCheck = object({
   y: coord,
 });
 
+const smartEditCheck = object({
+  type: literal("smart"),
+  kind: oneOf(["path", "stream", "tree_wall", "grass", "water", "ledge"] as const),
+  width: num(1, 16),
+  direction: nullable(oneOf(["s", "e", "w"] as const)),
+  points: intArray(0, FILE_LIMITS.maxMapSide - 1, FILE_LIMITS.maxCellsPerEdit),
+});
+
 const EDIT_CHECKS: Record<string, Check<Edit>> = {
+  smart: smartEditCheck,
   stroke: strokeEditCheck,
   elevation: elevationEditCheck,
   lock: lockEditCheck,
@@ -473,6 +482,9 @@ export const MIGRATIONS: Record<number, Migration> = {
   // and new edit records for the lock brush, selections and the Things tool. Nothing
   // in a version-4 file needs changing.
   4: (file) => ({ ...file, schemaVersion: 5 }),
+  // v5 → v6 (Milestone 3, part B): smart-stroke edit records ("type": "smart").
+  // Nothing in a version-5 file needs changing.
+  5: (file) => ({ ...file, schemaVersion: 6 }),
 };
 
 /** Upgrade an old file step by step to the target version. */
@@ -535,6 +547,11 @@ function loadMap(saved: ReturnType<typeof savedMapCheck>, path: string): MapBlue
       return;
     }
     if (e.type === "entity") return inside(e.x, e.y, `${path}.edits[${i}]`);
+    if (e.type === "smart") {
+      if (e.points.length % 2 !== 0 || e.points.length === 0) throw new FileFormatError(`${path}.edits[${i}].points`, "expected pairs of x, y numbers");
+      for (let k = 0; k < e.points.length; k += 2) inside(e.points[k], e.points[k + 1], `${path}.edits[${i}].points`);
+      return;
+    }
     if (e.cells.length % 2 !== 0) throw new FileFormatError(`${path}.edits[${i}].cells`, "expected pairs of x, y numbers");
     if (e.type === "stroke" && terrainIndex(e.terrain) < 0) throw new FileFormatError(`${path}.edits[${i}].terrain`, `unknown terrain type "${e.terrain}"`);
     for (let k = 0; k < e.cells.length; k += 2) inside(e.cells[k], e.cells[k + 1], `${path}.edits[${i}].cells`);

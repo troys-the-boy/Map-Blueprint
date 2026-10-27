@@ -224,7 +224,18 @@ export interface EntityEdit {
   x: number;
   y: number;
 }
-export type Edit = StrokeEdit | ElevationEdit | LockEdit | AreaEdit | EntityEdit;
+/** A smart stroke (Smart strokes tool): a drawn line or outline, made valid by the tool. See core/strokes.ts. */
+export interface SmartEdit {
+  type: "smart";
+  kind: "path" | "stream" | "tree_wall" | "grass" | "water" | "ledge";
+  /** Width in cells for line strokes (1 for ledges and areas). */
+  width: number;
+  /** Ledges only: the jump direction chosen, or null to work it out from the line. */
+  direction: "s" | "e" | "w" | null;
+  /** The cells the pointer went through, in order: [x0, y0, x1, y1, …]. */
+  points: number[];
+}
+export type Edit = StrokeEdit | ElevationEdit | LockEdit | AreaEdit | EntityEdit | SmartEdit;
 
 export interface MapBlueprint {
   /** Internal id, unique in the project (e.g. "map_3"). Not the MAP_* constant. */

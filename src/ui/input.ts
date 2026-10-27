@@ -141,6 +141,7 @@ export class CanvasInput {
       this.pressTool = this.store.tool;
       if (this.store.selecting) this.store.selectDown(cell[0], cell[1], { add: e.shiftKey, subtract: e.altKey });
       else if (this.pressTool === "things") this.store.thingsDown(cell[0], cell[1]);
+      else if (this.pressTool === "strokes") this.store.smartDown(cell[0], cell[1]);
       else this.store.beginStroke(cell[0], cell[1]);
       this.setHover(cell);
     } else {
@@ -164,6 +165,14 @@ export class CanvasInput {
     if (e.pointerType !== "touch" || this.mode === "paint") this.setHover(cell);
     if (this.mode === "paint" && p && isSelectTool(this.pressTool)) this.store.selectMove(cell[0], cell[1]);
     else if (this.mode === "paint" && p && this.pressTool === "things") this.store.thingsMove(cell[0], cell[1]);
+    else if (this.mode === "paint" && p && this.pressTool === "strokes") {
+      const events = typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : [];
+      for (const ce of events.length ? events : [e]) {
+        const [cx, cy] = this.local(ce);
+        const c = this.renderer.cellAt(cx, cy);
+        this.store.smartMove(c[0], c[1]);
+      }
+    }
     else if (this.mode === "paint" && p) {
       // Use coalesced events for smooth Pencil lines when the browser provides them.
       const events = typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : [];
@@ -203,6 +212,7 @@ export class CanvasInput {
   private endPress(cancelled: boolean) {
     if (isSelectTool(this.pressTool)) this.store.selectUp();
     else if (this.pressTool === "things") this.store.thingsUp();
+    else if (this.pressTool === "strokes") this.store.smartUp(cancelled);
     else if (cancelled) this.store.cancelStroke();
     else this.store.endStroke();
   }

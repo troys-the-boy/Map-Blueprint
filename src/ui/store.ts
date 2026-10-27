@@ -29,6 +29,8 @@ import {
 } from "../core/selection";
 import type { Direction } from "../core/terrain";
 import { entityAt, newThing, setFacing, setSight, sightOf, turnClockwise } from "../core/things";
+import type { SmartKind } from "../core/strokes";
+import { AREA_KINDS, applySmartStroke, strokeWidth } from "../core/strokes";
 import { hmsFor, readRouteParams } from "../core/generators/params";
 import type { Issue } from "../core/validate";
 import { validateMap } from "../core/validate";
@@ -48,8 +50,9 @@ export const APP_VERSION = "0.1.0";
  * "lock" is the lock brush. "select" draws a rectangle to copy, move or delete;
  * "lasso" draws any shape for the same; "wand" picks every joined cell of one terrain.
  * "things" places, drags, turns and removes trainers, items and so on.
+ * "strokes" draws smart strokes: paths, streams, tree walls, grass, water, ledges.
  */
-export type Tool = "pencil" | "erase" | "pan" | "pick" | "elevation" | "lock" | "select" | "lasso" | "wand" | "things";
+export type Tool = "pencil" | "erase" | "pan" | "pick" | "elevation" | "lock" | "select" | "lasso" | "wand" | "things" | "strokes";
 
 /** How a new rectangle, lasso or wand pick changes the selection. */
 export type SelectMode = "new" | "add" | "subtract";
@@ -138,6 +141,12 @@ class EditorStore {
   /** Level the elevation brush paints (index into ELEVATION_LEVELS). */
   elevationLevel = ELEVATION_LEVELS.indexOf("raised1");
   brush = 1;
+  /** What the Smart strokes tool draws. */
+  smartKind: SmartKind = "path";
+  /** Which way ledges drawn with Smart strokes jump ("auto" = from the line). */
+  ledgeDir: "auto" | "s" | "e" | "w" = "auto";
+  /** The smart stroke being drawn: the cells the pointer has passed, [x0, y0, x1, y1, …]. */
+  smartPoints: number[] | null = null;
   /** What the Things tool places, or "remove" to take things away. */
   thingKind: EntityKind | "remove" = "trainer";
   /** Whether the lock brush locks or unlocks. */
@@ -433,6 +442,7 @@ class EditorStore {
     this.grab = null;
     this.selectAnchor = null;
     this.lassoPoints = null;
+    this.smartPoints = null;
     this.selectedThing = null;
     this.thingDrag = null;
   }
@@ -869,6 +879,67 @@ class EditorStore {
     this.markDirty();
     this.changed();
     this.cellsChanged(map.id, cells);
+  }
+
+  // ----- Smart strokes tool ------------------------------------------------
+
+  setSmartKind(kind: SmartKind) {
+    this.smartKind = kind;
+    this.setTool("strokes");
+  }
+
+  setLedgeDir(dir: "auto" | "s" | "e" | "w") {
+    this.ledgeDir = dir;
+    this.changed();
+  }
+
+  /** How wide the current smart stroke is drawn (for the preview too). */
+  get smartWidth(): number {
+    const map = this.currentMap;
+    return strokeWidth(this.smartKind, this.brush, map ? readRouteParams(map.params).pathWidthMin : 2);
+  }
+
+  smartDown(x: number, y: number) {
+    const map = this.currentMap;
+    if (!map) return;
+    this.smartPoints = [Math.max(0, Math.min(map.width - 1, x)), Math.max(0, Math.min(map.height - 1, y))];
+    this.changed();
+  }
+
+  smartMove(x: number, y: number) {
+    const map = this.currentMap;
+    const pts = this.smartPoints;
+    if (!map || !pts) return;
+    const px = Math.max(0, Math.min(map.width - 1, x));
+    const py = Math.max(0, Math.min(map.height - 1, y));
+    if (pts[pts.length - 2] === px && pts[pts.length - 1] === py) return;
+    pts.push(px, py);
+    this.changed();
+  }
+
+  /** Let go: make the drawn line or outline valid and paint it (one undo step). */
+  smartUp(cancelled = false) {
+    const map = this.currentMap;
+    const points = this.smartPoints;
+    this.smartPoints = null;
+    this.changed();
+    if (!map || !points || cancelled) return;
+    const kind = this.smartKind;
+    const edit: Edit = {
+      type: "smart",
+      kind,
+      width: AREA_KINDS.has(kind) ? 1 : this.smartWidth,
+      direction: kind === "ledge" && this.ledgeDir !== "auto" ? this.ledgeDir : null,
+      points,
+    };
+    const diff = emptyDiff();
+    applySmartStroke(map, edit, diff, new Map());
+    if (!diff.index.length) return;
+    map.edits.push(edit);
+    this.pushUndo({ type: "stroke", mapId: map.id, diff, edit });
+    this.markDirty();
+    this.changed();
+    this.cellsChanged(map.id, diff.index);
   }
 
   // ----- Things tool -------------------------------------------------------

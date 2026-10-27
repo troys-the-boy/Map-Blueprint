@@ -47,6 +47,7 @@ Double-click **`start.command`**. If macOS refuses to open it:
 | --- | --- | --- |
 | Paint | Left-drag with the Pencil tool (**B**) | Apple Pencil, or one finger (see below) |
 | Erase to plain ground | Eraser tool (**E**) | Eraser tool |
+| Draw a path, stream, tree wall, ledge, grass patch or pond | Smart strokes (**S**), pick the kind in the Paint tab | Smart strokes tool, with the Pencil |
 | Paint elevation | Elevation brush (**L**) | Elevation brush in the tool strip |
 | Lock / unlock cells | Lock brush (**K**) / Unlock brush (**U**) | The two padlock buttons in the tool strip |
 | Select an area | Select tool (**V**), drag a rectangle; Lasso (**Q**), draw round any shape; Magic wand (**W**), click a terrain | Select, Lasso or Magic wand tool, with the Pencil |
@@ -82,6 +83,18 @@ Double-click **`start.command`**. If macOS refuses to open it:
 **Locked cells:** everything you paint, move or paste is *locked* (marked with a small yellow corner when **Show → Locked cells** is on). Generate never changes locked cells. Turn this off for painting with **Lock what I paint**. The **Lock brush** (**K**) and **Unlock brush** (**U**), side by side in the tool strip, lock or unlock cells by hand without changing them.
 
 ## Editing (Milestone 3)
+
+**Smart strokes (S).** Pick what to draw in the Paint tab under **Smart strokes**, then draw it. The tool makes it valid:
+
+- **Path:** a line, widened to at least the **Narrowest path** setting (or the brush size, if bigger). Where it crosses water it becomes a bridge.
+- **Stream:** deep water at least 2 wide (or the brush size). Where it runs through trees or rock, a bank of open ground is cleared on both sides. Where it crosses a path, there's a bridge.
+- **Tree wall:** trees at least 2 thick (or the brush size).
+- **Grass patch:** draw round an area; it fills with tall grass. Paths and water inside stay as they are.
+- **Water body:** draw round an area; it fills with deep water, with the shoreline tidied (no one-cell spikes or notches). Paths across it become bridges.
+- **Ledge:** a line of ledges. Below the kinds, choose which way they jump: **Auto** (a line across the map jumps south, a line down it jumps east), or ↓ → ←.
+
+You see the stroke as you draw; it's applied when you let go, and one Undo takes it back. Everything a stroke draws is locked, so Generate builds the rest of the route around it. Water gets Porymap's water elevation (1) and bridges 15 (F).
+
 
 **Select, move, copy (Select tool V, Lasso Q, Magic wand W).**
 
@@ -326,7 +339,8 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 ## Known limitations
 
 - **Routes only.** Generate works for routes. Towns, forests and caves arrive in Milestone 5, and until then those map types stay blank.
-- **No stroke tools yet.** Painting is still the square-brush pencil. Stroke tools (paths, streams, tree walls…), zones and the variations grid come in the next parts of Milestone 3.
+- **Zones and the variations grid** come in the next parts of Milestone 3.
+- **Generate works around drawn features but doesn't route through them.** A path you draw is kept, but the generated main path may run elsewhere; join them with another stroke if you want one route.
 - **Regenerated gaps are often forest.** Away from the path, the generator mostly grows trees, so a gap filled with generated terrain may come back as forest. Use Fill with… or the pencil if you want open ground there.
 - **Moving across elevation** isn't smoothed: an area moved onto raised ground keeps its own elevation, so check the Elevation view (and the Check tab) afterwards.
 - **Basic entities only.** Generate places trainers, items, hidden items, Cut trees, Rock Smash rocks and a sign. Their field values are suggestions to check in Porymap. Other kinds, editing entities, and encounter tables come in Milestone 4.

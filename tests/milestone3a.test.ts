@@ -174,7 +174,7 @@ describe("file format v5", () => {
     ];
     map.edits.push(...edits);
     const loaded = parseProject(serializeProject(region, "test"));
-    expect(CURRENT_SCHEMA_VERSION).toBe(5);
+    expect(CURRENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(5);
     expect(loaded.maps[0].entities[0].locked).toBe(true);
     expect(loaded.maps[0].edits).toEqual(edits);
   });
@@ -187,7 +187,7 @@ describe("file format v5", () => {
 
   it("opens version-4 files", () => {
     const { region } = blank();
-    const v4 = serializeProject(region, "test").replace('"schemaVersion": 5', '"schemaVersion": 4');
+    const v4 = serializeProject(region, "test").replace('"schemaVersion": 6', '"schemaVersion": 4');
     expect(parseProject(v4).maps).toHaveLength(1);
   });
 });

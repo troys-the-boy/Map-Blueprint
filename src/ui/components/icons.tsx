@@ -13,6 +13,7 @@ const paths: Record<string, string> = {
   shrink: "M4 4h16v16H4zM8 12h8",
   invert: "M4 4h16v16H4zM4 20L20 4",
   all: "M4 4h16v16H4zM8 8h8v8H8z",
+  stroke: "M4 18c3-6 6 2 9-4s5-6 7-8M4 18l2 2",
   things: "M12 21s-6-5.2-6-10a6 6 0 0112 0c0 4.8-6 10-6 10zM12 8.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z",
   lock: "M6 11h12v9H6v-9zM8.5 11V8a3.5 3.5 0 017 0v3",
   unlock: "M6 11h12v9H6v-9zM8.5 11V8a3.5 3.5 0 016.8-1.2",

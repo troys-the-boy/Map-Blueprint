@@ -306,3 +306,6 @@ fieldset.checks .check { min-height: 38px; }
 .edit-bar-group.first { border-left: 0; padding-left: 0; }
 .edit-bar-group.check { gap: 6px; font-size: 14px; min-height: var(--hit); }
 .edit-bar-more { display: contents; }
+.segmented { display: flex; gap: 4px; margin-top: 8px; }
+.segmented button { flex: 1; min-height: var(--hit); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; }
+.segmented button.active { background: var(--accent); color: #0f1a16; }

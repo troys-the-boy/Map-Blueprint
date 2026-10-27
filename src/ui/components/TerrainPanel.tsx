@@ -10,6 +10,8 @@ import type { EntityKind } from "../../core/model";
 import type { Overlays } from "../prefs";
 import { HEAT_COLORS } from "../renderer";
 import { PLACEABLE_KINDS, THING_LABELS } from "../../core/things";
+import { SMART_KINDS, SMART_LABELS, SMART_TERRAIN } from "../../core/strokes";
+import type { SmartKind } from "../../core/strokes";
 import { Icon } from "./icons";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -87,6 +89,22 @@ const HEAT_KEY: Array<[number, string]> = [
   [-1, "Can't reach"],
 ];
 
+const SMART_TIPS: Record<SmartKind, string> = {
+  path: "Path: draw a line. It's widened to at least the narrowest-path setting (or the brush size), and becomes a bridge where it crosses water.",
+  stream: "Stream: draw a line. Deep water at least 2 wide, with open banks where it runs through trees, and a bridge where it crosses a path.",
+  tree_wall: "Tree wall: draw a line. Trees at least 2 thick (or the brush size).",
+  grass: "Grass patch: draw round an area. It fills with tall grass; paths and water stay as they are.",
+  water: "Water body: draw round an area. It fills with deep water, with a tidy shoreline; paths across it become bridges.",
+  ledge: "Ledge: draw a line of ledges. Choose which way they jump below, or leave it on Auto (south across the map, east down it).",
+};
+
+const LEDGE_DIRS: Array<{ dir: "auto" | "s" | "e" | "w"; label: string; tip: string }> = [
+  { dir: "auto", label: "Auto", tip: "Work it out from the line: a line across the map jumps south, a line down it jumps east." },
+  { dir: "s", label: "↓", tip: "Jump south (down)" },
+  { dir: "e", label: "→", tip: "Jump east (right)" },
+  { dir: "w", label: "←", tip: "Jump west (left)" },
+];
+
 export function TerrainPanel({ onPicked }: { onPicked?: () => void }) {
   const s = useStore();
   const palette = getPalette(s.prefs.paletteId);
@@ -120,6 +138,43 @@ export function TerrainPanel({ onPicked }: { onPicked?: () => void }) {
           </div>
         </section>
       ))}
+
+      <section className="terrain-group">
+        <h3>Smart strokes</h3>
+        <p className="hint">Draw, and the tool makes it valid: paths and streams get bridges where they cross, streams get banks, shorelines are tidied. What you draw is locked. Brush size sets the width.</p>
+        <div className="terrain-grid">
+          {SMART_KINDS.map((kind) => {
+            const active = s.tool === "strokes" && s.smartKind === kind;
+            const t = TERRAIN_TYPES[SMART_TERRAIN[kind]];
+            return (
+              <button
+                key={kind}
+                className={`terrain-item ${active ? "active" : ""}`}
+                title={SMART_TIPS[kind]}
+                aria-pressed={active}
+                onClick={() => {
+                  s.setSmartKind(kind);
+                  onPicked?.();
+                }}
+              >
+                <span className="swatch" style={{ background: palette.colors[t.id] }}>
+                  {t.glyph ?? ""}
+                </span>
+                <span className="terrain-label">{SMART_LABELS[kind]}</span>
+              </button>
+            );
+          })}
+        </div>
+        {s.tool === "strokes" && s.smartKind === "ledge" && (
+          <div className="segmented" role="group" aria-label="Ledge jump direction">
+            {LEDGE_DIRS.map((d) => (
+              <button key={d.dir} className={s.ledgeDir === d.dir ? "active" : ""} title={d.tip} aria-pressed={s.ledgeDir === d.dir} onClick={() => s.setLedgeDir(d.dir)}>
+                {d.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className="terrain-group">
         <h3>Elevation brush</h3>

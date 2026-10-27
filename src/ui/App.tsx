@@ -229,6 +229,7 @@ function useKeyboardShortcuts(openNewMap: () => void) {
       else if (key === "v") store.setTool("select");
       else if (key === "q") store.setTool("lasso");
       else if (key === "w") store.setTool("wand");
+      else if (key === "s") store.setTool("strokes");
       else if (key === "u") store.setLockMode("unlock");
       else if (key === "t") store.setTool("things");
       else if (key === "k") store.setLockMode("lock");

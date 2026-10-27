@@ -4,7 +4,7 @@ This document defines the tool's file formats. The terrain vocabulary and the ti
 
 | File | Identifier (`format`) | Version field | Current |
 | --- | --- | --- | --- |
-| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 5 |
+| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 6 |
 | Terrain vocabulary (`profiles/terrain.json`) | `gen3-terrain-vocabulary` | `formatVersion` | 1 |
 | Terrain palette (`profiles/palettes/*.json`) | `gen3-terrain-palette` | `formatVersion` | 1 |
 | Tileset profile (`profiles/tilesets/*.json`) | `gen3-tileset-profile` | `formatVersion` | 1 (draft) |
@@ -13,7 +13,7 @@ Coordinates are in **metatiles** (16×16 px). The origin (0, 0) is the top-left 
 
 ---
 
-## Project file, schemaVersion 5
+## Project file, schemaVersion 6
 
 A project is a single JSON file holding one region and all of its maps. The app treats it as untrusted data when opening it:
 
@@ -31,11 +31,12 @@ When the format changes, `schemaVersion` goes up and a migration in `src/core/pr
 | 3 | 2 (revision) | Each opening gains `kind`: `walk` or `surf`. Version-2 openings become `walk`. |
 | 4 | 2 (second revision) | New terrain types `snow`, `snow_grass`, `ice`, `snowdrift`; elevation levels `raised3`, `raised4`; elevation-brush edits (`"type": "elevation"`). Version-3 files need no changes. |
 | 5 | 3 (part A) | Entities may have `"locked": true` (placed or moved by hand; Generate keeps them). New edit types `lock`, `area` and `entity`. Version-4 files need no changes. |
+| 6 | 3 (part B) | New edit type `smart` (smart strokes). Version-5 files need no changes. |
 
 ```jsonc
 {
   "format": "gen3-map-blueprint-project",
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "appVersion": "0.1.0",
   "savedAt": "2026-10-26T20:00:00.000Z",
   "region": {
@@ -225,6 +226,15 @@ Edits are user actions, recorded in order. Strokes (`stroke`, `elevation`, `lock
 { "type": "entity", "action": "turn", "id": "T4", "kind": "trainer",
   "x": 5, "y": 15 }                  // action: place | move | turn | sight | delete; x, y = where it ends up
 ```
+
+A smart stroke records what was drawn; replaying it (`applySmartStroke` in `src/core/strokes.ts`) on the same map gives the same cells:
+
+```jsonc
+{ "type": "smart", "kind": "stream", "width": 2, "direction": null,
+  "points": [x0, y0, x1, y1, …] }   // kind: path | stream | tree_wall | grass | water | ledge
+```
+
+`points` are the cells the pointer passed through, in order; `grass` and `water` treat them as an outline to fill. `width` is the line width in cells (1 for outlines and ledges). `direction` is `s`, `e` or `w` for a ledge whose jump direction was chosen, else `null`.
 
 `cells` (optional) lists the exact cells of a lasso shape, as `[x0, y0, x1, y1, …]`; without it the whole rectangle `area` was used. `value` (optional) is the terrain id for `fill` or the elevation level for `elevation`. `toX`/`toY` are `null` except for move and paste. A move or delete leaves plain, unlocked ground behind; when the app fills that gap with generated terrain, a `regenerate` edit for the same area follows.
 

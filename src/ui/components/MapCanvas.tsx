@@ -5,6 +5,7 @@ import { CanvasInput } from "../input";
 import { MapRenderer } from "../renderer";
 import { store } from "../store";
 import { hmHeatmap, openingCells } from "../../core/reach";
+import { AREA_KINDS, SMART_TERRAIN } from "../../core/strokes";
 
 /** The renderer of the canvas on screen, so toolbar buttons (zoom, fit) can reach it. */
 export const canvasRef: { renderer: MapRenderer | null } = { renderer: null };
@@ -37,10 +38,16 @@ export function MapCanvas({ onHover }: { onHover: (cell: [number, number] | null
     });
     // Overlay toggles that don't change cells (grid, rulers, frame) only need a redraw.
     // So do brush size and tool changes (the hover outline shows the brush footprint).
-    const brushFor = () => (store.tool === "pencil" || store.tool === "erase" || store.tool === "elevation" || store.tool === "lock" ? store.brush : 1);
+    const brushFor = () =>
+      store.tool === "pencil" || store.tool === "erase" || store.tool === "elevation" || store.tool === "lock"
+        ? store.brush
+        : store.tool === "strokes" && !AREA_KINDS.has(store.smartKind)
+          ? store.smartWidth
+          : 1;
     renderer.brush = brushFor();
     let heatFor = -1;
     let lassoLength = 0;
+    let smartLength = 0;
     let focusSeq = store.focus?.seq ?? 0;
     const sync = () => {
       let redraw = false;
@@ -76,6 +83,15 @@ export function MapCanvas({ onHover }: { onHover: (cell: [number, number] | null
         renderer.selection = store.selection;
         renderer.selectedThing = store.selectedThing;
         renderer.floating = floating;
+        redraw = true;
+      }
+      // A smart stroke being drawn.
+      const pts = store.smartPoints;
+      if ((pts?.length ?? 0) !== smartLength || (!pts && renderer.smartPreview)) {
+        smartLength = pts?.length ?? 0;
+        renderer.smartPreview = pts
+          ? { points: pts, width: store.smartWidth, closed: AREA_KINDS.has(store.smartKind), color: renderer.colorOf(SMART_TERRAIN[store.smartKind]) }
+          : null;
         redraw = true;
       }
       if (renderer.issues !== store.issues) {

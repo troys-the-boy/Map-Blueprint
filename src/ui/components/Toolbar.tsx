@@ -7,6 +7,7 @@ import { LEVEL_VALUE, PORYMAP_ELEVATION_COLORS, hexDigit } from "../../core/pory
 import { ENTITY_PREFIX } from "../../core/entities";
 import { ENTITY_COLORS } from "../../core/exporters/blueprint";
 import { THING_LABELS } from "../../core/things";
+import { SMART_LABELS, SMART_TERRAIN } from "../../core/strokes";
 import { Icon } from "./icons";
 import { canvasRef } from "./MapCanvas";
 import type { SideTab } from "./SidePanel";
@@ -14,6 +15,7 @@ import type { SideTab } from "./SidePanel";
 const TOOLS: Array<{ tool: Tool; icon: string; label: string; key: string; tip: string }> = [
   { tool: "pencil", icon: "pencil", label: "Pencil", key: "B", tip: "Pencil (B): paint the selected terrain. Painted cells are locked so Generate keeps them." },
   { tool: "erase", icon: "erase", label: "Eraser", key: "E", tip: "Eraser (E): set cells back to plain ground and unlock them." },
+  { tool: "strokes", icon: "stroke", label: "Smart strokes", key: "S", tip: "Smart strokes (S): draw a path, stream, tree wall or ledge as a line, or a grass patch or water body as an outline. The tool widens it, adds banks and bridges, and tidies shorelines. Choose what to draw in the Paint tab." },
   { tool: "elevation", icon: "elevation", label: "Elevation brush", key: "L", tip: "Elevation brush (L): paint the elevation numbers you'll set in Porymap's collision tab. Terrain stays as it is." },
   { tool: "select", icon: "select", label: "Select", key: "V", tip: "Select (V): drag a rectangle. Drag inside it to move it (with the things in it). Copy, cut, paste, delete, fill, lock or regenerate it from the bar at the top." },
   { tool: "lasso", icon: "lasso", label: "Lasso", key: "Q", tip: "Lasso (Q): draw around any shape to select it. Then use it like a rectangle selection: drag inside to move it, or use the bar at the top." },
@@ -86,6 +88,12 @@ export function Toolbar({ onShowTab }: { onShowTab: (tab: SideTab) => void }) {
             </span>
           )}
         </button>
+      ) : s.tool === "strokes" ? (
+        <button className="tool swatch-button" title={`Drawing: ${SMART_LABELS[s.smartKind]}. Tap to choose another.`} aria-label={`Choose what to draw (current: ${SMART_LABELS[s.smartKind]})`} onClick={() => onShowTab("terrain")}>
+          <span className="swatch big" style={{ background: palette.colors[TERRAIN_TYPES[SMART_TERRAIN[s.smartKind]].id] }}>
+            {TERRAIN_TYPES[SMART_TERRAIN[s.smartKind]].glyph ?? ""}
+          </span>
+        </button>
       ) : s.tool === "elevation" ? (
         <button className="tool swatch-button" title={`Elevation ${hexDigit(elevationValue)}. Tap to choose another.`} aria-label={`Choose elevation (current: ${hexDigit(elevationValue)})`} onClick={() => onShowTab("terrain")}>
           <span className="swatch big elevation-swatch" style={{ background: PORYMAP_ELEVATION_COLORS[elevationValue] }}>
@@ -99,7 +107,7 @@ export function Toolbar({ onShowTab }: { onShowTab: (tab: SideTab) => void }) {
           </span>
         </button>
       )}
-      {(s.tool === "pencil" || s.tool === "erase" || s.tool === "elevation" || s.tool === "lock") && <div className="brush" title="Brush size: how many cells wide the pencil, eraser, elevation brush and lock brush paint.">
+      {(s.tool === "pencil" || s.tool === "erase" || s.tool === "elevation" || s.tool === "lock" || s.tool === "strokes") && <div className="brush" title="Brush size: how many cells wide the pencil, eraser, elevation brush and lock brush paint.">
         <button className="tool small" aria-label="Smaller brush" onClick={() => s.setBrush(s.brush - 1)}>
           −
         </button>

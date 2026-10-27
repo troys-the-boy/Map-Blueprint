@@ -85,6 +85,8 @@ export class MapRenderer {
   brush = 1;
   /** The selected area (a rectangle, or a lasso shape). */
   selection: Area | null = null;
+  /** A smart stroke being drawn: its cells, width, whether it's an outline, and its colour. */
+  smartPreview: { points: number[]; width: number; closed: boolean; color: string } | null = null;
   /** The line being drawn with the Lasso. */
   lassoPoints: Array<[number, number]> | null = null;
   /** An area being moved or pasted, drawn where it would land. */
@@ -96,6 +98,11 @@ export class MapRenderer {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("This browser can't draw on a canvas.");
     this.ctx = ctx;
+  }
+
+  /** The palette colour of a terrain type (for previews). */
+  colorOf(terrain: number): string {
+    return this.colors[terrain] ?? "#ffffff";
   }
 
   setPalette(paletteId: string) {
@@ -437,6 +444,34 @@ export class MapRenderer {
       for (const e of clip.entities) marker(x + e.x, y + e.y, ENTITY_COLORS[e.kind], e.id);
       dashed({ x, y, w: clip.w, h: clip.h, mask: clip.mask });
     } else if (this.selection) dashed(this.selection);
+
+    // A smart stroke being drawn: a line as wide as the stroke, or an outline to fill.
+    const sp = this.smartPreview;
+    if (sp && sp.points.length >= 2) {
+      ctx.beginPath();
+      for (let k = 0; k + 1 < sp.points.length; k += 2) {
+        const px = offsetX + (sp.points[k] + 0.5) * scale;
+        const py = offsetY + (sp.points[k + 1] + 0.5) * scale;
+        if (k === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      if (sp.closed) ctx.closePath();
+      ctx.lineCap = "square";
+      ctx.lineJoin = "round";
+      ctx.globalAlpha = 0.75;
+      ctx.lineWidth = sp.closed ? 2 : Math.max(2, sp.width * scale);
+      ctx.strokeStyle = sp.color;
+      ctx.stroke();
+      if (sp.closed) {
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = sp.color;
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.lineCap = "butt";
+      ctx.lineJoin = "miter";
+      if (sp.points.length === 2) ctx.fillRect(offsetX + sp.points[0] * scale, offsetY + sp.points[1] * scale, scale, scale);
+    }
 
     // The lasso line being drawn.
     if (this.lassoPoints && this.lassoPoints.length > 1) {

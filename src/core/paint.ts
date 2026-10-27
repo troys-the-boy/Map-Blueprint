@@ -124,7 +124,7 @@ export function paintLock(map: MapBlueprint, x: number, y: number, lock: 0 | 1, 
  */
 export function replayStroke(map: MapBlueprint, edit: Edit): CellDiff {
   const diff = emptyDiff();
-  if (edit.type === "area" || edit.type === "entity") return diff;
+  if (edit.type === "area" || edit.type === "entity" || edit.type === "smart") return diff;
   const lock = edit.locked ? 1 : 0;
   const seen = new Map<number, number>();
   if (edit.type === "lock") {
@@ -155,4 +155,9 @@ export function applyDiff(map: MapBlueprint, diff: CellDiff, side: "before" | "a
     e[diff.index[k]] = ev[k];
     l[diff.index[k]] = lv[k];
   }
+}
+
+/** Set one cell's terrain and elevation level together (smart strokes). Returns true if anything changed. */
+export function paintCellLevel(map: MapBlueprint, x: number, y: number, terrain: number, level: number, lock: 0 | 1, diff: CellDiff, seen: Map<number, number>): boolean {
+  return setCell(map, x, y, terrain, level, lock, diff, seen);
 }
