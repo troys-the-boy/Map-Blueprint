@@ -9,7 +9,7 @@ import { useSyncExternalStore } from "react";
 import type { Entity, MapBlueprint, NewMapOptions, Opening, Region, StrokeEdit, Zone } from "../core/model";
 import type { GenerateResult } from "../core/generate";
 import { applyResult, canGenerate } from "../core/generate";
-import { readRouteParams } from "../core/generators/params";
+import { hmsFor, readRouteParams } from "../core/generators/params";
 import type { Issue } from "../core/validate";
 import { validateMap } from "../core/validate";
 import { runGenerate } from "./generation";
@@ -158,7 +158,7 @@ class EditorStore {
     this.validateTimer = null;
     const map = this.currentMap;
     this.issues = map
-      ? validateMap(map, { limits: this.region.settings.engineLimits, availableHms: readRouteParams(map.params).availableHms })
+      ? validateMap(map, { limits: this.region.settings.engineLimits, availableHms: hmsFor(readRouteParams(map.params), map.biome) })
       : [];
     this.changed();
   }

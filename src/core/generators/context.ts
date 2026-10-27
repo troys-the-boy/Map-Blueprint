@@ -7,8 +7,9 @@
 import type { Rng } from "../rng";
 import { ValueNoise } from "../noise";
 import type { Biome, Entity, Opening, Zone } from "../model";
-import type { RouteParams } from "./params";
+import type { Layout, RouteParams } from "./params";
 import { IS_WALKABLE, IS_WALL, T } from "../grid";
+import { ELEVATION_LEVELS } from "../terrain";
 
 /** Why the generator placed a cell. */
 export const Role = {
@@ -20,22 +21,40 @@ export const Role = {
   Pocket: 5, // HM-gated area (and the wall ring around it)
   Opening: 6, // the gap through the border at an entrance
   Bridge: 7,
-  Water: 8,
+  Water: 8, // ponds and streams
   Clearing: 9,
+  Sea: 10, // layout water: the sea, a river, open water
+  Beach: 11, // sand along a shore
+  Cliff: 12, // the rim of a plateau (cliff faces and ledges)
+  Stairs: 13, // stairs up a plateau, and the cells in front of and behind them
+  GrassRoute: 14, // the grass shortcut ("two ways through")
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];
+
+/** Elevation level indices (into ELEVATION_LEVELS). */
+export const LEVEL = {
+  water: ELEVATION_LEVELS.indexOf("water"),
+  ground: ELEVATION_LEVELS.indexOf("ground"),
+  raised1: ELEVATION_LEVELS.indexOf("raised1"),
+  raised2: ELEVATION_LEVELS.indexOf("raised2"),
+  bridge: ELEVATION_LEVELS.indexOf("bridge"),
+};
 
 export interface GenInput {
   width: number;
   height: number;
-  /** The map's current terrain; only locked cells are kept. */
+  /** The map's current terrain and elevation; only locked cells are kept. */
   terrain: Uint8Array;
+  elevation: Uint8Array;
   locks: Uint8Array;
   openings: Opening[];
   biome: Biome;
+  layout: Layout;
   params: RouteParams;
   /** Used for suggested script labels and flags (e.g. "Route1"). */
   labelBase: string;
+  /** Seed for layout geometry (shoreline, river line). Fixed across retries so entrances stay put. */
+  layoutSeed: number;
 }
 
 export class GenContext {
@@ -43,19 +62,23 @@ export class GenContext {
   readonly height: number;
   readonly n: number;
   readonly terrain: Uint8Array;
+  /** Elevation level per cell (index into ELEVATION_LEVELS). */
+  readonly elevation: Uint8Array;
   readonly locks: Uint8Array;
   readonly role: Uint8Array;
   readonly noise: ValueNoise;
   readonly entities: Entity[] = [];
   readonly zones: Zone[] = [];
-  /** Centre-line cells of the main path, entrance to exit. */
+  /** Centre-line cells of the main path, entrance to exit (the surfing lane on open water). */
   mainLine: number[] = [];
-  /** Cell just inside each opening, where the path starts. */
+  /** Cell just inside each walk entrance, where the path starts. */
   openingEnds: number[] = [];
   /** Tips of side branches (dead ends). */
   deadEnds: number[] = [];
   /** Centre cell of each HM pocket, and the HM sealing it. */
   pockets: Array<{ center: number; hm: string; zoneId: string }> = [];
+  /** The stretch of main path (indices into mainLine) that the grass shortcut bypasses. */
+  shortcut: { from: number; to: number } | null = null;
   /** True when the route runs top-to-bottom. */
   readonly vertical: boolean;
 
@@ -69,9 +92,15 @@ export class GenContext {
     this.locks = input.locks;
     this.role = new Uint8Array(this.n);
     this.noise = new ValueNoise(rng.fork("noise"));
-    // Locked cells keep the user's terrain. Everything else starts as trees.
+    // Locked cells keep the user's terrain and elevation. Everything else starts as trees on the ground.
     this.terrain = new Uint8Array(this.n);
-    for (let i = 0; i < this.n; i++) this.terrain[i] = input.locks[i] ? input.terrain[i] : T.tree;
+    this.elevation = new Uint8Array(this.n).fill(LEVEL.ground);
+    for (let i = 0; i < this.n; i++) {
+      if (input.locks[i]) {
+        this.terrain[i] = input.terrain[i];
+        this.elevation[i] = input.elevation[i];
+      } else this.terrain[i] = T.tree;
+    }
     const o = input.openings;
     const ns = o.filter((x) => x.edge === "north" || x.edge === "south").length;
     const ew = o.length - ns;
@@ -80,6 +109,9 @@ export class GenContext {
 
   get params() {
     return this.input.params;
+  }
+  get layout() {
+    return this.input.layout;
   }
 
   idx(x: number, y: number) {

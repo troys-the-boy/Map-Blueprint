@@ -9,6 +9,7 @@
 
 import { DIRS, IS_WALKABLE, IS_WALL, T, cheapestPath } from "../grid";
 import { makeGrid } from "../model";
+import { MoveGraph, openingCells } from "../reach";
 import type { Entity } from "../model";
 import type { GenContext } from "./context";
 import { Role } from "./context";
@@ -16,7 +17,7 @@ import type { PocketHm } from "./params";
 
 export function addLedges(ctx: GenContext): void {
   const line = ctx.mainLine;
-  if (line.length < 16) return;
+  if (line.length < 16 || ctx.layout === "water") return;
   for (let l = 0; l < ctx.params.ledges; l++) {
     for (let attempt = 0; attempt < 20; attempt++) {
       if (tryLedge(ctx, line)) break;
@@ -48,7 +49,19 @@ function tryLedge(ctx: GenContext, line: number[]): boolean {
   const forbidden = (c: number) => {
     if (ctx.locks[c] || ctx.edgeDist(c) < ctx.params.borderThickness + 1) return true;
     const r = ctx.role[c];
-    return r === Role.Pocket || r === Role.Opening || r === Role.Bridge || r === Role.Water || r === Role.Corridor || ctx.terrain[c] === T.waterDeep;
+    return (
+      r === Role.Pocket ||
+      r === Role.Opening ||
+      r === Role.Bridge ||
+      r === Role.Water ||
+      r === Role.Corridor ||
+      r === Role.Sea ||
+      r === Role.Beach ||
+      r === Role.Cliff ||
+      r === Role.Stairs ||
+      r === Role.GrassRoute ||
+      ctx.terrain[c] === T.waterDeep
+    );
   };
   const corridor = cheapestPath(ctx.width, ctx.height, a, b, (c) => {
     // The corridor is carved 2 wide, so check the whole 2×2 footprint.
@@ -57,6 +70,7 @@ function tryLedge(ctx: GenContext, line: number[]): boolean {
     const foot = [c, c + 1, c + ctx.width, c + ctx.width + 1];
     const onPath = foot.some((f) => ctx.role[f] === Role.MainPath || ctx.role[f] === Role.Branch);
     if (foot.some((f) => forbidden(f) && !(ctx.role[f] === Role.MainPath || ctx.role[f] === Role.Branch))) return Infinity;
+    if (foot.some((f) => ctx.elevation[f] !== ctx.elevation[a])) return Infinity;
     if (onPath) return 40;
     return IS_WALKABLE[ctx.terrain[c]] ? 3 : 1;
   });
@@ -83,7 +97,7 @@ function tryLedge(ctx: GenContext, line: number[]): boolean {
   for (const c of corridor)
     ctx.stamp(c, 2, T.path, Role.Corridor, (j) => {
       const r = ctx.role[j];
-      return r !== Role.MainPath && r !== Role.Branch && r !== Role.Opening && r !== Role.Pocket && r !== Role.Bridge && r !== Role.Water && ctx.edgeDist(j) >= ctx.params.borderThickness;
+      return !forbidden(j) && r !== Role.MainPath && r !== Role.Branch && ctx.edgeDist(j) >= ctx.params.borderThickness;
     });
   const [lx, ly] = ctx.xy(corridor[ledgeAt]);
   const across = ctx.vertical ? [1, 0] : [0, 1];
@@ -125,8 +139,11 @@ const HM_LABEL: Record<PocketHm, string> = { cut: "Cut", rock_smash: "Rock Smash
 
 export function addHmPockets(ctx: GenContext): void {
   const types = ctx.params.hmPocketTypes;
-  if (!types.length) return;
+  if (!types.length || ctx.layout === "water") return;
   let gateCount = { cut_tree: 0, smash_rock: 0 } as Record<string, number>;
+  // Doorways must be somewhere the player can actually walk to.
+  const starts = ctx.input.openings.filter((o) => o.kind === "walk").flatMap((o) => openingCells(o, ctx.width, ctx.height));
+  const reach = new MoveGraph({ width: ctx.width, height: ctx.height, terrain: ctx.terrain, entities: ctx.entities, elevation: ctx.elevation }, new Set()).forward(starts);
   // Start at a random HM in the list so single pockets aren't always the first type.
   const offset = ctx.rng.int(0, types.length - 1);
   for (let k = 0; k < ctx.params.hmPockets; k++) {
@@ -136,7 +153,7 @@ export function addHmPockets(ctx: GenContext): void {
     for (let a = 0; a < ctx.n; a++) {
       // Pockets open off the main path or a branch (or a cell right beside it), like Cut trees in Emerald.
       const r = ctx.role[a];
-      if (ctx.locks[a] || !ctx.isWalkable(a) || ctx.terrain[a] === T.waterDeep) continue;
+      if (ctx.locks[a] || !ctx.isWalkable(a) || ctx.terrain[a] === T.waterDeep || !reach[a]) continue;
       const [ax, ay] = ctx.xy(a);
       const onPath = r === Role.MainPath || r === Role.Branch;
       const besidePath =
@@ -203,6 +220,8 @@ function tryPocket(
   const bt = ctx.params.borderThickness;
   for (const c of [...neck, ...room]) {
     if (ctx.locks[c] || ctx.role[c] !== Role.None || !IS_WALL[ctx.terrain[c]] || ctx.edgeDist(c) < bt) return null;
+    // The whole pocket sits on the doorway's level.
+    if (ctx.elevation[c] !== ctx.elevation[a]) return null;
   }
   for (const c of ring) {
     if (neck.includes(c)) continue;

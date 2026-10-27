@@ -81,6 +81,24 @@ Double-click **`start.command`**. If macOS refuses to open it:
 5. **Painting first works too.** Cells you paint are locked, and Generate builds around them. Paint a pond, then Generate, and the pond stays exactly as drawn. If your painting blocks the route, the Check tab tells you where.
 6. **Undo** reverses a Generate, like any other change.
 
+**Layouts** (Generate tab → Basic → Layout). The biome sets the look; the layout sets the shape:
+
+- **Land:** a route through forest and fields.
+- **Coastal:** the sea fills one long side, out to the map edge, with a sandy beach and surf entrances on the water at both ends. "Auto" picks this for the coastal biome.
+- **River:** a river runs the length of the route. The path follows the banks and crosses on bridges, and there are surf entrances on the river at both ends.
+- **Open water:** sea or lake with islands. It's a surfing route with swimmers on the water and items on the islands, and the checks assume the player has Surf.
+
+**Elevation** (Basic → Elevation) adds raised plateaus like Hoenn's. Each has a cliff face, stairs up, and ledges you jump down. At 0% the route is flat. Higher values give more and bigger plateaus, sometimes a second level on top. The **Elevation** overlay shades raised ground.
+
+**Two ways through** (Structure → Grass shortcut). Every route offers a choice:
+
+- **Stick to the path:** it's longer, and trainers watch it, so you'll fight most of them. You'll still cross some grass, set by **Grass across the path**.
+- **Take the grass shortcut:** it's shorter, mostly tall grass, and skips most trainers, but one may still watch it.
+
+No battle is forced for the whole map, because there's always the other way.
+
+Each entrance is **Walk** or **Surf** (Entrances section). Changing the layout resets entrances to automatic. Surf entrances are only checked once the player has Surf.
+
 **What a generated route contains:**
 
 - **Main path:** winds from entrance to entrance, with side branches that end in an item.
@@ -231,7 +249,7 @@ Whenever you push new code to GitHub, the hosted copy updates. The iPad picks up
 - **No stroke tools yet.** Painting is still the single-cell pencil. Stroke tools (paths, streams, tree walls…), "regenerate only part of the map" and the variations grid come in Milestone 3.
 - **Basic entities only.** Generate places trainers, items, hidden items, Cut trees, Rock Smash rocks and a sign. Their field values are suggestions to check in Porymap. Other kinds, editing entities, and encounter tables come in Milestone 4.
 - **No intentional unavoidable trainers.** Generated trainers can always be avoided. Marking an unavoidable battle as intended comes with the properties panel in Milestone 4.
-- **Simplified movement checks.** Water currents count as plain Surf water (the forced movement is ignored). Elevation is only modelled for bridges. Both will be refined when caves and cliffs arrive.
+- **Water currents.** They count as plain Surf water: the forced movement is ignored for now.
 - **Plain export text.** Labels in exported images use a small built-in pixel font, in capitals only.
 - **Not tested on real Apple devices.** Testing used Chromium on Windows, including an iPad-sized viewport. Please try Generate and Export on the real iPad and in desktop Safari.
 - **No resizing.** You can't change an existing map's size; create a new map instead.

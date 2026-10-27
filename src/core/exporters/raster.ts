@@ -119,7 +119,7 @@ export function textWidth(s: string, scale = 1): number {
 
 /** Map any text onto the characters the pixel font has. */
 function normalizeText(s: string): string {
-  const alias: Record<string, string> = { "⇡": "↑", "⇣": "↓", "⇢": "→", "⇠": "←", "≋": "=", "≡": "=", "◎": "O", "∩": "A", "–": "-", "—": "-", "×": "X", "·": "." };
+  const alias: Record<string, string> = { "⇡": "↑", "⇣": "↓", "⇢": "→", "⇠": "←", "≋": "=", "≡": "H", "◎": "O", "∩": "A", "–": "-", "—": "-", "×": "X", "·": "." };
   return [...s.toUpperCase()].map((ch) => alias[ch] ?? ch).join("");
 }
 

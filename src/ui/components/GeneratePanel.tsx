@@ -4,10 +4,11 @@
 import { HMS } from "../../core/constants";
 import type { Hm } from "../../core/constants";
 import { canGenerate } from "../../core/generate";
-import { DEFAULT_ROUTE_PARAMS, PARAM_RANGES, POCKET_HMS, readRouteParams, writeRouteParams } from "../../core/generators/params";
+import { DEFAULT_ROUTE_PARAMS, PARAM_RANGES, POCKET_HMS, readRouteParams, resolveLayout, writeRouteParams } from "../../core/generators/params";
+import type { Layout, LayoutSetting } from "../../core/generators/params";
 import type { RouteParams } from "../../core/generators/params";
 import { BIOMES, EDGES } from "../../core/model";
-import type { Biome, Edge, Opening } from "../../core/model";
+import type { Biome, Edge, Opening, OpeningKind } from "../../core/model";
 import { MAX_SEED } from "../../core/rng";
 import { useStore } from "../store";
 import { NumberField } from "./NumberField";
@@ -20,6 +21,8 @@ const BIOME_LABELS: Record<Biome, string> = {
   meadow: "Meadow",
   urban_edge: "Urban edge",
 };
+
+const LAYOUT_LABELS: Record<Layout, string> = { land: "Land", coastal: "Coastal", river: "River", water: "Open water" };
 
 const HM_LABELS: Record<string, string> = { cut: "Cut", flash: "Flash", rock_smash: "Rock Smash", strength: "Strength", surf: "Surf", dive: "Dive", waterfall: "Waterfall" };
 
@@ -34,6 +37,14 @@ export function GeneratePanel() {
   const map = s.currentMap;
   if (!map) return null;
   const p = readRouteParams(map.params);
+  const layout = resolveLayout(p, map.biome);
+  /** Change layout or biome. Entrances belong to a layout, so they go back to automatic when it changes. */
+  const changeLayout = (setting: LayoutSetting, biome: Biome) => {
+    const next = resolveLayout({ ...p, layout: setting }, biome);
+    if (setting !== p.layout) set({ layout: setting });
+    if (biome !== map.biome) s.setBiome(biome);
+    if (next !== layout && map.openings.length) s.setOpenings([]);
+  };
   const set = (patch: Partial<Record<keyof RouteParams, string | number | boolean>>) => s.setParams(patch as Record<string, string | number | boolean>);
   const supported = canGenerate(map);
   const last = s.lastGenerate?.mapId === map.id ? s.lastGenerate : null;
@@ -107,7 +118,7 @@ export function GeneratePanel() {
         <summary title="Biome, path shape">Basic</summary>
         <label className="field" title="The look of the map: changes the mix of trees, grass, water and ground.">
           <span>Biome</span>
-          <select value={map.biome} onChange={(e) => s.setBiome(e.target.value as Biome)}>
+          <select value={map.biome} onChange={(e) => changeLayout(p.layout, e.target.value as Biome)}>
             {BIOMES.map((b) => (
               <option key={b} value={b}>
                 {BIOME_LABELS[b]}
@@ -115,6 +126,18 @@ export function GeneratePanel() {
             ))}
           </select>
         </label>
+        <label className="field" title="The overall shape of the route. Auto = Coastal for the coastal biome, Land otherwise.">
+          <span>Layout</span>
+          <select value={p.layout} onChange={(e) => changeLayout(e.target.value as LayoutSetting, map.biome)}>
+            <option value="auto">Auto ({LAYOUT_LABELS[layout]})</option>
+            <option value="land">Land</option>
+            <option value="coastal">Coastal: sea along one side</option>
+            <option value="river">River: a river along the route</option>
+            <option value="water">Open water: sea or lake, surfing</option>
+          </select>
+        </label>
+        {layout === "water" && <p className="hint">Open-water routes are crossed by surfing, so the checks assume the player has Surf.</p>}
+        {num("elevation", "Elevation", "How hilly the route is: raised plateaus with cliffs, stairs up and ledges down. 0% = flat.")}
         {num("winding", "Path winding", "0% = straight, 100% = wanders a lot.")}
         {num("pathWidthMin", "Narrowest path", "Narrowest the main path gets, in cells.")}
         {num("pathWidthMax", "Widest path", "Widest the main path gets, in cells.")}
@@ -122,9 +145,16 @@ export function GeneratePanel() {
 
       <details>
         <summary title="Where the player enters and leaves the map">Entrances ({map.openings.length || "auto"})</summary>
-        {map.openings.length === 0 && <p className="hint">Picked automatically on the first Generate (one at each short end). You can then move them here.</p>}
+        {map.openings.length === 0 && <p className="hint">Picked automatically on the first Generate (at each short end, plus surf entrances on the water for coastal and river layouts). You can then move them here.</p>}
+        {map.openings.some((o) => o.kind === "surf") && !p.availableHms.includes("surf") && layout !== "water" && (
+          <p className="hint">Surf entrances aren't checked until Surf is ticked under Gameplay → Player has.</p>
+        )}
         {map.openings.map((o, k) => (
           <div key={o.id} className="opening-row">
+            <select value={o.kind} title="Walk = on land. Surf = on water, needs Surf." onChange={(e) => setOpening(k, { kind: e.target.value as OpeningKind })}>
+              <option value="walk">Walk</option>
+              <option value="surf">Surf</option>
+            </select>
             <select value={o.edge} title="Which edge of the map" onChange={(e) => setOpening(k, { edge: e.target.value as Edge, start: Math.min(o.start, Math.max(0, edgeLength(e.target.value as Edge) - o.width)) })}>
               {EDGES.map((e) => (
                 <option key={e} value={e}>
@@ -153,7 +183,7 @@ export function GeneratePanel() {
               const used = new Set(map.openings.map((o) => o.id));
               let n = map.openings.length + 1;
               while (used.has(`o${n}`)) n++;
-              s.setOpenings([...map.openings, { id: `o${n}`, edge: "east", start: Math.max(0, Math.floor(map.height / 2) - 1), width: 3 }]);
+              s.setOpenings([...map.openings, { id: `o${n}`, edge: "east", start: Math.max(0, Math.floor(map.height / 2) - 1), width: 3, kind: "walk" }]);
             }}
           >
             Add entrance
@@ -187,6 +217,12 @@ export function GeneratePanel() {
             <option value="no">Never</option>
           </select>
         </label>
+        {(layout === "coastal" || layout === "river") && (
+          <label className="check" title="Add entrances on the water at each end, which need Surf. Applies when entrances are picked automatically.">
+            <input type="checkbox" checked={p.surfEntrances} onChange={(e) => set({ surfEntrances: e.target.checked })} />
+            Surf entrances on the water
+          </label>
+        )}
         <label className="check" title="An open clearing beside the path.">
           <input type="checkbox" checked={p.clearing} onChange={(e) => set({ clearing: e.target.checked })} />
           Clearing
@@ -195,6 +231,11 @@ export function GeneratePanel() {
 
       <details>
         <summary title="Branches, ledges, HM-gated areas">Structure</summary>
+        <label className="check" title="A shorter second way through that's mostly tall grass. Taking the path means trainer battles; taking the grass means wild Pokémon.">
+          <input type="checkbox" checked={p.grassShortcut} onChange={(e) => set({ grassShortcut: e.target.checked })} />
+          Grass shortcut (two ways through)
+        </label>
+        {num("pathGrass", "Grass across the path", "Stretches of grass on the main path itself, so the path still has some wild encounters.")}
         {num("branches", "Side branches", "Dead-end paths off the main route.")}
         {num("branchLength", "Branch length", "How far side branches reach.")}
         <label className="check" title="Put an item at the end of every dead end.">

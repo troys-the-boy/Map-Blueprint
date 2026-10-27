@@ -4,11 +4,15 @@
 //   • item balls at dead ends and inside every HM pocket (plus extras off the path);
 //   • hidden items in odd corners;
 //   • trainers beside the path, facing it, so their sight line crosses the path.
+//     With a grass shortcut, trainers favour the stretch of path it bypasses
+//     (taking the path means battles) and at most one watches the grass.
+//   • on open water: swimmers beside the surfing lane, and items on islands.
 // All field values are suggestions for Porymap and can be edited later.
 
 import { FACE_MOVEMENT, trainerSight } from "../entities";
 import { DIRS, IS_WALKABLE, IS_WALL, IS_WATER, T, distanceField } from "../grid";
 import type { Entity } from "../model";
+import type { Hm } from "../constants";
 import { MoveGraph, openingCells } from "../reach";
 import type { GenContext } from "./context";
 import { Role } from "./context";
@@ -30,12 +34,19 @@ export function placeEntities(ctx: GenContext): void {
   const taken = new Uint8Array(n);
   for (const e of ctx.entities) taken[ctx.idx(e.x, e.y)] = 1;
 
-  const starts = ctx.input.openings.flatMap((o) => openingCells(o, width, height));
-  const fromOpenings = distanceField(width, height, starts);
-  const reachNoHm = new MoveGraph({ width, height, terrain: ctx.terrain, entities: ctx.entities }, new Set()).forward(starts);
+  const water = ctx.layout === "water";
+  // On open water the route is the surfing lane, travelled with Surf; elsewhere it's the path, on foot.
+  const routeOpenings = ctx.input.openings.filter((o) => o.kind === (water ? "surf" : "walk"));
+  const hms = new Set<Hm>(water ? ["surf"] : []);
+  const view = (terrain: Uint8Array) => ({ width, height, terrain, entities: ctx.entities, elevation: ctx.elevation });
+  const starts = routeOpenings.flatMap((o) => openingCells(o, width, height));
+  const fromOpenings = distanceField(width, height, ctx.input.openings.flatMap((o) => openingCells(o, width, height)));
+  const reachNoHm = new MoveGraph(view(ctx.terrain), hms).forward(starts);
+  const lane = new Set(water ? ctx.mainLine : []);
   const pathish = (i: number) => {
+    if (water) return lane.has(i);
     const r = ctx.role[i];
-    return r === Role.MainPath || r === Role.Branch || r === Role.Corridor || r === Role.Opening || r === Role.Bridge;
+    return r === Role.MainPath || r === Role.Branch || r === Role.Corridor || r === Role.Opening || r === Role.Bridge || r === Role.GrassRoute;
   };
   const add = (e: Omit<Entity, "elevation">) => {
     ctx.entities.push({ ...e, elevation: "ground" });
@@ -61,6 +72,16 @@ export function placeEntities(ctx: GenContext): void {
         if (t !== T.ground && t !== T.tree) continue;
         const besidePath = DIRS.some(({ dx: ddx, dy: ddy }) => ctx.inside(x + ddx, y + ddy) && pathish(ctx.idx(x + ddx, y + ddy)));
         if (!besidePath) continue;
+        // The path cell next to the sign must still have walkable ground on its far side.
+        const pinches = DIRS.some(({ dx: ddx, dy: ddy }) => {
+          const px = x + ddx;
+          const py = y + ddy;
+          if (!ctx.inside(px, py) || !pathish(ctx.idx(px, py))) return false;
+          const fx = px + ddx;
+          const fy = py + ddy;
+          return !ctx.inside(fx, fy) || !IS_WALKABLE[ctx.terrain[ctx.idx(fx, fy)]];
+        });
+        if (pinches) continue;
         const score = Math.abs(dx) + Math.abs(dy) + (IS_WALKABLE[t] ? 0 : 2);
         if (score < bestScore) {
           bestScore = score;
@@ -109,8 +130,9 @@ export function placeEntities(ctx: GenContext): void {
   for (let i = 0; i < n; i++) if (pathish(i)) pathCells.push(i);
   const fromPath = distanceField(width, height, pathCells);
   const offPath: number[] = [];
+  const farthest = water ? 14 : 6;
   for (let i = 0; i < n; i++)
-    if (reachNoHm[i] && !taken[i] && !pathish(i) && fromPath[i] >= 2 && fromPath[i] <= 6 && IS_WALKABLE[ctx.terrain[i]] && fromOpenings[i] > 5) offPath.push(i);
+    if (reachNoHm[i] && !taken[i] && !pathish(i) && fromPath[i] >= 2 && fromPath[i] <= farthest && IS_WALKABLE[ctx.terrain[i]] && fromOpenings[i] > 5) offPath.push(i);
   for (const i of rng.shuffle(offPath)) {
     if (budget <= 0) break;
     if (taken[i] || tooClose(ctx, i, "item_ball", 6)) continue;
@@ -143,12 +165,23 @@ export function placeEntities(ctx: GenContext): void {
   }
 
   // --- Trainers ---------------------------------------------------------------------------
-  type Spot = { i: number; dir: (typeof DIRS)[number]; range: number; score: number };
+  type Spot = { i: number; dir: (typeof DIRS)[number]; range: number; score: number; watchesGrass: boolean };
   const spots: Spot[] = [];
+  // Main-path cells on the stretch the grass shortcut bypasses: trainers here force battles on the path.
+  const bypassed = new Set<number>();
+  if (ctx.shortcut) {
+    for (let k = ctx.shortcut.from; k <= ctx.shortcut.to; k++) {
+      const [cx, cy] = ctx.xy(ctx.mainLine[k]);
+      for (let dy = -2; dy <= 2; dy++)
+        for (let dx = -2; dx <= 2; dx++) if (ctx.inside(cx + dx, cy + dy) && ctx.role[ctx.idx(cx + dx, cy + dy)] === Role.MainPath) bypassed.add(ctx.idx(cx + dx, cy + dy));
+    }
+  }
   for (let i = 0; i < n; i++) {
-    if (!reachNoHm[i] || taken[i] || pathish(i) || ctx.role[i] === Role.Pocket || fromOpenings[i] < 6) continue;
+    if (!reachNoHm[i] || taken[i] || pathish(i) || ctx.role[i] === Role.Pocket || ctx.role[i] === Role.Stairs || fromOpenings[i] < 6) continue;
     const t = ctx.terrain[i];
-    if (!IS_WALKABLE[t] || t === T.signTile) continue;
+    // Swimmers stand on open water; everyone else on walkable land.
+    if (water ? !IS_WATER[t] : !IS_WALKABLE[t] || t === T.signTile) continue;
+    const seeThrough = (j: number) => (water ? IS_WATER[ctx.terrain[j]] || IS_WALKABLE[ctx.terrain[j]] : IS_WALKABLE[ctx.terrain[j]]) && !taken[j];
     const [x, y] = ctx.xy(i);
     for (const d of DIRS) {
       // Look along this direction. The sight line must cross the path (in one
@@ -161,7 +194,7 @@ export function placeEntities(ctx: GenContext): void {
         const yy = y + d.dy * k;
         if (!ctx.inside(xx, yy)) break;
         const j = ctx.idx(xx, yy);
-        const walkable = IS_WALKABLE[ctx.terrain[j]] && !taken[j];
+        const walkable = seeThrough(j) && ctx.elevation[j] === ctx.elevation[i];
         if (walkable && pathish(j)) {
           if (firstPath < 0) firstPath = k;
           lastPath = k;
@@ -172,8 +205,11 @@ export function placeEntities(ctx: GenContext): void {
       }
       if (firstPath < 0 || firstPath > 4 || !crosses || lastPath - firstPath + 1 > p.pathWidthMax + 1) continue;
       const range = Math.min(6, lastPath);
-      // Prefer trainers standing a step or two back from the path.
-      spots.push({ i, dir: d, range, score: rng.next() + (firstPath === 2 ? 0.5 : firstPath === 1 ? 0.2 : 0) });
+      const first = ctx.idx(x + d.dx * firstPath, y + d.dy * firstPath);
+      const watchesGrass = ctx.role[first] === Role.GrassRoute;
+      // Prefer trainers a step or two back from the path, on the stretch the grass bypasses.
+      const score = rng.next() + (firstPath === 2 ? 0.5 : firstPath === 1 ? 0.2 : 0) + (bypassed.has(first) ? 1.2 : 0) + (watchesGrass ? 0.6 : 0);
+      spots.push({ i, dir: d, range, score, watchesGrass });
     }
   }
   spots.sort((a, b) => b.score - a.score || a.i - b.i);
@@ -183,19 +219,22 @@ export function placeEntities(ctx: GenContext): void {
   };
   // Can the player still get between the entrances if the trainer's sight line were a wall?
   const avoidable = (sight: number[], standing: number) => {
-    if (ctx.input.openings.length < 2) return true;
+    if (routeOpenings.length < 2) return true;
     const blocked = ctx.terrain.slice();
     for (const c of sight) blocked[c] = T.tree;
     blocked[standing] = T.tree;
-    const first = openingCells(ctx.input.openings[0], width, height);
-    const reach = new MoveGraph({ width, height, terrain: blocked, entities: ctx.entities }, new Set()).forward(first);
-    return ctx.input.openings.slice(1).every((o) => openingCells(o, width, height).some((c) => reach[c]));
+    const first = openingCells(routeOpenings[0], width, height);
+    const reach = new MoveGraph(view(blocked), hms).forward(first);
+    return routeOpenings.slice(1).every((o) => openingCells(o, width, height).some((c) => reach[c]));
   };
+  let grassWatchers = 0;
   const placedSights: number[][] = [];
   let trainerNo = 0;
   for (const s of spots) {
     if (trainerNo >= p.trainers) break;
     if (taken[s.i] || tooClose(ctx, s.i, "trainer", p.trainerSpacing)) continue;
+    // Only one trainer watches the grass shortcut; the shortcut's point is skipping trainers.
+    if (s.watchesGrass && grassWatchers >= 1) continue;
     const [x, y] = ctx.xy(s.i);
     const e: Entity = {
       id: `T${trainerNo + 1}`,
@@ -204,7 +243,7 @@ export function placeEntities(ctx: GenContext): void {
       y,
       elevation: "ground",
       fields: {
-        graphics_id: `OBJ_EVENT_GFX_${nearWater(s.i) ? "FISHERMAN" : rng.pick(TRAINER_GRAPHICS)}`,
+        graphics_id: `OBJ_EVENT_GFX_${water ? rng.pick(["SWIMMER_M", "SWIMMER_F"]) : nearWater(s.i) ? "FISHERMAN" : rng.pick(TRAINER_GRAPHICS)}`,
         movement_type: FACE_MOVEMENT[s.dir.dir],
         movement_range_x: 0,
         movement_range_y: 0,
@@ -231,6 +270,7 @@ export function placeEntities(ctx: GenContext): void {
     // A trainer must not watch another trainer's spot.
     if (sight.some((c) => taken[c])) continue;
     trainerNo++;
+    if (s.watchesGrass) grassWatchers++;
     placedSights.push(sight);
     ctx.entities.push(e);
     taken[s.i] = 1;

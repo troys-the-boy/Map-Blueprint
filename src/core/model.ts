@@ -95,8 +95,12 @@ export interface Warp {
 export const EDGES = ["north", "south", "east", "west"] as const;
 export type Edge = (typeof EDGES)[number];
 
+/** "walk" entrances are on land; "surf" entrances are on water and need Surf. */
+export const OPENING_KINDS = ["walk", "surf"] as const;
+export type OpeningKind = (typeof OPENING_KINDS)[number];
+
 /**
- * A gap in the map's edge where the player walks onto a neighbouring map.
+ * A gap in the map's edge where the player moves onto a neighbouring map.
  * `start` is the first cell along the edge (x for north/south, y for east/west).
  */
 export interface Opening {
@@ -104,6 +108,7 @@ export interface Opening {
   edge: Edge;
   start: number;
   width: number;
+  kind: OpeningKind;
 }
 
 /** Connection directions, named as in pokeemerald map.json ("up", "down", …). */

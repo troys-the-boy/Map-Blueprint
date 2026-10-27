@@ -6,35 +6,19 @@
 //    the "winding" setting controls how much it wanders.
 // 3. Add side branches that end in dead ends.
 
-import type { Edge, Opening } from "../model";
-import type { Rng } from "../rng";
+import type { Opening } from "../model";
 import { T, cheapestPath, distanceField } from "../grid";
 import { IS_WALKABLE } from "../grid";
 import type { GenContext } from "./context";
 import { Role } from "./context";
-import type { RouteParams } from "./params";
 
-/** Pick default entrances: one on each short end of the map. */
-export function defaultOpenings(width: number, height: number, params: RouteParams, rng: Rng): Opening[] {
-  const vertical = height >= width;
-  const edges: [Edge, Edge] = vertical ? ["north", "south"] : ["west", "east"];
-  const edgeLength = vertical ? width : height;
-  return edges.map((edge, k) => {
-    const w = Math.min(edgeLength, rng.int(params.pathWidthMin, Math.max(params.pathWidthMin, params.pathWidthMax)) + 1);
-    const margin = params.borderThickness + 2;
-    const lo = Math.min(margin, Math.max(0, edgeLength - w));
-    const hi = Math.max(lo, edgeLength - margin - w);
-    // Keep entrances in the middle 60% of the edge so the path has room to wander.
-    const mid = (lo + hi) / 2;
-    const spread = (hi - lo) * 0.3;
-    const start = Math.round(Math.min(hi, Math.max(lo, mid + rng.range(-spread, spread))));
-    return { id: `o${k + 1}`, edge, start, width: w };
-  });
-}
-
-/** Cell indices along an opening, from the map edge inwards to `depth`. Also returns the inner end cell. */
+/**
+ * Carve an entrance through the border, from the map edge inwards. Walk entrances
+ * become path; surf entrances become water. Returns the inner end cell.
+ */
 function carveOpening(ctx: GenContext, o: Opening): number {
   const depth = ctx.params.borderThickness + 1;
+  const surf = o.kind === "surf";
   let inner = 0;
   for (let k = 0; k < o.width; k++) {
     const along = o.start + k;
@@ -46,7 +30,8 @@ function carveOpening(ctx: GenContext, o: Opening): number {
       else [x, y] = [ctx.width - 1 - d, along];
       if (!ctx.inside(x, y)) continue;
       const i = ctx.idx(x, y);
-      ctx.set(i, T.path, Role.Opening);
+      if (surf) ctx.set(i, T.waterDeep, Role.Sea);
+      else ctx.set(i, T.path, Role.Opening);
       if (k === Math.floor(o.width / 2) && d === depth) inner = i;
     }
   }
@@ -59,7 +44,12 @@ function pathCost(ctx: GenContext, margin: number) {
   return (i: number) => {
     const [x, y] = ctx.xy(i);
     if (ctx.locks[i]) return IS_WALKABLE[ctx.terrain[i]] ? 1 : Infinity;
-    if (ctx.role[i] === Role.Opening) return 1;
+    const r = ctx.role[i];
+    if (r === Role.Opening || r === Role.Stairs) return 1;
+    if (r === Role.Cliff) return Infinity;
+    // Rivers are crossed on bridges (expensive, so crossings are short); the sea can't be crossed on foot.
+    if (r === Role.Sea) return ctx.layout === "river" ? 14 : Infinity;
+    if (r === Role.Beach) return 1.5;
     // Never through the border wall; near it only when there's no other way.
     if (ctx.edgeDist(i) < ctx.params.borderThickness) return Infinity;
     const nearEdge = x < margin || y < margin || x >= ctx.width - margin || y >= ctx.height - margin;
@@ -95,8 +85,10 @@ export function buildRouteSkeleton(ctx: GenContext): void {
   const margin = p.borderThickness + Math.ceil(p.pathWidthMax / 2) + 1;
   const cost = pathCost(ctx, margin);
 
-  ctx.openingEnds = ctx.input.openings.map((o) => carveOpening(ctx, o));
-  if (ctx.openingEnds.length === 0) return;
+  const ends = ctx.input.openings.map((o) => ({ o, end: carveOpening(ctx, o) }));
+  ctx.openingEnds = ends.filter((e) => e.o.kind === "walk").map((e) => e.end);
+  // Open water: the surfing lane (made by the layout) is the route; there's no path to lay.
+  if (ctx.layout === "water" || ctx.openingEnds.length === 0) return;
 
   // Main path: from the first entrance to every other one.
   const first = ctx.openingEnds[0];
@@ -126,7 +118,7 @@ export function buildRouteSkeleton(ctx: GenContext): void {
   let width = ctx.rng.int(p.pathWidthMin, p.pathWidthMax);
   mainLine.forEach((c, k) => {
     if (k % 12 === 0) width = ctx.rng.int(p.pathWidthMin, p.pathWidthMax);
-    ctx.stamp(c, width, T.path, Role.MainPath, (j) => ctx.role[j] !== Role.Opening && ctx.edgeDist(j) >= p.borderThickness);
+    ctx.stamp(c, width, T.path, Role.MainPath, (j) => canPave(ctx, j, c === j));
   });
 
   buildBranches(ctx, cost, margin);
@@ -152,10 +144,24 @@ function buildBranches(ctx: GenContext, cost: (i: number) => number, margin: num
       if (dist[target] < 5) continue;
       const leg = cheapestPath(ctx.width, ctx.height, from, target, cost);
       if (!leg) continue;
-      for (const c of leg)
-        ctx.stamp(c, p.pathWidthMin, T.path, Role.Branch, (j) => ctx.role[j] !== Role.MainPath && ctx.role[j] !== Role.Opening && ctx.edgeDist(j) >= p.borderThickness);
+      for (const c of leg) ctx.stamp(c, p.pathWidthMin, T.path, Role.Branch, (j) => ctx.role[j] !== Role.MainPath && canPave(ctx, j, c === j));
       ctx.deadEnds.push(target);
       break;
     }
   }
+}
+
+/**
+ * Can path paint this cell? Never over entrances, cliffs, stairs or the border.
+ * Over a river, the path's centre line becomes a bridge instead.
+ */
+function canPave(ctx: GenContext, j: number, centre: boolean): boolean {
+  const r = ctx.role[j];
+  if (r === Role.Opening || r === Role.Cliff || r === Role.Stairs || r === Role.Bridge) return false;
+  if (ctx.edgeDist(j) < ctx.params.borderThickness) return false;
+  if (r === Role.Sea) {
+    if (centre && ctx.layout === "river") ctx.set(j, T.bridge, Role.Bridge);
+    return false;
+  }
+  return true;
 }

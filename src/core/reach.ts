@@ -8,14 +8,17 @@
 //   • Cut trees, Rock Smash rocks and Strength boulders (entities) need their HM;
 //   • trainers, NPCs and signs (entities) block their cell. Item balls don't
 //     count as blocking, since the player picks them up.
-// Simplifications for now: currents are treated as plain Surf water (forced
-// movement is ignored) and elevation other than bridges is not modelled.
+//   • elevation: water, ground and bridges are the low level; raised1 and
+//     raised2 are plateaus. You can only change level on stairs (one level at
+//     a time), or by jumping down a ledge.
+// Simplification for now: currents are treated as plain Surf water (forced
+// movement is ignored).
 
 import type { Hm } from "./constants";
 import { DIRS } from "./grid";
 import type { Entity, Opening } from "./model";
 import type { Direction } from "./terrain";
-import { TERRAIN_TYPES } from "./terrain";
+import { ELEVATION_LEVELS, TERRAIN_TYPES } from "./terrain";
 
 /** The minimum a reachability check needs to know about a map. */
 export interface MapView {
@@ -23,7 +26,14 @@ export interface MapView {
   height: number;
   terrain: Uint8Array;
   entities: readonly Entity[];
+  /** Elevation level per cell (index into ELEVATION_LEVELS). Missing = all low ground. */
+  elevation?: Uint8Array;
 }
+
+/** Height tier of each elevation level: water, ground and bridges are all tier 0. */
+const TIER: Record<string, number> = { water: 0, ground: 0, bridge: 0, raised1: 1, raised2: 2 };
+const LEVEL_TIER = ELEVATION_LEVELS.map((l) => TIER[l]);
+const STAIRS = TERRAIN_TYPES.findIndex((t) => t.id === "stairs");
 
 /** HMs that matter for reaching places (Flash only lights caves). In the order the heatmap labels them. */
 export const MOVEMENT_HMS: readonly Hm[] = ["cut", "rock_smash", "strength", "surf", "waterfall", "dive"];
@@ -79,6 +89,13 @@ export class MoveGraph {
     };
     const canStand = (this.canStand = new Uint8Array(n));
     for (let i = 0; i < n; i++) canStand[i] = standable(i) ? 1 : 0;
+    const elev = view.elevation;
+    const tier = (i: number) => (elev ? LEVEL_TIER[elev[i]] ?? 0 : 0);
+    /** Can you step from a to b without a ledge? Same level, or one level apart on stairs. */
+    const levelOk = (a: number, b: number) => {
+      const d = Math.abs(tier(a) - tier(b));
+      return d === 0 || (d === 1 && (terrain[a] === STAIRS || terrain[b] === STAIRS));
+    };
 
     for (let i = 0; i < n; i++) {
       if (!canStand[i]) continue;
@@ -97,10 +114,11 @@ export class MoveGraph {
           const ly = ny + dy;
           if (lx < 0 || ly < 0 || lx >= width || ly >= height) return;
           const l = ly * width + lx;
-          if (canStand[l]) this.out[i * 4 + k] = l;
+          // A ledge only ever takes you down (or along the same level).
+          if (canStand[l] && tier(l) <= tier(i)) this.out[i * 4 + k] = l;
           return;
         }
-        if (canStand[j]) this.out[i * 4 + k] = j;
+        if (canStand[j] && levelOk(i, j)) this.out[i * 4 + k] = j;
       });
     }
   }
@@ -161,6 +179,11 @@ export class MoveGraph {
     }
     return seen;
   }
+}
+
+/** HMs needed to use an entrance: surf entrances need Surf. */
+export function openingNeeds(o: Opening): Hm[] {
+  return o.kind === "surf" ? ["surf"] : [];
 }
 
 /** The edge cells of an opening (cells on the map's outer row or column). */

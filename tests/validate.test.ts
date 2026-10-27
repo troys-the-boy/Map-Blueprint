@@ -19,8 +19,8 @@ function mapFrom(rows: string[], openings: MapBlueprint["openings"]): MapBluepri
 }
 
 const NS = [
-  { id: "n", edge: "north" as const, start: 2, width: 1 },
-  { id: "s", edge: "south" as const, start: 2, width: 1 },
+  { id: "n", edge: "north" as const, start: 2, width: 1, kind: "walk" as const },
+  { id: "s", edge: "south" as const, start: 2, width: 1, kind: "walk" as const },
 ];
 const codes = (map: MapBlueprint, hms: Parameters<typeof validateMap>[1] = {}) => validateMap(map, hms).map((i) => i.code);
 
@@ -41,8 +41,8 @@ describe("validation", () => {
 
   it("finds a ledge trap: a pit you can drop into but never leave", () => {
     const map = mapFrom(["#.....#", "#.###.#", "#.#,#.#", "#.#v#.#", "#.#,#.#", "#.###.#", "#.....#"], [
-      { id: "n", edge: "north", start: 1, width: 1 },
-      { id: "s", edge: "south", start: 1, width: 1 },
+      { id: "n", edge: "north", start: 1, width: 1, kind: "walk" as const },
+      { id: "s", edge: "south", start: 1, width: 1, kind: "walk" as const },
     ]);
     // Open the pit's top so the player can walk in from the north loop.
     map.layers.terrain.data[1 * 7 + 3] = T.ground;
@@ -60,6 +60,31 @@ describe("validation", () => {
     map.entities.push({ id: "C1", kind: "cut_tree", x: 2, y: 1, elevation: "ground", fields: {} });
     expect(codes(map)).toContain("unreachable-exit");
     expect(codes(map, { availableHms: ["cut"] })).not.toContain("unreachable-exit");
+  });
+
+  it("only lets you change level on stairs, and jump down off a plateau ledge", () => {
+    // A raised strip (row 2) between two ground rows, reached by stairs or a ledge.
+    const map = mapFrom(["##.##", "##.##", "##.##", "##.##", "##.##"], NS);
+    const raised = 2; // ELEVATION_LEVELS index of raised1
+    for (let x = 0; x < 5; x++) map.layers.elevation.data[2 * 5 + x] = raised;
+    // Without stairs, the level change blocks the way.
+    expect(codes(map)).toContain("unreachable-exit");
+    // Stairs on the way up from the north make it passable both ways.
+    map.layers.terrain.data[1 * 5 + 2] = T.stairs;
+    map.layers.elevation.data[1 * 5 + 2] = raised;
+    map.layers.terrain.data[3 * 5 + 2] = T.stairs;
+    map.layers.elevation.data[3 * 5 + 2] = raised;
+    expect(codes(map)).not.toContain("unreachable-exit");
+  });
+
+  it("needs Surf for surf entrances, and says so when the only way in is surfing", () => {
+    const map = mapFrom(["##~##", "##~##", "##~##"], [
+      { id: "n", edge: "north", start: 2, width: 1, kind: "surf" },
+      { id: "s", edge: "south", start: 2, width: 1, kind: "surf" },
+    ]);
+    expect(codes(map)).toContain("no-usable-entrance");
+    expect(codes(map, { availableHms: ["surf"] })).not.toContain("no-usable-entrance");
+    expect(codes(map, { availableHms: ["surf"] })).not.toContain("unreachable-exit");
   });
 
   it("reports a blocked entrance", () => {

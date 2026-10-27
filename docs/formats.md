@@ -4,7 +4,7 @@ This document defines the tool's file formats. The terrain vocabulary and the ti
 
 | File | Identifier (`format`) | Version field | Current |
 | --- | --- | --- | --- |
-| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 2 |
+| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 3 |
 | Terrain vocabulary (`profiles/terrain.json`) | `gen3-terrain-vocabulary` | `formatVersion` | 1 |
 | Terrain palette (`profiles/palettes/*.json`) | `gen3-terrain-palette` | `formatVersion` | 1 |
 | Tileset profile (`profiles/tilesets/*.json`) | `gen3-tileset-profile` | `formatVersion` | 1 (draft) |
@@ -13,7 +13,7 @@ Coordinates are in **metatiles** (16×16 px). The origin (0, 0) is the top-left 
 
 ---
 
-## Project file, schemaVersion 2
+## Project file, schemaVersion 3
 
 A project is a single JSON file holding one region and all of its maps. The app treats it as untrusted data when opening it:
 
@@ -28,11 +28,12 @@ When the format changes, `schemaVersion` goes up and a migration in `src/core/pr
 | --- | --- | --- |
 | 1 | 1 | First version. |
 | 2 | 2 | Each map gains `openings` (edge entrances). Version-1 files are upgraded with `openings: []`. |
+| 3 | 2 (revision) | Each opening gains `kind`: `walk` or `surf`. Version-2 openings become `walk`. |
 
 ```jsonc
 {
   "format": "gen3-map-blueprint-project",
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "appVersion": "0.1.0",
   "savedAt": "2026-10-26T20:00:00.000Z",
   "region": {
@@ -90,7 +91,7 @@ The region's connection graph isn't stored separately. It's derived from each ma
                   "fields": { "script": "Route1_EventScript_Sign" } } ],
   "warps": [ { "id": "w0", "kind": "cave_mouth", "x": 10, "y": 2, "elevation": "ground",
                "destMap": "map_5", "destWarpId": 0 } ],
-  "openings": [ { "id": "o1", "edge": "north", "start": 8, "width": 3 } ],   // edge entrances
+  "openings": [ { "id": "o1", "edge": "north", "start": 8, "width": 3, "kind": "walk" } ],   // edge entrances
   "connections": [ { "direction": "up", "map": "map_2", "offset": 0 } ],
   "header": { /* map.json header, below */ },
   "layout": { "borderBlock": ["tree", "tree", "tree", "tree"], "primaryTileset": "", "secondaryTileset": "" },
@@ -144,6 +145,7 @@ An opening is a gap in the map edge where the player walks onto a neighbouring m
 - `edge` is `north`, `south`, `east` or `west`.
 - `start` is the first cell along that edge: x for north and south, y for east and west.
 - `width` is how many cells wide the gap is.
+- `kind` is `walk` (on land) or `surf` (on water). Surf entrances are only checked once the player has Surf.
 
 An empty list means "let the generator choose". The first Generate then picks one opening at each short end of the map and saves them here.
 
@@ -153,13 +155,18 @@ Every value is optional. Missing or out-of-range values fall back to the default
 
 | Key | Default | Range / values |
 | --- | --- | --- |
+| `layout` | `auto` | `auto` (coastal for the coastal biome, else land), `land`, `coastal`, `river`, `water` |
+| `elevation` | 0.35 | 0–1 (how many and how big the plateaus are) |
+| `grassShortcut` | true | true / false (the "two ways through" grass route) |
+| `pathGrass` | 0.5 | 0–1 (grass stretches across the main path) |
+| `surfEntrances` | true | true / false (coastal and river: surf entrances on the water) |
 | `pathWidthMin`, `pathWidthMax` | 2, 3 | 1–4, 1–5 cells |
 | `winding` | 0.5 | 0–1 |
 | `branches` | 2 | 0–6 |
 | `branchLength` | 0.5 | 0–1 |
 | `deadEndRewards` | true | true / false |
 | `ledges` | 1 | 0–4 |
-| `grass`, `water`, `treeDensity` | 0.35, 0.25, 0.55 | 0–1 |
+| `grass`, `water`, `treeDensity` | 0.65, 0.25, 0.55 | 0–1 |
 | `borderThickness` | 2 | 1–4 |
 | `borderStyle` | `forest` | `forest`, `cliff` |
 | `stream` | `auto` | `auto`, `yes`, `no` |
@@ -173,6 +180,16 @@ Every value is optional. Missing or out-of-range values fall back to the default
 | `generatorVersion` | (set by the app) | which generator produced the map |
 
 The same map, settings and seed always produce exactly the same result. If the generators change in a way that alters results, `GENERATOR_VERSION` in `src/core/generate.ts` is bumped.
+
+#### Elevation
+
+The `elevation` layer stores one level per cell: `water`, `ground`, `raised1`, `raised2` or `bridge`. For movement:
+
+- `water`, `ground` and `bridge` are one low level. `raised1` and `raised2` are plateaus.
+- The player can only change level by stepping onto or off **stairs**, one level at a time.
+- The player can also drop down a level by jumping a **ledge**.
+
+Generated plateaus are ringed by `rock_wall` (the cliff face). Parts of the rim are `stairs`, and some stretches are `ledge_s`, `ledge_e` or `ledge_w`.
 
 #### Zones written by the generator
 

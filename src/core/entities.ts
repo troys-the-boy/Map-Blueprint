@@ -1,6 +1,6 @@
 // Helpers for entities: trainer sight lines and table IDs.
 
-import { IS_WALKABLE } from "./grid";
+import { IS_WALKABLE, IS_WATER } from "./grid";
 import type { Entity, EntityKind } from "./model";
 import type { Direction } from "./terrain";
 
@@ -55,13 +55,16 @@ const STEP: Record<Direction, [number, number]> = { n: [0, -1], s: [0, 1], e: [1
 
 /**
  * Cells a trainer can see: along each direction it faces, up to its sight range,
- * stopping at the first cell the player couldn't stand on (a tree, wall, water…).
+ * stopping at the first cell the player couldn't be on (a tree, a wall…). A
+ * trainer on land is stopped by water; a swimmer sees across water.
  */
 export function trainerSight(e: Entity, width: number, height: number, terrain: Uint8Array): number[] {
   if (e.kind !== "trainer") return [];
   const range = Number(e.fields.trainer_sight_or_berry_tree_id ?? 0);
   if (!Number.isFinite(range) || range <= 0) return [];
   const dirs = FACING[String(e.fields.movement_type ?? "")] ?? [];
+  const swimmer = e.x >= 0 && e.y >= 0 && e.x < width && e.y < height && IS_WATER[terrain[e.y * width + e.x]];
+  const seeThrough = (t: number) => (swimmer ? IS_WATER[t] || IS_WALKABLE[t] : IS_WALKABLE[t]);
   const out: number[] = [];
   for (const d of dirs) {
     const [dx, dy] = STEP[d];
@@ -70,7 +73,7 @@ export function trainerSight(e: Entity, width: number, height: number, terrain: 
       const y = e.y + dy * k;
       if (x < 0 || y < 0 || x >= width || y >= height) break;
       const i = y * width + x;
-      if (!IS_WALKABLE[terrain[i]]) break;
+      if (!seeThrough(terrain[i])) break;
       out.push(i);
     }
   }

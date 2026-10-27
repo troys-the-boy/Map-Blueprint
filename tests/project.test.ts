@@ -130,6 +130,14 @@ describe("opening untrusted files", () => {
 });
 
 describe("migrations", () => {
+  it("opens a version-2 file and marks its entrances as walk entrances", () => {
+    const f = parseSample();
+    f.schemaVersion = 2;
+    f.region.maps[0].openings = [{ id: "o1", edge: "north", start: 3, width: 2 }];
+    const loaded = parseProject(JSON.stringify(f));
+    expect(loaded.maps[0].openings).toEqual([{ id: "o1", edge: "north", start: 3, width: 2, kind: "walk" }]);
+  });
+
   it("opens a version-1 file (Milestone 1) and adds empty openings", () => {
     const f = parseSample();
     f.schemaVersion = 1;

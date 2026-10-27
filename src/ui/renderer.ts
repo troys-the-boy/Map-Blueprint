@@ -308,10 +308,12 @@ export class MapRenderer {
     ctx.lineWidth = 1;
     ctx.strokeRect(Math.round(offsetX) - 0.5, Math.round(offsetY) - 0.5, map.width * scale + 1, map.height * scale + 1);
 
-    // Entrances: yellow outline on their edge cells.
+    // Entrances: yellow outline for walk entrances, light blue for surf entrances.
     ctx.lineWidth = 2;
-    ctx.strokeStyle = "rgba(255, 214, 60, 0.95)";
-    for (const o of map.openings) for (const c of openingCells(o, map.width, map.height)) ctx.strokeRect(...cellRect(c, 1));
+    for (const o of map.openings) {
+      ctx.strokeStyle = o.kind === "surf" ? "rgba(120, 220, 255, 0.95)" : "rgba(255, 214, 60, 0.95)";
+      for (const c of openingCells(o, map.width, map.height)) ctx.strokeRect(...cellRect(c, 1));
+    }
 
     // Trainer sight lines.
     if (this.overlays.sight) {

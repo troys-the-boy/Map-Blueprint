@@ -34,6 +34,7 @@ export const T = {
   waterShallow: requireTerrain("water_shallow"),
   waterDeep: requireTerrain("water_deep"),
   bridge: requireTerrain("bridge"),
+  stairs: requireTerrain("stairs"),
   signTile: requireTerrain("sign_tile"),
   void: requireTerrain("void"),
 } as const;

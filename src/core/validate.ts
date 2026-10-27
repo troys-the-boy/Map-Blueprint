@@ -10,7 +10,7 @@ import { PORYMAP_GROUP, trainerSight } from "./entities";
 import { DIRS, IS_GRASS, IS_WALKABLE, IS_WALL, IS_WATER, T, components, distanceField } from "./grid";
 import type { EngineLimits, MapBlueprint, Opening } from "./model";
 import { DEFAULT_ENGINE_LIMITS } from "./model";
-import { MOVEMENT_HMS, MoveGraph, openingCells } from "./reach";
+import { MOVEMENT_HMS, MoveGraph, openingCells, openingNeeds } from "./reach";
 import type { MapView } from "./reach";
 import { checkMapSize, describeSizeCheck } from "./sizeRule";
 import { TERRAIN_TYPES } from "./terrain";
@@ -85,13 +85,27 @@ export function validateMap(map: MapBlueprint, opts: ValidateOptions = {}): Issu
     }
 
   // --- Entrances and reachability ----------------------------------------------
-  const view: MapView = { width, height, terrain, entities: map.entities };
+  const view: MapView = { width, height, terrain, entities: map.entities, elevation: map.layers.elevation.data };
   const graph = new MoveGraph(view, new Set(hms));
-  const openings = map.openings.map((o) => ({ o, cells: openingCells(o, width, height).filter((c) => graph.canStand[c]) }));
+  const everyHm = new MoveGraph(view, new Set(MOVEMENT_HMS));
   if (map.openings.length === 0) warn("no-entrances", "This map has no entrances yet. Generate it, or add entrances in the Generate panel.");
-  for (const { o, cells } of openings) {
-    if (cells.length === 0) err("blocked-entrance", `The ${describeOpening(o)} is blocked: no walkable cell on the map edge there.`, openingCells(o, width, height));
+  // Surf entrances only count once the player has Surf.
+  const canUse = (o: Opening) => openingNeeds(o).every((h) => hms.includes(h));
+  const openings = map.openings.filter(canUse).map((o) => ({ o, cells: openingCells(o, width, height).filter((c) => graph.canStand[c]) }));
+  for (const o of map.openings) {
+    const cells = openingCells(o, width, height);
+    const ok = o.kind === "surf" ? cells.some((c) => IS_WATER[terrain[c]] && everyHm.canStand[c]) : cells.some((c) => everyHm.canStand[c] && !IS_WATER[terrain[c]]);
+    if (!ok)
+      err(
+        "blocked-entrance",
+        o.kind === "surf"
+          ? `The ${describeOpening(o)} is a surf entrance, but there's no water on the map edge there.`
+          : `The ${describeOpening(o)} is blocked: no walkable cell on the map edge there.`,
+        cells,
+      );
   }
+  if (map.openings.length && !openings.length)
+    err("no-usable-entrance", `This map can only be entered by surfing, but the player doesn't have Surf here. Tick Surf under "Player has" if they do.`);
   const usable = openings.filter((x) => x.cells.length);
   for (const a of usable) {
     const reach = graph.forward(a.cells);
@@ -156,12 +170,22 @@ export function validateMap(map: MapBlueprint, opts: ValidateOptions = {}): Issu
   const gated = new Uint8Array(width * height);
   for (const z of map.layers.zones) if (z.kind === "hm_gate") z.mask.data.forEach((v, i) => v && (gated[i] = 1));
   // Ledges count as open here: they can be crossed (one way).
+  const nextToStairs = (x: number, y: number) => {
+    for (let dy = -2; dy <= 2; dy++)
+      for (let dx = -2; dx <= 2; dx++) {
+        const xx = x + dx;
+        const yy = y + dy;
+        if (xx >= 0 && yy >= 0 && xx < width && yy < height && terrain[yy * width + xx] === T.stairs) return true;
+      }
+    return false;
+  };
   const blocks = (x: number, y: number) =>
     x < 0 || y < 0 || x >= width || y >= height || (!IS_WALKABLE[terrain[y * width + x]] && TERRAIN_TYPES[terrain[y * width + x]].passability !== "one_way");
   for (let y = 0; y < height; y++)
     for (let x = 0; x < width; x++) {
       const i = y * width + x;
-      if (terrain[i] !== T.path || gated[i]) continue;
+      // Paths onto stairs are naturally one cell wide, like the stairs.
+      if (terrain[i] !== T.path || gated[i] || nextToStairs(x, y)) continue;
       if ((blocks(x - 1, y) && blocks(x + 1, y)) || (blocks(x, y - 1) && blocks(x, y + 1))) narrow.push(i);
     }
   for (const g of groups(narrow, width, height)) warn("narrow-path", `Path near ${xy(g[0])} is only 1 cell wide.`, g);

@@ -30,6 +30,7 @@ import {
   CONNECTION_DIRECTIONS,
   EDGES,
   ENTITY_KINDS,
+  OPENING_KINDS,
   MAP_TYPES,
   WARP_KINDS,
   makeGrid,
@@ -53,7 +54,7 @@ import {
 import { ELEVATION_LEVELS, TERRAIN_TYPES, terrainIndex } from "./terrain";
 
 export const FILE_FORMAT_ID = "gen3-map-blueprint-project";
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 /** Safety limits for opened files. Anything bigger is rejected. */
 export const FILE_LIMITS = {
@@ -247,6 +248,7 @@ const openingCheck: Check<Opening> = object({
   edge: oneOf(EDGES),
   start: num(0, FILE_LIMITS.maxMapSide - 1),
   width: num(1, FILE_LIMITS.maxMapSide),
+  kind: oneOf(OPENING_KINDS),
 });
 
 const connectionCheck: Check<Connection> = object({
@@ -398,6 +400,20 @@ export const MIGRATIONS: Record<number, Migration> = {
             }
           : region,
     };
+  },
+  // v2 → v3 (Milestone 2 revision): entrances are "walk" or "surf"; existing ones are walk.
+  2: (file) => {
+    const region = file.region as Record<string, unknown> | null;
+    const maps = Array.isArray(region?.maps) ? (region!.maps as unknown[]) : null;
+    const upgradeMap = (m: unknown) => {
+      if (!m || typeof m !== "object" || Array.isArray(m)) return m;
+      const openings = (m as { openings?: unknown }).openings;
+      return {
+        ...(m as object),
+        openings: Array.isArray(openings) ? openings.map((o) => (o && typeof o === "object" ? { ...(o as object), kind: "walk" } : o)) : openings,
+      };
+    };
+    return { ...file, schemaVersion: 3, region: region && maps ? { ...region, maps: maps.map(upgradeMap) } : region };
   },
 };
 

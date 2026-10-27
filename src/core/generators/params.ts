@@ -6,13 +6,28 @@
 
 import type { Hm } from "../constants";
 import { HMS } from "../constants";
+import type { Biome } from "../model";
 
 export type BorderStyle = "forest" | "cliff";
+/** The overall shape of a route. "auto" = coastal for the coastal biome, land otherwise. */
+export type LayoutSetting = "auto" | "land" | "coastal" | "river" | "water";
+export type Layout = Exclude<LayoutSetting, "auto">;
+export const LAYOUTS: readonly LayoutSetting[] = ["auto", "land", "coastal", "river", "water"];
 export type StreamMode = "auto" | "yes" | "no";
 export type PocketHm = "cut" | "rock_smash" | "surf";
 export const POCKET_HMS: readonly PocketHm[] = ["cut", "rock_smash", "surf"];
 
 export interface RouteParams {
+  /** Land, coastal (sea along one side), river (a river along the route) or open water (surfing). */
+  layout: LayoutSetting;
+  /** How hilly: 0 = flat, 1 = several raised plateaus with cliffs, stairs and ledges. */
+  elevation: number;
+  /** A shorter second way through that's mostly tall grass, so players choose trainers or wild Pokémon. */
+  grassShortcut: boolean;
+  /** How much grass crosses the main path itself (grass you can't avoid on the path), 0 … 1. */
+  pathGrass: number;
+  /** Coastal and river routes: add entrances on the water that need Surf. */
+  surfEntrances: boolean;
   /** Narrowest and widest the main path can be, in cells. */
   pathWidthMin: number;
   pathWidthMax: number;
@@ -55,6 +70,11 @@ export interface RouteParams {
 }
 
 export const DEFAULT_ROUTE_PARAMS: RouteParams = {
+  layout: "auto",
+  elevation: 0.35,
+  grassShortcut: true,
+  pathGrass: 0.5,
+  surfEntrances: true,
   pathWidthMin: 2,
   pathWidthMax: 3,
   winding: 0.5,
@@ -62,7 +82,7 @@ export const DEFAULT_ROUTE_PARAMS: RouteParams = {
   branchLength: 0.5,
   deadEndRewards: true,
   ledges: 1,
-  grass: 0.35,
+  grass: 0.65,
   water: 0.25,
   treeDensity: 0.55,
   borderThickness: 2,
@@ -81,6 +101,8 @@ export const DEFAULT_ROUTE_PARAMS: RouteParams = {
 
 /** Allowed range for each number setting: [min, max, whole numbers only]. */
 export const PARAM_RANGES: Record<string, [number, number, boolean]> = {
+  elevation: [0, 1, false],
+  pathGrass: [0, 1, false],
   pathWidthMin: [1, 4, true],
   pathWidthMax: [1, 5, true],
   winding: [0, 1, false],
@@ -124,6 +146,9 @@ export function readRouteParams(params: Record<string, string | number | boolean
   }
   if (p.pathWidthMax < p.pathWidthMin) p.pathWidthMax = p.pathWidthMin;
   p.deadEndRewards = typeof params.deadEndRewards === "boolean" ? params.deadEndRewards : d.deadEndRewards;
+  p.grassShortcut = typeof params.grassShortcut === "boolean" ? params.grassShortcut : d.grassShortcut;
+  p.surfEntrances = typeof params.surfEntrances === "boolean" ? params.surfEntrances : d.surfEntrances;
+  p.layout = (LAYOUTS as readonly unknown[]).includes(params.layout) ? (params.layout as LayoutSetting) : d.layout;
   p.clearing = typeof params.clearing === "boolean" ? params.clearing : d.clearing;
   p.borderStyle = params.borderStyle === "cliff" ? "cliff" : "forest";
   p.stream = params.stream === "yes" || params.stream === "no" ? params.stream : "auto";
@@ -137,10 +162,26 @@ export function writeRouteParams(p: RouteParams): Record<string, string | number
   return {
     ...Object.fromEntries(Object.keys(PARAM_RANGES).map((k) => [k, (p as unknown as Record<string, number>)[k]])),
     deadEndRewards: p.deadEndRewards,
+    grassShortcut: p.grassShortcut,
+    surfEntrances: p.surfEntrances,
+    layout: p.layout,
     clearing: p.clearing,
     borderStyle: p.borderStyle,
     stream: p.stream,
     hmPocketTypes: p.hmPocketTypes.join(","),
     availableHms: p.availableHms.join(","),
   };
+}
+
+/** The layout actually used: "auto" means coastal for the coastal biome, land otherwise. */
+export function resolveLayout(p: RouteParams, biome: Biome): Layout {
+  if (p.layout !== "auto") return p.layout;
+  return biome === "coastal" ? "coastal" : "land";
+}
+
+/** HMs the player has here. Open-water routes always assume Surf (you can't cross them without it). */
+export function hmsFor(p: RouteParams, biome: Biome): Hm[] {
+  const hms = [...p.availableHms];
+  if (resolveLayout(p, biome) === "water" && !hms.includes("surf")) hms.push("surf");
+  return hms;
 }

@@ -9,20 +9,24 @@
 
 import type { Entity, MapBlueprint, Opening, Zone } from "./model";
 import { Rng, deriveSeed } from "./rng";
-import { ELEVATION_LEVELS, TERRAIN_TYPES } from "./terrain";
+import { IS_WATER, T } from "./grid";
 import type { Issue, ValidateOptions } from "./validate";
 import { validateMap } from "./validate";
-import { GenContext } from "./generators/context";
+import { GenContext, LEVEL } from "./generators/context";
 import type { GenInput } from "./generators/context";
-import { readRouteParams } from "./generators/params";
-import { buildRouteSkeleton, defaultOpenings } from "./generators/routeSkeleton";
+import { hmsFor, readRouteParams, resolveLayout } from "./generators/params";
+import { buildRouteSkeleton } from "./generators/routeSkeleton";
+import { applyLayout, computeGeometry, layoutOpenings } from "./generators/layout";
+import type { Geometry } from "./generators/layout";
+import { addPlateaus } from "./generators/plateaus";
+import { addGrassShortcut, addPathGrass } from "./generators/shortcut";
 import { fillTerrain } from "./generators/terrainFill";
 import { addHmPockets, addLedges } from "./generators/features";
 import { cleanup } from "./generators/cleanup";
 import { placeEntities } from "./generators/placement";
 
 /** Version of the generators. Bumped when the same seed starts giving different maps. */
-export const GENERATOR_VERSION = 1;
+export const GENERATOR_VERSION = 2;
 
 export interface GenerateResult {
   ok: boolean;
@@ -41,9 +45,16 @@ export function canGenerate(map: MapBlueprint): boolean {
   return map.mapType === "route";
 }
 
-function elevationFor(terrain: Uint8Array): Uint8Array {
-  const out = new Uint8Array(terrain.length);
-  for (let i = 0; i < terrain.length; i++) out[i] = ELEVATION_LEVELS.indexOf(TERRAIN_TYPES[terrain[i]].elevation);
+/** Final elevation: plateau levels as built, water on the low level marked "water", bridges "bridge". */
+function finishElevation(ctx: GenContext): Uint8Array {
+  const out = ctx.elevation.slice();
+  for (let i = 0; i < ctx.n; i++) {
+    if (ctx.locks[i]) continue;
+    const low = out[i] === LEVEL.ground || out[i] === LEVEL.water;
+    if (ctx.terrain[i] === T.bridge) out[i] = LEVEL.bridge;
+    else if (low && IS_WATER[ctx.terrain[i]]) out[i] = LEVEL.water;
+    else if (out[i] === LEVEL.water) out[i] = LEVEL.ground;
+  }
   return out;
 }
 
@@ -52,16 +63,20 @@ function labelBase(map: MapBlueprint): string {
   return map.header.name.replace(/[^A-Za-z0-9]/g, "") || map.name.replace(/[^A-Za-z0-9]/g, "") || "Map";
 }
 
-function runOnce(map: MapBlueprint, input: GenInput, seed: number, validate: ValidateOptions): GenerateResult {
+function runOnce(map: MapBlueprint, input: GenInput, geometry: Geometry, seed: number, validate: ValidateOptions): GenerateResult {
   const ctx = new GenContext(input, new Rng(seed));
-  buildRouteSkeleton(ctx);
-  fillTerrain(ctx);
+  applyLayout(ctx, geometry); // sea, river or open water
+  addPlateaus(ctx); // elevation: cliffs, stairs, ledges
+  buildRouteSkeleton(ctx); // entrances, main path, branches
+  addGrassShortcut(ctx); // the second way through, in tall grass
+  addPathGrass(ctx); // grass across the main path
+  fillTerrain(ctx); // trees, open ground, ponds, stream, grass
   addHmPockets(ctx);
-  addLedges(ctx);
+  addLedges(ctx); // extra ledge shortcut loops
   cleanup(ctx);
   placeEntities(ctx);
 
-  const elevation = elevationFor(ctx.terrain);
+  const elevation = finishElevation(ctx);
   const keptZones = map.layers.zones.filter((z) => z.data.generated !== true);
   const zones = [...keptZones, ...ctx.zones];
   const draft: MapBlueprint = {
@@ -105,23 +120,29 @@ function runOnce(map: MapBlueprint, input: GenInput, seed: number, validate: Val
 /** Generate a route for this map, using its seed and saved settings. Doesn't change the map. */
 export function generateRoute(map: MapBlueprint, validate: Omit<ValidateOptions, "availableHms"> = {}): GenerateResult {
   const params = readRouteParams(map.params);
-  const openings = map.openings.length ? map.openings : defaultOpenings(map.width, map.height, params, new Rng(deriveSeed(map.seed, "openings")));
+  const layout = resolveLayout(params, map.biome);
+  const layoutSeed = deriveSeed(map.seed, "layout");
+  const geometry = computeGeometry(map.width, map.height, params, layout, layoutSeed);
+  const openings = map.openings.length ? map.openings : layoutOpenings(geometry, params, layout, new Rng(deriveSeed(map.seed, "openings")));
   const input: GenInput = {
     width: map.width,
     height: map.height,
     terrain: map.layers.terrain.data,
+    elevation: map.layers.elevation.data,
     locks: map.layers.locks.data,
     openings,
     biome: map.biome,
+    layout,
     params,
     labelBase: labelBase(map),
+    layoutSeed,
   };
-  const opts: ValidateOptions = { ...validate, availableHms: params.availableHms };
+  const opts: ValidateOptions = { ...validate, availableHms: hmsFor(params, map.biome) };
   let best: GenerateResult | null = null;
   const errorCount = (r: GenerateResult) => r.issues.filter((i) => i.severity === "error").length;
   for (let attempt = 0; attempt <= params.retries; attempt++) {
     const seed = attempt === 0 ? map.seed : deriveSeed(map.seed, `attempt${attempt}`);
-    const result = runOnce(map, input, seed, opts);
+    const result = runOnce(map, input, geometry, seed, opts);
     result.attempts = attempt + 1;
     if (result.ok) return result;
     if (!best || errorCount(result) < errorCount(best)) best = result;
@@ -137,4 +158,9 @@ export function applyResult(map: MapBlueprint, result: GenerateResult): void {
   map.openings = result.openings;
   map.layers.zones = result.zones;
   map.params = { ...map.params, generatorVersion: GENERATOR_VERSION };
+  // The border block shows beyond the map edges: water for sea routes, the wall style otherwise.
+  const p = readRouteParams(map.params);
+  const layout = resolveLayout(p, map.biome);
+  const border = layout === "water" || layout === "coastal" ? "water_deep" : p.borderStyle === "cliff" ? "rock_wall" : "tree";
+  map.layout.borderBlock = [border, border, border, border];
 }

@@ -101,12 +101,12 @@ export function renderBlueprint(map: MapBlueprint, opts: BlueprintOptions): Rast
   }
   img.strokeRect(ox - 1, oy - 1, mapW + 2, mapH + 2, INK);
 
-  // Entrances: a yellow outline on their edge cells.
+  // Entrances: yellow outline for walk entrances, light blue for surf entrances.
   for (const o of map.openings)
     for (const c of openingCells(o, map.width, map.height)) {
       const x = c % map.width;
       const y = Math.floor(c / map.width);
-      if (inArea(x, y)) img.strokeRect(px(x), py(y), C, C, [255, 214, 60, 255], 2);
+      if (inArea(x, y)) img.strokeRect(px(x), py(y), C, C, o.kind === "surf" ? [120, 220, 255, 255] : [255, 214, 60, 255], 2);
     }
 
   // Trainer sight lines: tinted cells plus a line from the trainer.

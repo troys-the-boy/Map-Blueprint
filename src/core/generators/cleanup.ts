@@ -10,6 +10,7 @@ import { DIRS, IS_GRASS, IS_WALKABLE, IS_WALL, IS_WATER, T, components } from ".
 import { MOVEMENT_HMS, MoveGraph } from "../reach";
 import { openingCells } from "../reach";
 import type { GenContext } from "./context";
+import { Role } from "./context";
 
 export const MIN_GRASS_PATCH = 6;
 
@@ -68,7 +69,7 @@ export function cleanup(ctx: GenContext): void {
   // Open ground nobody can ever reach becomes trees.
   const starts = ctx.input.openings.flatMap((o) => openingCells(o, width, height));
   if (starts.length) {
-    const reach = new MoveGraph({ width, height, terrain: ctx.terrain, entities: ctx.entities }, new Set(MOVEMENT_HMS)).forward(starts);
+    const reach = new MoveGraph({ width, height, terrain: ctx.terrain, entities: ctx.entities, elevation: ctx.elevation }, new Set(MOVEMENT_HMS)).forward(starts);
     for (let i = 0; i < n; i++) {
       if (!reach[i] && IS_WALKABLE[ctx.terrain[i]] && !ctx.isProtected(i)) ctx.set(i, T.tree);
     }
@@ -78,7 +79,10 @@ export function cleanup(ctx: GenContext): void {
   const grass = components(width, height, (i) => IS_GRASS[ctx.terrain[i]]);
   for (let i = 0; i < n; i++) {
     const id = grass.ids[i];
-    if (id >= 0 && grass.sizes[id] < MIN_GRASS_PATCH && !ctx.isProtected(i)) ctx.set(i, T.ground);
+    if (id < 0 || grass.sizes[id] >= MIN_GRASS_PATCH) continue;
+    const r = ctx.role[i];
+    if (r === Role.MainPath) ctx.set(i, T.path);
+    else if (r === Role.GrassRoute || !ctx.isProtected(i)) ctx.set(i, T.ground);
   }
   const water = components(width, height, (i) => IS_WATER[ctx.terrain[i]]);
   for (let i = 0; i < n; i++) {
@@ -88,7 +92,7 @@ export function cleanup(ctx: GenContext): void {
   // Single cells of sand, mud or flowers become plain ground.
   for (let i = 0; i < n; i++) {
     const t = ctx.terrain[i];
-    if ((t !== T.sand && t !== T.mud && t !== T.flowers) || ctx.isProtected(i)) continue;
+    if ((t !== T.sand && t !== T.mud && t !== T.flowers) || (ctx.isProtected(i) && ctx.role[i] !== Role.Beach)) continue;
     const [x, y] = ctx.xy(i);
     const alone = DIRS.every(({ dx, dy }) => !ctx.inside(x + dx, y + dy) || ctx.terrain[ctx.idx(x + dx, y + dy)] !== t);
     if (alone) ctx.set(i, T.ground);

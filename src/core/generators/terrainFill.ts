@@ -11,7 +11,8 @@ import { T, cheapestPath, distanceField } from "../grid";
 import type { GenContext } from "./context";
 import { Role } from "./context";
 
-const PATH_ROLES = new Set<number>([Role.MainPath, Role.Branch, Role.Opening, Role.Corridor, Role.Bridge]);
+/** Open ground grows out from these (paths, and beaches on islands and coasts). */
+const PATH_ROLES = new Set<number>([Role.MainPath, Role.Branch, Role.Opening, Role.Corridor, Role.Bridge, Role.Beach]);
 
 function isPathRole(ctx: GenContext, i: number) {
   return PATH_ROLES.has(ctx.role[i]);
@@ -29,7 +30,7 @@ export function fillTerrain(ctx: GenContext): void {
   const open = new Uint8Array(n);
   const spread = (1 - p.treeDensity) * 6;
   for (let i = 0; i < n; i++) {
-    if (isPathRole(ctx, i) || ctx.edgeDist(i) < p.borderThickness) continue;
+    if (ctx.isProtected(i) || ctx.edgeDist(i) < p.borderThickness) continue;
     const [x, y] = ctx.xy(i);
     const reach = 0.6 + spread * ctx.noise.fractal(x + 101, y + 57, 6, 3);
     if (dist[i] <= reach) open[i] = 1;
@@ -46,18 +47,21 @@ export function fillTerrain(ctx: GenContext): void {
     for (let i = 0; i < n; i++) {
       const [x, y] = ctx.xy(i);
       const d = Math.hypot(x - ox, y - oy) + (ctx.noise.at(x * 0.7, y * 0.7) - 0.5);
-      if (d <= r && ctx.edgeDist(i) >= p.borderThickness + 1 && !isPathRole(ctx, i)) {
+      if (d <= r && ctx.edgeDist(i) >= p.borderThickness + 1 && !ctx.isProtected(i) && ctx.elevation[i] === ctx.elevation[c]) {
         open[i] = 1;
         ctx.role[i] = Role.Clearing;
       }
     }
   }
 
+  // Clearings (the landmark, plateau tops) are always open.
+  for (let i = 0; i < n; i++) if (ctx.role[i] === Role.Clearing) open[i] = 1;
+
   // Smooth the edges: a cell becomes open if most of its neighbours are (cellular automaton).
   for (let pass = 0; pass < 2; pass++) {
     const next = open.slice();
     for (let i = 0; i < n; i++) {
-      if (isPathRole(ctx, i) || ctx.edgeDist(i) < p.borderThickness) continue;
+      if (ctx.isProtected(i) || ctx.edgeDist(i) < p.borderThickness) continue;
       const [x, y] = ctx.xy(i);
       let count = 0;
       for (let dy = -1; dy <= 1; dy++)
@@ -68,7 +72,7 @@ export function fillTerrain(ctx: GenContext): void {
           const j = ctx.idx(xx, yy);
           if (open[j] || isPathRole(ctx, j)) count++;
         }
-      next[i] = count >= 5 ? 1 : 0;
+      next[i] = count >= 5 || ctx.role[i] === Role.Clearing ? 1 : 0;
     }
     open.set(next);
   }
@@ -76,7 +80,8 @@ export function fillTerrain(ctx: GenContext): void {
   // --- Apply: walls, border, open ground -------------------------------------
   const wall = p.borderStyle === "cliff" ? T.rockWall : T.denseForest;
   for (let i = 0; i < n; i++) {
-    if (isPathRole(ctx, i)) continue;
+    // Paths, entrances, the sea, beaches, cliffs, stairs and the grass shortcut keep what they are.
+    if (ctx.isProtected(i)) continue;
     const [x, y] = ctx.xy(i);
     const jitter = ctx.noise.at(x * 0.5 + 300, y * 0.5) > 0.6 ? 1 : 0;
     if (ctx.edgeDist(i) < p.borderThickness + jitter) {
@@ -124,7 +129,7 @@ function addWater(ctx: GenContext, dist: Float64Array) {
   const wantStream =
     p.stream === "yes" ||
     (p.stream === "auto" && p.water >= 0.2 && rng.chance(ctx.input.biome === "temperate_rainforest" || ctx.input.biome === "wetland" ? 0.75 : 0.45));
-  if (!wantStream || ctx.mainLine.length < 12) return;
+  if (!wantStream || ctx.mainLine.length < 12 || ctx.layout === "river" || ctx.layout === "water") return;
   const span = ctx.vertical ? height : width;
   const at = Math.round(span * rng.range(0.3, 0.7));
   const a = ctx.vertical ? ctx.idx(0, at) : ctx.idx(at, 0);
@@ -133,20 +138,22 @@ function addWater(ctx: GenContext, dist: Float64Array) {
   const line = cheapestPath(width, height, a, b, (i) => {
     if (ctx.locks[i]) return Infinity;
     const r = ctx.role[i];
-    // Cross paths, never run along them, and keep clear of entrances and HM pockets.
-    if (r === Role.Opening || r === Role.Pocket) return Infinity;
+    // Cross paths, never run along them, and keep clear of entrances, HM pockets, cliffs and stairs.
+    if (r === Role.Opening || r === Role.Pocket || r === Role.Cliff || r === Role.Stairs) return Infinity;
+    if (r === Role.Sea) return 1;
     const [x, y] = ctx.xy(i);
-    return (r === Role.MainPath || r === Role.Branch ? 8 : 1) + 3 * ctx.noise.fractal(x + 400, y + 400, 6, 2);
+    const crossing = r === Role.MainPath || r === Role.Branch || r === Role.GrassRoute || r === Role.Corridor;
+    return (crossing ? 30 : 1) + 3 * ctx.noise.fractal(x + 400, y + 400, 6, 2);
   });
   if (!line) return;
   for (const c of line) {
     ctx.stamp(c, 2, T.waterDeep, Role.Water, (j) => {
       const r = ctx.role[j];
-      if (r === Role.MainPath || r === Role.Branch || r === Role.Corridor) {
+      if (r === Role.MainPath || r === Role.Branch || r === Role.Corridor || r === Role.GrassRoute) {
         ctx.set(j, T.bridge, Role.Bridge);
         return false;
       }
-      return r !== Role.Opening && r !== Role.Pocket && r !== Role.Bridge;
+      return r !== Role.Opening && r !== Role.Pocket && r !== Role.Bridge && r !== Role.Sea && r !== Role.Beach && r !== Role.Cliff && r !== Role.Stairs;
     });
   }
 }
@@ -155,10 +162,10 @@ function addGrass(ctx: GenContext, dist: Float64Array) {
   const p = ctx.params;
   const candidates: Array<{ i: number; score: number }> = [];
   for (let i = 0; i < ctx.n; i++) {
-    if (ctx.terrain[i] !== T.ground || ctx.locks[i] || ctx.isProtected(i)) continue;
+    if (ctx.terrain[i] !== T.ground || ctx.locks[i] || ctx.isProtected(i) || besideCliff(ctx, i)) continue;
     const [x, y] = ctx.xy(i);
-    // Grass prefers cells near the path.
-    const score = ctx.noise.fractal(x + 200, y + 700, 5, 3) - 0.05 * Math.min(dist[i], 6);
+    // Grass prefers cells near the path, in large patches.
+    const score = ctx.noise.fractal(x + 200, y + 700, 8, 3) - 0.04 * Math.min(dist[i], 6);
     candidates.push({ i, score });
   }
   if (!candidates.length || p.grass <= 0) return;
@@ -184,4 +191,15 @@ function addBiomeDetail(ctx: GenContext) {
     else if (biome === "wetland" && v > 0.66) ctx.set(i, T.mud);
     else if (biome === "meadow" && v > 0.68) ctx.set(i, T.flowers);
   }
+}
+
+/** True next to a plateau's cliff (no tall grass on raised edges by cliffs, per the spec). */
+function besideCliff(ctx: GenContext, i: number): boolean {
+  const [x, y] = ctx.xy(i);
+  for (let dy = -1; dy <= 1; dy++)
+    for (let dx = -1; dx <= 1; dx++) {
+      if (!ctx.inside(x + dx, y + dy)) continue;
+      if (ctx.role[ctx.idx(x + dx, y + dy)] === Role.Cliff) return true;
+    }
+  return false;
 }
