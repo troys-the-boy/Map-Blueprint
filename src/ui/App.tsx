@@ -1,0 +1,204 @@
+// The editor's main layout: header, canvas with tool strip, terrain panel,
+// status bar, and the dialogs.
+
+import { useEffect, useRef, useState } from "react";
+import { checkMapSize } from "../core/sizeRule";
+import { TERRAIN_TYPES } from "../core/terrain";
+import { MapCanvas, canvasRef } from "./components/MapCanvas";
+import { MapsPanel } from "./components/MapsPanel";
+import { NewMapDialog } from "./components/NewMapDialog";
+import { SettingsDialog } from "./components/SettingsDialog";
+import { TerrainPanel } from "./components/TerrainPanel";
+import { Toolbar } from "./components/Toolbar";
+import { Icon } from "./components/icons";
+import { openProject, saveProject } from "./files";
+import { screenLabel } from "./renderer";
+import { store, useStore } from "./store";
+
+type Dialog = null | "newMap" | "settings";
+
+export function App() {
+  const s = useStore();
+  const [dialog, setDialog] = useState<Dialog>(null);
+  const [mapsOpen, setMapsOpen] = useState(false);
+  const [terrainOpen, setTerrainOpen] = useState(false);
+  const [hover, setHover] = useState<[number, number] | null>(null);
+  const map = s.currentMap;
+
+  useKeyboardShortcuts(() => setDialog("newMap"));
+
+  // Warn before closing the tab with unsaved changes.
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (store.dirty) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
+
+  const confirmDiscard = () =>
+    !store.dirty || window.confirm("You have unsaved changes. Continue without saving them?\n\n(Choose Cancel, then Save, to keep them.)");
+
+  const hoverTerrain = hover && map ? TERRAIN_TYPES[map.layers.terrain.data[hover[1] * map.width + hover[0]]] : null;
+  const size = map ? checkMapSize(map.width, map.height, s.region.settings.engineLimits) : null;
+
+  return (
+    <div className="app">
+      <header className="topbar">
+        <button className="icon-button labeled" onClick={() => setMapsOpen(true)} title="Show the maps in this project">
+          <Icon name="maps" /> <span>Maps</span>
+        </button>
+        <nav className="breadcrumbs" aria-label="Location">
+          <span className="crumb">{s.region.name}</span>
+          {map && (
+            <>
+              <span className="sep">›</span>
+              <span className="crumb current">{map.name}</span>
+            </>
+          )}
+        </nav>
+        <div className="spacer" />
+        {s.dirty && (
+          <span className="unsaved" title="Changes since your last save live only in this browser. Save to a file to keep them.">
+            ● Unsaved changes
+          </span>
+        )}
+        <button className="icon-button labeled" onClick={() => setDialog("newMap")} title="Create a new map (N)">
+          <Icon name="plus" /> <span>New map</span>
+        </button>
+        <button className="icon-button labeled" onClick={() => confirmDiscard() && void openProject(store)} title="Open a project file from this device">
+          <Icon name="open" /> <span>Open</span>
+        </button>
+        <button className="icon-button labeled" onClick={() => void saveProject(store)} title="Save the project to a file on this device (Ctrl+S)">
+          <Icon name="save" /> <span>Save</span>
+        </button>
+        <details className="menu">
+          <summary className="icon-button" title="More">
+            ⋯
+          </summary>
+          <div className="menu-items">
+            <button onClick={() => void saveProject(store, { forceDownload: true })} title="Always download a copy of the project file">
+              Download a copy
+            </button>
+            <button
+              onClick={() => {
+                if (confirmDiscard()) store.newProject();
+              }}
+              title="Start a new, empty project"
+            >
+              New project
+            </button>
+          </div>
+        </details>
+        <button className="icon-button" onClick={() => setDialog("settings")} title="Settings" aria-label="Settings">
+          <Icon name="settings" />
+        </button>
+      </header>
+
+      {s.notice && (
+        <div className={`notice ${s.notice.kind}`} role={s.notice.kind === "error" ? "alert" : "status"}>
+          <span>{s.notice.text}</span>
+          <button className="icon-button" aria-label="Dismiss message" onClick={() => s.setNotice(null)}>
+            <Icon name="close" size={18} />
+          </button>
+        </div>
+      )}
+
+      <main className="workspace">
+        <div className="canvas-wrap">
+          <MapCanvas onHover={setHover} />
+          {map && <Toolbar onToggleTerrain={() => setTerrainOpen((o) => !o)} />}
+          {!map && (
+            <div className="welcome">
+              <h1>Gen 3 Map Blueprint</h1>
+              <p>Plan maps for your pokeemerald hack, then rebuild them in Porymap.</p>
+              <div className="welcome-actions">
+                <button className="primary" onClick={() => setDialog("newMap")}>
+                  <Icon name="plus" size={18} /> Create a map
+                </button>
+                <button className="secondary" onClick={() => void openProject(store)}>
+                  <Icon name="open" size={18} /> Open a project file
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        {map && (
+          <div className={`terrain-dock ${terrainOpen ? "open" : ""}`}>
+            <TerrainPanel onClose={terrainOpen ? () => setTerrainOpen(false) : undefined} />
+          </div>
+        )}
+      </main>
+
+      <footer className="statusbar">
+        {map ? (
+          <>
+            <span title="Cell under the pointer (x, y), counted from the top-left corner">
+              {hover ? `x ${hover[0]}, y ${hover[1]}` : "x –, y –"}
+            </span>
+            <span title="The 15×10 GBA screen this cell is in (columns A, B, C… left to right; rows 1, 2, 3… top to bottom)">
+              Screen {hover ? screenLabel(hover[0], hover[1]) : "–"}
+            </span>
+            <span className="grow">{hoverTerrain ? hoverTerrain.label : ""}</span>
+            <span title={size ? `Map memory: ${size.used.toLocaleString("en-US")} of ${size.limit.toLocaleString("en-US")} used` : ""} className={size?.ok ? "" : "bad"}>
+              {map.width}×{map.height} · {size?.ok ? `${size.remaining.toLocaleString("en-US")} left` : "too big"}
+            </span>
+            <span title="Seed for this map">Seed {map.seed}</span>
+          </>
+        ) : (
+          <span>No map open</span>
+        )}
+      </footer>
+
+      {mapsOpen && (
+        <>
+          <div className="drawer-backdrop" onPointerDown={() => setMapsOpen(false)} />
+          <MapsPanel
+            onClose={() => setMapsOpen(false)}
+            onNewMap={() => {
+              setMapsOpen(false);
+              setDialog("newMap");
+            }}
+          />
+        </>
+      )}
+      {dialog === "newMap" && <NewMapDialog onClose={() => setDialog(null)} />}
+      {dialog === "settings" && <SettingsDialog onClose={() => setDialog(null)} />}
+    </div>
+  );
+}
+
+function useKeyboardShortcuts(openNewMap: () => void) {
+  const openRef = useRef(openNewMap);
+  openRef.current = openNewMap;
+  useEffect(() => {
+    const openNewMap = () => openRef.current();
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT") return;
+      const mod = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+      if (mod && key === "z" && !e.shiftKey) store.undo();
+      else if (mod && (key === "y" || (key === "z" && e.shiftKey))) store.redo();
+      else if (mod && key === "s") void saveProject(store);
+      else if (mod) return;
+      else if (key === "b") store.setTool("pencil");
+      else if (key === "e") store.setTool("erase");
+      else if (key === "h") store.setTool("pan");
+      else if (key === "i") store.setTool("pick");
+      else if (key === "n") openNewMap();
+      else if (key === "[") store.setBrush(store.brush - 1);
+      else if (key === "]") store.setBrush(store.brush + 1);
+      else if (key === "0") canvasRef.renderer?.fit();
+      else if (key === "+" || key === "=") canvasRef.renderer?.zoomAt(1.25, canvasRef.renderer.size.width / 2, canvasRef.renderer.size.height / 2);
+      else if (key === "-") canvasRef.renderer?.zoomAt(0.8, canvasRef.renderer.size.width / 2, canvasRef.renderer.size.height / 2);
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+}

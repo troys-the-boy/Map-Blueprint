@@ -1,0 +1,8 @@
+{
+  "regionName": "Example Region",
+  "name": "Route 1",
+  "mapType": "route",
+  "width": 20,
+  "height": 40,
+  "biome": "temperate_rainforest"
+}

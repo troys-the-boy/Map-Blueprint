@@ -1,0 +1,10 @@
+{
+  // Checks that src/core uses no browser APIs: the DOM library is left out,
+  // so any use of window, document, canvas etc. in core/ fails here.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": []
+  },
+  "include": ["src/core"]
+}

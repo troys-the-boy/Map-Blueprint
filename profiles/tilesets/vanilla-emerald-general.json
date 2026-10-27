@@ -1,0 +1,269 @@
+{
+  "format": "gen3-tileset-profile",
+  "formatVersion": 1,
+  "name": "Vanilla Emerald – General",
+  "description": "STUB. Maps abstract terrain to vanilla Emerald metatiles. Every entry is TODO: fill in or verify each one in Porymap's tileset editor. Not used by the app until Milestone 7.",
+  "tilesets": {
+    "primary": "gTileset_General",
+    "secondary": ""
+  },
+  "supportedTypes": [],
+  "elevation": {
+    "water": 1,
+    "ground": 3,
+    "raised1": 4,
+    "raised2": 5,
+    "bridge": null,
+    "todo": "water=1 (ELEVATION_SURF) and ground=3 (ELEVATION_DEFAULT) are from include/global.fieldmap.h. Verify raised1, raised2 and bridge on a vanilla map in Porymap."
+  },
+  "terrain": {
+    "path": {
+      "autotile": {
+        "neighbors": 8,
+        "sameAs": [
+          "path"
+        ],
+        "rules": [],
+        "fallbackMetatile": null
+      },
+      "collision": 0,
+      "todo": "Find the path metatiles (centre, edges, corners) in Porymap's tileset editor and fill in the rules."
+    },
+    "road": {
+      "metatile": null,
+      "collision": 0,
+      "todo": "Find the road metatile ID in Porymap's tileset editor."
+    },
+    "ground": {
+      "metatile": null,
+      "collision": 0,
+      "todo": "Find the ground metatile ID in Porymap's tileset editor."
+    },
+    "tall_grass": {
+      "autotile": {
+        "neighbors": 8,
+        "sameAs": [
+          "tall_grass"
+        ],
+        "rules": [],
+        "fallbackMetatile": null
+      },
+      "collision": 0,
+      "todo": "Find the tall grass metatiles (centre, edges, corners) in Porymap's tileset editor and fill in the rules."
+    },
+    "long_grass": {
+      "autotile": {
+        "neighbors": 8,
+        "sameAs": [
+          "long_grass"
+        ],
+        "rules": [],
+        "fallbackMetatile": null
+      },
+      "collision": 0,
+      "todo": "Find the long grass metatiles (centre, edges, corners) in Porymap's tileset editor and fill in the rules."
+    },
+    "sand": {
+      "autotile": {
+        "neighbors": 8,
+        "sameAs": [
+          "sand"
+        ],
+        "rules": [],
+        "fallbackMetatile": null
+      },
+      "collision": 0,
+      "todo": "Find the sand metatiles (centre, edges, corners) in Porymap's tileset editor and fill in the rules."
+    },
+    "mud": {
+      "autotile": {
+        "neighbors": 8,
+        "sameAs": [
+          "mud"
+        ],
+        "rules": [],
+        "fallbackMetatile": null
+      },
+      "collision": 0,
+      "todo": "Find the mud metatiles (centre, edges, corners) in Porymap's tileset editor and fill in the rules."
+    },
+    "flowers": {
+      "metatile": null,
+      "collision": 0,
+      "todo": "Find the flowers metatile ID in Porymap's tileset editor."
+    },
+    "tree": {
+      "autotile": {
+        "neighbors": 8,
+        "sameAs": [
+          "tree"
+        ],
+        "rules": [],
+        "fallbackMetatile": null
+      },
+      "collision": 1,
+      "todo": "Find the tree metatiles (centre, edges, corners) in Porymap's tileset editor and fill in the rules."
+    },
+    "dense_forest": {
+      "autotile": {
+        "neighbors": 8,
+        "sameAs": [
+          "dense_forest"
+        ],
+        "rules": [],
+        "fallbackMetatile": null
+      },
+      "collision": 1,
+      "todo": "Find the dense forest metatiles (centre, edges, corners) in Porymap's tileset editor and fill in the rules."
+    },
+    "rock_wall": {
+      "autotile": {
+        "neighbors": 8,
+        "sameAs": [
+          "rock_wall"
+        ],
+        "rules": [],
+        "fallbackMetatile": null
+      },
+      "collision": 1,
+      "todo": "Find the rock wall metatiles (centre, edges, corners) in Porymap's tileset editor and fill in the rules."
+    },
+    "cave_floor": {
+      "metatile": null,
+      "collision": 0,
+      "todo": "Find the cave floor metatile ID in Porymap's tileset editor."
+    },
+    "ledge_s": {
+      "autotile": {
+        "neighbors": 8,
+        "sameAs": [
+          "ledge_s"
+        ],
+        "rules": [],
+        "fallbackMetatile": null
+      },
+      "collision": 1,
+      "todo": "Find the ledge (jump south) metatiles (centre, edges, corners) in Porymap's tileset editor and fill in the rules."
+    },
+    "ledge_e": {
+      "autotile": {
+        "neighbors": 8,
+        "sameAs": [
+          "ledge_e"
+        ],
+        "rules": [],
+        "fallbackMetatile": null
+      },
+      "collision": 1,
+      "todo": "Find the ledge (jump east) metatiles (centre, edges, corners) in Porymap's tileset editor and fill in the rules."
+    },
+    "ledge_w": {
+      "autotile": {
+        "neighbors": 8,
+        "sameAs": [
+          "ledge_w"
+        ],
+        "rules": [],
+        "fallbackMetatile": null
+      },
+      "collision": 1,
+      "todo": "Find the ledge (jump west) metatiles (centre, edges, corners) in Porymap's tileset editor and fill in the rules."
+    },
+    "water_shallow": {
+      "autotile": {
+        "neighbors": 8,
+        "sameAs": [
+          "water_shallow"
+        ],
+        "rules": [],
+        "fallbackMetatile": null
+      },
+      "collision": 0,
+      "todo": "Find the shallow water metatiles (centre, edges, corners) in Porymap's tileset editor and fill in the rules."
+    },
+    "water_deep": {
+      "autotile": {
+        "neighbors": 8,
+        "sameAs": [
+          "water_deep"
+        ],
+        "rules": [],
+        "fallbackMetatile": null
+      },
+      "collision": 1,
+      "todo": "Find the deep water metatiles (centre, edges, corners) in Porymap's tileset editor and fill in the rules."
+    },
+    "water_current_n": {
+      "metatile": null,
+      "collision": 1,
+      "todo": "Find the current (north) metatile ID in Porymap's tileset editor."
+    },
+    "water_current_s": {
+      "metatile": null,
+      "collision": 1,
+      "todo": "Find the current (south) metatile ID in Porymap's tileset editor."
+    },
+    "water_current_e": {
+      "metatile": null,
+      "collision": 1,
+      "todo": "Find the current (east) metatile ID in Porymap's tileset editor."
+    },
+    "water_current_w": {
+      "metatile": null,
+      "collision": 1,
+      "todo": "Find the current (west) metatile ID in Porymap's tileset editor."
+    },
+    "waterfall": {
+      "metatile": null,
+      "collision": 1,
+      "todo": "Find the waterfall metatile ID in Porymap's tileset editor."
+    },
+    "dive_spot": {
+      "metatile": null,
+      "collision": 1,
+      "todo": "Find the dive spot metatile ID in Porymap's tileset editor."
+    },
+    "bridge": {
+      "metatile": null,
+      "collision": 0,
+      "todo": "Find the bridge metatile ID in Porymap's tileset editor."
+    },
+    "stairs": {
+      "metatile": null,
+      "collision": 0,
+      "todo": "Find the stairs metatile ID in Porymap's tileset editor."
+    },
+    "fence": {
+      "autotile": {
+        "neighbors": 8,
+        "sameAs": [
+          "fence"
+        ],
+        "rules": [],
+        "fallbackMetatile": null
+      },
+      "collision": 1,
+      "todo": "Find the fence metatiles (centre, edges, corners) in Porymap's tileset editor and fill in the rules."
+    },
+    "building": {
+      "metatile": null,
+      "collision": 1,
+      "todo": "Find the building metatile ID in Porymap's tileset editor."
+    },
+    "cave_entrance": {
+      "metatile": null,
+      "collision": 1,
+      "todo": "Find the cave entrance metatile ID in Porymap's tileset editor."
+    },
+    "sign_tile": {
+      "metatile": null,
+      "collision": 1,
+      "todo": "Find the sign metatile ID in Porymap's tileset editor."
+    },
+    "void": {
+      "metatile": null,
+      "collision": 1,
+      "todo": "Find the void metatile ID in Porymap's tileset editor."
+    }
+  }
+}

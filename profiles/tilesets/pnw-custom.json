@@ -1,0 +1,19 @@
+{
+  "format": "gen3-tileset-profile",
+  "formatVersion": 1,
+  "name": "PNW custom",
+  "description": "Empty profile for the planned custom Pacific Northwest tilesets. The tileset generator will fill this in.",
+  "tilesets": {
+    "primary": "",
+    "secondary": ""
+  },
+  "supportedTypes": [],
+  "elevation": {
+    "water": 1,
+    "ground": 3,
+    "raised1": null,
+    "raised2": null,
+    "bridge": null
+  },
+  "terrain": {}
+}
