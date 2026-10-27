@@ -17,6 +17,7 @@ const TOOLS: Array<{ tool: Tool; icon: string; label: string; key: string; tip: 
   { tool: "elevation", icon: "elevation", label: "Elevation brush", key: "L", tip: "Elevation brush (L): paint the elevation numbers you'll set in Porymap's collision tab. Terrain stays as it is." },
   { tool: "select", icon: "select", label: "Select", key: "V", tip: "Select (V): drag a rectangle. Drag inside it to move it (with the things in it). Copy, cut, paste, delete, fill, lock or regenerate it from the bar at the top." },
   { tool: "lasso", icon: "lasso", label: "Lasso", key: "Q", tip: "Lasso (Q): draw around any shape to select it. Then use it like a rectangle selection: drag inside to move it, or use the bar at the top." },
+  { tool: "wand", icon: "wand", label: "Magic wand", key: "W", tip: "Magic wand (W): tap a cell to select every joined cell of the same terrain, such as a whole pond or grass patch. Tick Everywhere in the top bar to pick that terrain all over the map." },
   { tool: "things", icon: "things", label: "Things", key: "T", tip: "Things (T): tap to place the chosen thing (trainer, item…). Drag a thing to move it; tap a picked trainer to turn it." },
 ];
 

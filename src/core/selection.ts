@@ -206,3 +206,97 @@ export function moveArea(map: MapBlueprint, a: Area, toX: number, toY: number): 
   clearArea(map, a);
   return pasteClip(map, clip, toX, toY, false);
 }
+
+// ---------------------------------------------------------------------------
+// Changing a selection: add, subtract, magic wand, grow, shrink, invert, all
+// ---------------------------------------------------------------------------
+
+/** A whole-map mask (1 = selected) for an area, or all zeros for none. */
+export function areaToMask(map: MapBlueprint, a: Area | null): Uint8Array {
+  const mask = new Uint8Array(map.width * map.height);
+  if (a) for (const i of areaCells(map, a)) mask[i] = 1;
+  return mask;
+}
+
+/** The area a whole-map mask selects, or null if it selects nothing. */
+export function maskToArea(map: MapBlueprint, mask: Uint8Array): Area | null {
+  return clipToMap(map, { x: 0, y: 0, w: map.width, h: map.height, mask });
+}
+
+/** Add one area to another, or take it away. */
+export function combineAreas(map: MapBlueprint, base: Area | null, shape: Area | null, op: "add" | "subtract"): Area | null {
+  const mask = areaToMask(map, base);
+  if (shape) for (const i of areaCells(map, shape)) mask[i] = op === "add" ? 1 : 0;
+  return maskToArea(map, mask);
+}
+
+/**
+ * Magic wand: the cells with the same terrain as (x, y). Normally only the patch
+ * joined to it (side by side, not diagonally); with `everywhere`, every cell of
+ * that terrain on the map.
+ */
+export function wandArea(map: MapBlueprint, x: number, y: number, everywhere: boolean): Area | null {
+  if (x < 0 || y < 0 || x >= map.width || y >= map.height) return null;
+  const t = map.layers.terrain.data;
+  const want = t[y * map.width + x];
+  const mask = new Uint8Array(map.width * map.height);
+  if (everywhere) {
+    for (let i = 0; i < mask.length; i++) if (t[i] === want) mask[i] = 1;
+  } else {
+    const stack = [y * map.width + x];
+    mask[stack[0]] = 1;
+    while (stack.length) {
+      const i = stack.pop()!;
+      const cx = i % map.width;
+      const cy = (i - cx) / map.width;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = cx + dx;
+        const ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= map.width || ny >= map.height) continue;
+        const j = ny * map.width + nx;
+        if (!mask[j] && t[j] === want) {
+          mask[j] = 1;
+          stack.push(j);
+        }
+      }
+    }
+  }
+  return maskToArea(map, mask);
+}
+
+/**
+ * Grow the area by one cell all round (by > 0) or shrink it by one (by < 0).
+ * Growing takes in the cells beside it, including diagonally, so corners stay
+ * square. When shrinking, the map edge counts as selected, so a selection
+ * against the edge only shrinks away from the other sides.
+ */
+export function growArea(map: MapBlueprint, a: Area, by: number): Area | null {
+  const src = areaToMask(map, a);
+  const out = new Uint8Array(src.length);
+  const at = (x: number, y: number) => (x < 0 || y < 0 || x >= map.width || y >= map.height ? (by < 0 ? 1 : 0) : src[y * map.width + x]);
+  for (let y = 0; y < map.height; y++)
+    for (let x = 0; x < map.width; x++) {
+      let any = 0;
+      let all = 1;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const v = at(x + dx, y + dy);
+          any |= v;
+          all &= v;
+        }
+      out[y * map.width + x] = by > 0 ? any : all;
+    }
+  return maskToArea(map, out);
+}
+
+/** Everything not in the area (or the whole map, for no selection). */
+export function invertArea(map: MapBlueprint, a: Area | null): Area | null {
+  const mask = areaToMask(map, a);
+  for (let i = 0; i < mask.length; i++) mask[i] = mask[i] ? 0 : 1;
+  return maskToArea(map, mask);
+}
+
+/** The whole map. */
+export function allArea(map: MapBlueprint): Area {
+  return { x: 0, y: 0, w: map.width, h: map.height };
+}

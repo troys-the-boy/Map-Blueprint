@@ -8,7 +8,8 @@ import type { Edit } from "../src/core/model";
 import { addNewMap, newRegion } from "../src/core/model";
 import { emptyDiff, paintLock, replayStroke } from "../src/core/paint";
 import { CURRENT_SCHEMA_VERSION, parseProject, serializeProject } from "../src/core/project";
-import { clearArea, copyArea, inArea, lassoArea, moveArea, pasteClip, rectFromCorners } from "../src/core/selection";
+import type { Area } from "../src/core/selection";
+import { allArea, areaCells, clearArea, combineAreas, copyArea, growArea, inArea, invertArea, lassoArea, moveArea, pasteClip, rectFromCorners, wandArea } from "../src/core/selection";
 import { entityAt, facingOf, newThing, nextEntityId, setSight, sightOf, turnClockwise } from "../src/core/things";
 import { trainerSight } from "../src/core/entities";
 
@@ -238,5 +239,48 @@ describe("lasso selections", () => {
     expect(parseProject(serializeProject(region, "test")).maps[0].edits).toEqual(edits);
     map.edits.push({ type: "area", action: "fill", area: { x: 0, y: 0, w: 1, h: 1 }, toX: null, toY: null, value: "lava" });
     expect(() => parseProject(serializeProject(region, "test"))).toThrow(/lava/);
+  });
+});
+
+describe("changing a selection", () => {
+  const count = (map: ReturnType<typeof blank>["map"], a: Area | null) => (a ? areaCells(map, a).length : 0);
+
+  it("adds and subtracts shapes", () => {
+    const { map } = blank(12, 12);
+    const a = combineAreas(map, { x: 0, y: 0, w: 3, h: 3 }, { x: 5, y: 5, w: 2, h: 2 }, "add")!;
+    expect(count(map, a)).toBe(13);
+    expect(inArea(a, 6, 6)).toBe(true);
+    const b = combineAreas(map, a, { x: 1, y: 1, w: 1, h: 1 }, "subtract")!;
+    expect(count(map, b)).toBe(12);
+    expect(inArea(b, 1, 1)).toBe(false);
+    expect(combineAreas(map, { x: 0, y: 0, w: 1, h: 1 }, { x: 0, y: 0, w: 2, h: 2 }, "subtract")).toBeNull();
+  });
+
+  it("the magic wand picks the joined patch, or that terrain everywhere", () => {
+    const { map } = blank(10, 10);
+    for (const i of [11, 12, 21, 77]) map.layers.terrain.data[i] = T.waterDeep;
+    const patch = wandArea(map, 1, 1, false)!;
+    expect(count(map, patch)).toBe(3);
+    expect(inArea(patch, 7, 7)).toBe(false);
+    expect(count(map, wandArea(map, 1, 1, true))).toBe(4);
+  });
+
+  it("grows by one cell all round and shrinks back", () => {
+    const { map } = blank(12, 12);
+    const grown = growArea(map, { x: 4, y: 4, w: 2, h: 2 }, 1)!;
+    expect(grown).toMatchObject({ x: 3, y: 3, w: 4, h: 4 });
+    expect(count(map, grown)).toBe(16);
+    expect(growArea(map, grown, -1)).toMatchObject({ x: 4, y: 4, w: 2, h: 2 });
+    // Against the map edge, shrinking only moves the other sides.
+    expect(growArea(map, { x: 0, y: 0, w: 4, h: 12 }, -1)).toMatchObject({ x: 0, y: 0, w: 3, h: 12 });
+    expect(growArea(map, { x: 4, y: 4, w: 1, h: 1 }, -1)).toBeNull();
+  });
+
+  it("inverts, and selects all", () => {
+    const { map } = blank(6, 6);
+    const inv = invertArea(map, { x: 0, y: 0, w: 6, h: 3 })!;
+    expect(inv).toMatchObject({ x: 0, y: 3, w: 6, h: 3 });
+    expect(invertArea(map, allArea(map))).toBeNull();
+    expect(count(map, invertArea(map, null))).toBe(36);
   });
 });

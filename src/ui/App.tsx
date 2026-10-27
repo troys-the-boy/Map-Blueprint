@@ -209,7 +209,9 @@ function useKeyboardShortcuts(openNewMap: () => void) {
         const r = canvasRef.renderer;
         return r ? r.cellAt(r.size.width / 2, r.size.height / 2) : null;
       };
-      if (mod && key === "c" && selecting) store.copySelection();
+      if (mod && key === "a" && selecting) store.selectAll();
+      else if (mod && key === "i" && selecting) store.invertSelection();
+      else if (mod && key === "c" && selecting) store.copySelection();
       else if (mod && key === "x" && selecting) store.cutSelection();
       else if (mod && key === "v") store.paste(canvasRef.renderer?.hover ?? centre());
       else if ((key === "delete" || key === "backspace") && selecting && store.selection) store.deleteSelection();
@@ -226,6 +228,7 @@ function useKeyboardShortcuts(openNewMap: () => void) {
       else if (key === "l") store.setTool("elevation");
       else if (key === "v") store.setTool("select");
       else if (key === "q") store.setTool("lasso");
+      else if (key === "w") store.setTool("wand");
       else if (key === "u") store.setLockMode("unlock");
       else if (key === "t") store.setTool("things");
       else if (key === "k") store.setLockMode("lock");

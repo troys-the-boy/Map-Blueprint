@@ -2,7 +2,9 @@
 // buttons for copy, paste, delete, turning trainers and so on, so everything
 // works with a finger or Pencil as well as with the keyboard.
 
+import { useState } from "react";
 import { useStore } from "../store";
+import type { SelectMode } from "../store";
 import { Icon } from "./icons";
 import { canvasRef } from "./MapCanvas";
 import { THING_LABELS, MAX_SIGHT, facingOf, sightOf } from "../../core/things";
@@ -10,6 +12,12 @@ import type { Direction } from "../../core/terrain";
 import { ELEVATION_LEVELS, TERRAIN_TYPES } from "../../core/terrain";
 import { LEVEL_VALUE, hexDigit } from "../../core/porymap";
 import { LEVEL_LABELS } from "./TerrainPanel";
+
+const MODES: Array<{ mode: SelectMode; label: string; tip: string }> = [
+  { mode: "new", label: "New", tip: "A new shape replaces the selection. Drag inside the selection to move it." },
+  { mode: "add", label: "+", tip: "Add: a new shape is added to the selection (or hold Shift)." },
+  { mode: "subtract", label: "−", tip: "Subtract: a new shape is taken away from the selection (or hold Alt)." },
+];
 
 const FACINGS: Array<{ dir: Direction | "all"; label: string; tip: string }> = [
   { dir: "n", label: "↑", tip: "Face up (north)" },
@@ -35,6 +43,8 @@ export function EditBar() {
 
 function SelectBar() {
   const s = useStore();
+  // The less-used buttons can be folded away to see more of the map.
+  const [more, setMore] = useState(true);
   const sel = s.selection;
   if (s.floating && !s.floating.source) {
     return (
@@ -51,7 +61,20 @@ function SelectBar() {
   }
   return (
     <div className="edit-bar" role="toolbar" aria-label="Selection">
-      <span className="edit-bar-label">{sel ? (sel.mask ? `Shape, ${sel.mask.reduce((a, b) => a + b, 0)} cells` : `${sel.w}×${sel.h} at ${sel.x}, ${sel.y}`) : s.tool === "lasso" ? "Draw round an area" : "Drag to select an area"}</span>
+      <span className="edit-bar-group first" role="group" aria-label="Selection mode">
+        {MODES.map((m) => (
+          <button key={m.mode} className={`icon-button facing ${s.selectMode === m.mode ? "active" : ""}`} title={m.tip} aria-label={m.tip} aria-pressed={s.selectMode === m.mode} onClick={() => s.setSelectMode(m.mode)}>
+            {m.label}
+          </button>
+        ))}
+      </span>
+      {s.tool === "wand" && (
+        <label className="edit-bar-group check" title="Pick the tapped terrain everywhere on the map, not just the joined patch.">
+          <input type="checkbox" checked={s.wandEverywhere} onChange={(e) => s.setWandEverywhere(e.target.checked)} />
+          Everywhere
+        </label>
+      )}
+      <span className="edit-bar-label">{sel ? (sel.mask ? `Shape, ${sel.mask.reduce((a, b) => a + b, 0)} cells` : `${sel.w}×${sel.h} at ${sel.x}, ${sel.y}`) : s.tool === "lasso" ? "Draw round an area" : s.tool === "wand" ? "Tap a terrain to select it" : "Drag to select an area"}</span>
       <button className="icon-button" title="Copy (Ctrl+C)" aria-label="Copy" disabled={!sel} onClick={() => s.copySelection()}>
         <Icon name="copy" />
       </button>
@@ -64,6 +87,44 @@ function SelectBar() {
       <button className="icon-button" title="Clear the area and remove the things in it; it is filled as chosen under Gaps (Delete)" aria-label="Delete" disabled={!sel} onClick={() => s.deleteSelection()}>
         <Icon name="trash" />
       </button>
+      <button
+        className="secondary"
+        title="Make this area again with the generator. Everything outside it stays exactly as it is. Each try gives a different result; Undo goes back."
+        disabled={!sel || s.generating}
+        onClick={() => s.regenerateSelection()}
+      >
+        <Icon name="generate" size={18} /> Regenerate area
+      </button>
+      {sel && (
+        <button className="icon-button" title="Clear the selection (Esc)" aria-label="Clear selection" onClick={() => s.clearSelection()}>
+          <Icon name="close" />
+        </button>
+      )}
+      <button
+        className="icon-button"
+        title={more ? "Fewer buttons: hide grow, shrink, fill, elevation, lock and gaps, to see more of the map" : "More buttons: grow, shrink, invert, select all, fill, elevation, lock and gaps"}
+        aria-label={more ? "Fewer buttons" : "More buttons"}
+        aria-expanded={more}
+        onClick={() => setMore(!more)}
+      >
+        {more ? "▴" : "▾"}
+      </button>
+      {more && (
+        <span className="edit-bar-more">
+      <span className="edit-bar-group" role="group" aria-label="Change the selection's shape">
+        <button className="icon-button" title="Grow the selection by one cell all round" aria-label="Grow selection" disabled={!sel} onClick={() => s.growSelection(1)}>
+          <Icon name="grow" />
+        </button>
+        <button className="icon-button" title="Shrink the selection by one cell all round" aria-label="Shrink selection" disabled={!sel} onClick={() => s.growSelection(-1)}>
+          <Icon name="shrink" />
+        </button>
+        <button className="icon-button" title="Invert: select everything that isn't selected (Ctrl+I)" aria-label="Invert selection" onClick={() => s.invertSelection()}>
+          <Icon name="invert" />
+        </button>
+        <button className="icon-button" title="Select the whole map (Ctrl+A)" aria-label="Select all" onClick={() => s.selectAll()}>
+          <Icon name="all" />
+        </button>
+      </span>
       <span className="edit-bar-group" role="group" aria-label="Change the selection">
         <select
           value=""
@@ -107,18 +168,7 @@ function SelectBar() {
           <option value="ground">Plain ground</option>
         </select>
       </label>
-      <button
-        className="secondary"
-        title="Make this area again with the generator. Everything outside it stays exactly as it is. Each try gives a different result; Undo goes back."
-        disabled={!sel || s.generating}
-        onClick={() => s.regenerateSelection()}
-      >
-        <Icon name="generate" size={18} /> Regenerate area
-      </button>
-      {sel && (
-        <button className="icon-button" title="Clear the selection (Esc)" aria-label="Clear selection" onClick={() => s.clearSelection()}>
-          <Icon name="close" />
-        </button>
+        </span>
       )}
     </div>
   );

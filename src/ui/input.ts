@@ -130,7 +130,8 @@ export class CanvasInput {
         this.mode = "none";
         return;
       }
-      if (e.altKey) {
+      // Alt+click picks a cell's terrain, except with the selection tools (where it subtracts).
+      if (e.altKey && !this.store.selecting) {
         this.store.setTool("pick");
         this.store.pickAt(cell[0], cell[1]);
         this.mode = "none";
@@ -138,7 +139,7 @@ export class CanvasInput {
       }
       this.mode = "paint";
       this.pressTool = this.store.tool;
-      if (this.pressTool === "select" || this.pressTool === "lasso") this.store.selectDown(cell[0], cell[1]);
+      if (this.store.selecting) this.store.selectDown(cell[0], cell[1], { add: e.shiftKey, subtract: e.altKey });
       else if (this.pressTool === "things") this.store.thingsDown(cell[0], cell[1]);
       else this.store.beginStroke(cell[0], cell[1]);
       this.setHover(cell);
@@ -161,7 +162,7 @@ export class CanvasInput {
     }
     const cell = this.renderer.cellAt(x, y);
     if (e.pointerType !== "touch" || this.mode === "paint") this.setHover(cell);
-    if (this.mode === "paint" && p && (this.pressTool === "select" || this.pressTool === "lasso")) this.store.selectMove(cell[0], cell[1]);
+    if (this.mode === "paint" && p && isSelectTool(this.pressTool)) this.store.selectMove(cell[0], cell[1]);
     else if (this.mode === "paint" && p && this.pressTool === "things") this.store.thingsMove(cell[0], cell[1]);
     else if (this.mode === "paint" && p) {
       // Use coalesced events for smooth Pencil lines when the browser provides them.
@@ -200,7 +201,7 @@ export class CanvasInput {
 
   /** Finish a press with the current tool (a cancelled paint stroke is undone). */
   private endPress(cancelled: boolean) {
-    if (this.pressTool === "select" || this.pressTool === "lasso") this.store.selectUp();
+    if (isSelectTool(this.pressTool)) this.store.selectUp();
     else if (this.pressTool === "things") this.store.thingsUp();
     else if (cancelled) this.store.cancelStroke();
     else this.store.endStroke();
@@ -255,4 +256,8 @@ export class CanvasInput {
 function isTyping(e: KeyboardEvent): boolean {
   const t = e.target as HTMLElement | null;
   return !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+}
+
+function isSelectTool(tool: Tool): boolean {
+  return tool === "select" || tool === "lasso" || tool === "wand";
 }

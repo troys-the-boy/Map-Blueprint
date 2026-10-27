@@ -10,7 +10,23 @@ import type { AreaEdit, Edit, Entity, EntityKind, MapBlueprint, NewMapOptions, O
 import type { GenerateResult } from "../core/generate";
 import { applyAreaResult, applyResult, areaInput, canGenerate, wholeMapInput } from "../core/generate";
 import type { Area, Clip } from "../core/selection";
-import { areaCellList, areaCells, clearArea, clipToMap, copyArea, inArea, lassoArea, moveArea, pasteClip, rectFromCorners } from "../core/selection";
+import {
+  allArea,
+  areaCellList,
+  areaCells,
+  clearArea,
+  clipToMap,
+  combineAreas,
+  copyArea,
+  growArea,
+  inArea,
+  invertArea,
+  lassoArea,
+  moveArea,
+  pasteClip,
+  rectFromCorners,
+  wandArea,
+} from "../core/selection";
 import type { Direction } from "../core/terrain";
 import { entityAt, newThing, setFacing, setSight, sightOf, turnClockwise } from "../core/things";
 import { hmsFor, readRouteParams } from "../core/generators/params";
@@ -30,10 +46,13 @@ export const APP_VERSION = "0.1.0";
 /**
  * "elevation" is the elevation brush: it paints elevation levels, leaving terrain alone.
  * "lock" is the lock brush. "select" draws a rectangle to copy, move or delete;
- * "lasso" draws any shape for the same.
+ * "lasso" draws any shape for the same; "wand" picks every joined cell of one terrain.
  * "things" places, drags, turns and removes trainers, items and so on.
  */
-export type Tool = "pencil" | "erase" | "pan" | "pick" | "elevation" | "lock" | "select" | "lasso" | "things";
+export type Tool = "pencil" | "erase" | "pan" | "pick" | "elevation" | "lock" | "select" | "lasso" | "wand" | "things";
+
+/** How a new rectangle, lasso or wand pick changes the selection. */
+export type SelectMode = "new" | "add" | "subtract";
 
 /** What generating changes: "keep" leaves locked cells alone; "whole" replaces everything. */
 export type GenerateMode = "keep" | "whole";
@@ -127,6 +146,10 @@ class EditorStore {
   selection: Area | null = null;
   /** The line being drawn with the Lasso, in cell coordinates. */
   lassoPoints: Array<[number, number]> | null = null;
+  /** Whether a new shape replaces the selection, adds to it or takes away from it. */
+  selectMode: SelectMode = "new";
+  /** Magic wand: pick that terrain everywhere on the map, not just the joined patch. */
+  wandEverywhere = false;
   /** The last copied area. */
   clipboard: Clip | null = null;
   /** An area being moved or pasted, not yet put down. */
@@ -337,7 +360,7 @@ class EditorStore {
   setTool(tool: Tool) {
     if (tool === "pick" && this.tool !== "pick") this.toolBeforePick = this.tool;
     // Leaving the selection tools puts down anything still being placed.
-    if (tool !== "select" && tool !== "lasso") this.dropFloating();
+    if (tool !== "select" && tool !== "lasso" && tool !== "wand") this.dropFloating();
     if (tool !== "things") this.selectedThing = null;
     this.tool = tool;
     this.showElevationFor(tool);
@@ -552,15 +575,42 @@ class EditorStore {
   /** Where the clipboard was copied from (for the edit record). */
   private clipboardFrom: Area | null = null;
 
-  /** True for the two tools that make selections. */
+  /** The selection before an add or subtract started, and which it is. */
+  private selectBase: Area | null = null;
+  private selectOp: SelectMode = "new";
+
+  /** True for the tools that make selections. */
   get selecting() {
-    return this.tool === "select" || this.tool === "lasso";
+    return this.tool === "select" || this.tool === "lasso" || this.tool === "wand";
   }
 
-  /** Pointer down with the Select or Lasso tool: grab the selection to move it, or start a new one. */
-  selectDown(x: number, y: number) {
+  setSelectMode(mode: SelectMode) {
+    this.selectMode = mode;
+    this.changed();
+  }
+
+  setWandEverywhere(on: boolean) {
+    this.wandEverywhere = on;
+    this.changed();
+  }
+
+  /** The selection with a new shape applied: replacing it, added to it, or taken from it. */
+  private applyShape(shape: Area | null): Area | null {
+    const map = this.currentMap;
+    if (!map || this.selectOp === "new") return shape;
+    return combineAreas(map, this.selectBase, shape, this.selectOp);
+  }
+
+  /**
+   * Pointer down with a selection tool. In New mode, pressing inside the selection
+   * grabs it to move it (except with the magic wand); otherwise a new rectangle, lasso or wand pick starts.
+   * Shift adds to the selection and Alt takes away, whatever the mode.
+   */
+  selectDown(x: number, y: number, keys: { add?: boolean; subtract?: boolean } = {}) {
     const map = this.currentMap;
     if (!map) return;
+    this.selectOp = keys.subtract ? "subtract" : keys.add ? "add" : this.selectMode;
+    this.selectBase = this.selection;
     const f = this.floating;
     if (f && inArea({ x: f.x, y: f.y, w: f.clip.w, h: f.clip.h, mask: f.clip.mask }, x, y)) {
       this.grab = [x - f.x, y - f.y];
@@ -569,7 +619,8 @@ class EditorStore {
     // Tapping away from a paste puts it down where it is.
     if (f) this.dropFloating();
     const sel = this.selection;
-    if (sel && inArea(sel, x, y)) {
+    // (The magic wand always picks: a tap is a pick, never a move.)
+    if (sel && this.selectOp === "new" && this.tool !== "wand" && inArea(sel, x, y)) {
       this.floating = { clip: copyArea(map, sel), x: sel.x, y: sel.y, source: sel };
       this.grab = [x - sel.x, y - sel.y];
       this.changed();
@@ -577,14 +628,20 @@ class EditorStore {
     }
     const cx = Math.max(0, Math.min(map.width - 1, x));
     const cy = Math.max(0, Math.min(map.height - 1, y));
+    if (this.tool === "wand") {
+      this.selection = this.applyShape(wandArea(map, cx, cy, this.wandEverywhere));
+      this.changed();
+      return;
+    }
     if (this.tool === "lasso") {
       this.lassoPoints = [[cx + 0.5, cy + 0.5]];
-      this.selection = null;
+      // A new lasso replaces the selection; while adding or subtracting, the old one stays in view.
+      if (this.selectOp === "new") this.selection = null;
       this.changed();
       return;
     }
     this.selectAnchor = [cx, cy];
-    this.selection = { x: cx, y: cy, w: 1, h: 1 };
+    this.selection = this.applyShape({ x: cx, y: cy, w: 1, h: 1 });
     this.changed();
   }
 
@@ -615,19 +672,25 @@ class EditorStore {
     }
     if (this.selectAnchor) {
       const r = clipToMap(map, rectFromCorners(this.selectAnchor[0], this.selectAnchor[1], x, y));
-      if (r && (r.x !== this.selection?.x || r.y !== this.selection.y || r.w !== this.selection.w || r.h !== this.selection.h)) {
-        this.selection = r;
+      const last = this.lastRect;
+      if (r && (r.x !== last?.x || r.y !== last.y || r.w !== last.w || r.h !== last.h)) {
+        this.lastRect = r;
+        this.selection = this.applyShape(r);
         this.changed();
       }
     }
   }
 
+  /** The rectangle being dragged, so the selection is only worked out again when it changes. */
+  private lastRect: Area | null = null;
+
   selectUp() {
     this.selectAnchor = null;
+    this.lastRect = null;
     const map = this.currentMap;
     if (this.lassoPoints && map) {
-      // Close the lasso: everything inside the line is selected.
-      this.selection = lassoArea(map, this.lassoPoints);
+      // Close the lasso: everything inside the line is selected (or added, or taken away).
+      this.selection = this.applyShape(lassoArea(map, this.lassoPoints));
       this.lassoPoints = null;
       this.changed();
     }
@@ -685,6 +748,34 @@ class EditorStore {
   cancelFloating() {
     this.floating = null;
     this.grab = null;
+    this.changed();
+  }
+
+  /** Grow the selection by one cell all round (by = 1), or shrink it (by = -1). */
+  growSelection(by: number) {
+    const map = this.currentMap;
+    if (!map || !this.selection) return;
+    this.dropFloating();
+    this.selection = growArea(map, this.selection, by);
+    this.changed();
+  }
+
+  /** Select everything that isn't selected (everything, if nothing is). */
+  invertSelection() {
+    const map = this.currentMap;
+    if (!map) return;
+    this.dropFloating();
+    this.selection = invertArea(map, this.selection);
+    if (!this.selecting) this.setTool("select");
+    this.changed();
+  }
+
+  selectAll() {
+    const map = this.currentMap;
+    if (!map) return;
+    this.dropFloating();
+    this.selection = allArea(map);
+    if (!this.selecting) this.setTool("select");
     this.changed();
   }
 

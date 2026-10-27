@@ -303,3 +303,6 @@ fieldset.checks .check { min-height: 38px; }
   .icon-button.labeled span { display: none; }
 }
 .edit-bar select { min-height: var(--hit); }
+.edit-bar-group.first { border-left: 0; padding-left: 0; }
+.edit-bar-group.check { gap: 6px; font-size: 14px; min-height: var(--hit); }
+.edit-bar-more { display: contents; }

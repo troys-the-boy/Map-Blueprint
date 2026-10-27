@@ -49,7 +49,9 @@ Double-click **`start.command`**. If macOS refuses to open it:
 | Erase to plain ground | Eraser tool (**E**) | Eraser tool |
 | Paint elevation | Elevation brush (**L**) | Elevation brush in the tool strip |
 | Lock / unlock cells | Lock brush (**K**) / Unlock brush (**U**) | The two padlock buttons in the tool strip |
-| Select an area | Select tool (**V**), drag a rectangle; or Lasso (**Q**), draw round any shape | Select or Lasso tool, with the Pencil |
+| Select an area | Select tool (**V**), drag a rectangle; Lasso (**Q**), draw round any shape; Magic wand (**W**), click a terrain | Select, Lasso or Magic wand tool, with the Pencil |
+| Add to / take from a selection | Hold **Shift** / **Alt** while selecting | **+** / **−** in the top bar |
+| Select all / invert | **Ctrl+A** / **Ctrl+I** | Buttons in the top bar |
 | Move it | Drag inside the selection | Drag inside the selection |
 | Copy / cut / paste / delete it | **Ctrl+C** / **Ctrl+X** / **Ctrl+V** / **Delete**; **Enter** places a paste, **Esc** cancels | Buttons in the bar at the top |
 | Place a trainer, item… | Things tool (**T**), click | Things tool, tap |
@@ -81,9 +83,22 @@ Double-click **`start.command`**. If macOS refuses to open it:
 
 ## Editing (Milestone 3)
 
-**Select, move, copy (Select tool, V, or Lasso, Q).** With Select, drag a rectangle. With the Lasso, draw round any shape: everything inside the line (and under it) is selected when you let go. Then:
+**Select, move, copy (Select tool V, Lasso Q, Magic wand W).**
 
-- **Move:** drag inside the selection. Trainers, items and other things in it move too.
+- **Select:** drag a rectangle.
+- **Lasso:** draw round any shape. Everything inside the line (and under it) is selected when you let go.
+- **Magic wand:** tap a cell to select every joined cell of the same terrain: a whole pond, grass patch or path. Tick **Everywhere** to pick that terrain all over the map.
+
+**Shaping a selection** (left end of the top bar):
+
+- **New / + / −:** whether the next rectangle, lasso or wand tap replaces the selection, adds to it, or takes away from it. On a keyboard, hold **Shift** to add or **Alt** to take away.
+- **Grow / Shrink** by one cell all round (for example, a pond plus its shore).
+- **Invert** selects everything that isn't selected; **Select all** selects the whole map.
+- **▴ / ▾** folds the less-used buttons away when you need to see more of the map.
+
+Then:
+
+- **Move:** drag inside the selection (in New mode). Trainers, items and other things in it move too.
 - **Copy / Cut / Paste / Delete:** use the bar at the top of the map (or Ctrl+C, Ctrl+X, Ctrl+V, Delete). A paste appears in the middle of the view: drag it where you want it, then **Place** (or Enter). **Cancel** (or Esc) throws it away.
 - **Change it all at once:** **Fill with…** sets every selected cell to one terrain, like a paint bucket (locked, if **Lock what I paint** is on). **Elevation…** sets their elevation. The padlock buttons lock or unlock them.
 - **Regenerate area:** makes only the selected area again with the generator. Everything outside it stays exactly as it is. Each try looks different; Undo goes back.
