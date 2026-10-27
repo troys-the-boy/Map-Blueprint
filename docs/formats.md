@@ -216,6 +216,14 @@ Towns (Milestone 5) also read these keys, and share `treeDensity`, `borderThickn
 | `houses`, `largeHouses` | 3, 1 | 0–12, 0–6 (how many of the houses are 5×4) |
 | `people` | 3 | 0–10 |
 | `edgeGrass` | 0.3 | 0–1 (optional grass patches near the border) |
+
+Forests (Milestone 5) read these keys, and share `pathWidthMin` (path width), `grass`, `borderThickness`, `trainers`, `items` (dead-end item balls = this + 2), `hiddenItems` and the levels with routes:
+
+| Key | Default | Range / values |
+| --- | --- | --- |
+| `mazeDensity` | 0.6 | 0–1 (0 = open with loops, 1 = one long winding way) |
+| `clearings` | 3 | 0–8 |
+| `guaranteedHidden` | 2 | 0–8 |
 | `retries` | 8 | 0–20 |
 | `generatorVersion` | (set by the app) | which generator produced the map |
 | `seedPinned` | absent | `true` when the seed is pinned in the app (New seed and Variations leave it alone); not used by the generator |

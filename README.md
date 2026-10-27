@@ -183,6 +183,17 @@ Generate also adds the town sign, a sign by the Gym, flower beds, fences and tre
 
 Doors Generate makes are replaced each time you Generate; warps you place yourself are kept. **Check** reports a door that isn't on a building's bottom edge with walkable ground in front of it.
 
+## Generate a forest (Milestone 5)
+
+Make a map of type **Forest** (sizes S 40×40, M 50×50, L 60×60), then press **Generate**. You get a maze of paths through dense forest, like Petalburg Woods. The **Forest** group in the Generate tab sets:
+
+- **Maze density** (0–100): low = open woods with a few loops and short side paths; high = one long winding way with long dead ends.
+- **Clearings:** open spaces where three or more paths meet.
+- **Guaranteed hidden items:** always placed, at quiet dead ends first.
+- **Path width:** 1–3 cells.
+
+The deepest dead ends get item balls (two more than **Extra items**), trainers watch the way between the entrances, long grass grows along the paths (**Grass** sets how much), and there's a sign at the entrance. The biome sets the look: long grass in rainforest and wetland woods (wetland clearings hold a little pool and mud), tall grass in meadow woods, snowy grass and outcrops of rock in alpine ones.
+
 ## Generate a route (Milestone 2)
 
 1. Create a map with **Type: Route** (for example the **M (vertical)** preset, 30×60).
@@ -444,7 +455,8 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 
 ## Known limitations
 
-- **Routes and towns only.** Forests and caves arrive in the next parts of Milestone 5; until then those map types stay blank.
+- **Routes, towns and forests only.** Caves arrive in the next parts of Milestone 5; until then cave maps stay blank.
+- **Zones apply to routes.** Towns and forests use a biome zone's look, but water, edge and keep-clear zones are only followed on routes so far.
 - **Waterfront towns** sometimes get wide patches of road where lanes run side by side.
 - **Mountains follow the map's own biome.** A biome zone changes the ground, trees, grass and detail in its area, but elevation (alpine terraces) still follows the map's main biome.
 - **Generate works around drawn features but doesn't route through them.** A path you draw is kept, but the generated main path may run elsewhere; join them with another stroke if you want one route.

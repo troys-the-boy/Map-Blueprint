@@ -11,6 +11,7 @@ import type { RouteParams } from "../../core/generators/params";
 import { TRAVEL_LABELS, TRAVEL_SETTINGS, travelOf, travelVertical } from "../../core/generators/travel";
 import { BUILDING_TYPES, TOWN_LAYOUTS, TOWN_LAYOUT_LABELS, TOWN_RANGES, buildingList, readTownParams } from "../../core/generators/townParams";
 import type { TownLayout } from "../../core/generators/townParams";
+import { FOREST_RANGES, readForestParams } from "../../core/generators/forestParams";
 import type { TravelSetting } from "../../core/generators/travel";
 import { BIOMES, EDGES } from "../../core/model";
 import type { Biome, Edge, Opening, OpeningKind } from "../../core/model";
@@ -31,6 +32,39 @@ const BIOME_LABELS: Record<Biome, string> = {
 };
 
 const LAYOUT_LABELS: Record<Layout, string> = { land: "Land", coastal: "Coastal", river: "River", water: "Open water" };
+
+/** Forest settings: how twisty the maze is, clearings, hidden items (see generators/forest.ts). */
+function ForestSettings() {
+  const s = useStore();
+  const map = s.currentMap!;
+  const f = readForestParams(map.params);
+  const p = readRouteParams(map.params);
+  const set = (patch: Record<string, string | number | boolean>) => s.setParams(patch);
+  return (
+    <details open>
+      <summary title="The maze, clearings and hidden items">Forest</summary>
+      <label className="slider" title="0 = open woods with loops and short side paths; 100 = one long winding way with long dead ends.">
+        <span>
+          Maze density <b>{Math.round(f.mazeDensity * 100)}</b>
+        </span>
+        <input type="range" min={0} max={1} step={0.05} value={f.mazeDensity} onChange={(e) => set({ mazeDensity: Number(e.target.value) })} />
+      </label>
+      <label className="field inline" title="Open clearings where three or more paths meet. In wetland forests they hold a little pool and mud.">
+        <span>Clearings</span>
+        <NumberField min={FOREST_RANGES.clearings[0]} max={FOREST_RANGES.clearings[1]} value={f.clearings} onChange={(v) => set({ clearings: v })} />
+      </label>
+      <label className="field inline" title="Hidden items always placed, at quiet dead ends first, then in corners.">
+        <span>Guaranteed hidden items</span>
+        <NumberField min={FOREST_RANGES.guaranteedHidden[0]} max={FOREST_RANGES.guaranteedHidden[1]} value={f.guaranteedHidden} onChange={(v) => set({ guaranteedHidden: v })} />
+      </label>
+      <label className="field inline" title="How wide the paths are, in cells (1–3).">
+        <span>Path width</span>
+        <NumberField min={1} max={3} value={Math.min(3, p.pathWidthMin)} onChange={(v) => set({ pathWidthMin: v, pathWidthMax: Math.max(v, p.pathWidthMax) })} />
+      </label>
+      <p className="hint">The biome sets the look: long grass in rainforest and wetland woods (with pools in wetland clearings), tall grass in meadow woods, rock in alpine ones.</p>
+    </details>
+  );
+}
 
 /** Town settings: street layout, buildings, people, edge grass (see generators/townParams.ts). */
 function TownSettings() {
@@ -129,6 +163,8 @@ export function GeneratePanel() {
           : null;
   const supported = canGenerate(map);
   const town = map.mapType === "town";
+  const forest = map.mapType === "forest";
+  const route = map.mapType === "route";
   const last = s.lastGenerate?.mapId === map.id ? s.lastGenerate : null;
   const errors = s.issues.filter((i) => i.severity === "error").length;
   const warnings = s.issues.length - errors;
@@ -170,7 +206,7 @@ export function GeneratePanel() {
         <button className="primary wide big" disabled={!supported || s.generating} onClick={() => void s.generate()} title="Generate this map from its seed and settings. By default, locked cells and things you placed are kept (see Generate changes, below). You can undo it.">
           {s.generating ? "Generating…" : "Generate"}
         </button>
-        {!supported && <p className="hint">Routes and towns can be generated so far. Forests and caves arrive in the next parts of Milestone 5.</p>}
+        {!supported && <p className="hint">Routes, towns and forests can be generated so far. Caves arrive in the next parts of Milestone 5.</p>}
         {last?.notes?.map((n) => (
           <p key={n} className="hint">
             {n}
@@ -245,9 +281,10 @@ export function GeneratePanel() {
       </div>
 
       {town && <TownSettings />}
+      {forest && <ForestSettings />}
 
-      <details open={!town}>
-        <summary title={town ? "Biome" : "Biome, path shape"}>Basic</summary>
+      <details open={route}>
+        <summary title={route ? "Biome, path shape" : "Biome"}>Basic</summary>
         <label className="field" title="The look of the map: changes the mix of trees, grass, water and ground.">
           <span>Biome</span>
           <select value={map.biome} onChange={(e) => changeLayout(p.layout, e.target.value as Biome)}>
@@ -258,7 +295,7 @@ export function GeneratePanel() {
             ))}
           </select>
         </label>
-        {!town && (
+        {route && (
           <>
             <label className="field" title="The overall shape of the route. Auto = Coastal for the coastal biome, Land otherwise.">
               <span>Layout</span>
@@ -349,9 +386,9 @@ export function GeneratePanel() {
 
       <details>
         <summary title="Grass, water, trees, border">Terrain</summary>
-        {!town && num("grass", "Grass", "Share of open ground that becomes grass (wild encounters).")}
-        {!town && num("water", "Water", "Ponds and streams.")}
-        {num("treeDensity", "Tree cover", town ? "How many trees dot the town." : "How much of the map is trees rather than open ground.")}
+        {!town && num("grass", "Grass", forest ? "How much long grass grows along the paths (wild encounters)." : "Share of open ground that becomes grass (wild encounters).")}
+        {route && num("water", "Water", "Ponds and streams.")}
+        {!forest && num("treeDensity", "Tree cover", town ? "How many trees dot the town." : "How much of the map is trees rather than open ground.")}
         {num("borderThickness", "Border thickness", "Cells of wall around the map edge.")}
         <label className="field" title="What the wall around the map is made of. Auto = cliffs on alpine routes, dense forest otherwise.">
           <span>Border style</span>
@@ -361,31 +398,31 @@ export function GeneratePanel() {
             <option value="cliff">Cliffs</option>
           </select>
         </label>
-        {!town && (
+        {route && (
           <>
-              <label className="field" title="A stream crossing the route, with a bridge where it meets the path.">
-                <span>Stream</span>
-                <select value={p.stream} onChange={(e) => set({ stream: e.target.value })}>
-                  <option value="auto">Sometimes</option>
-                  <option value="yes">Always</option>
-                  <option value="no">Never</option>
-                </select>
-              </label>
-              {(layout === "coastal" || layout === "river") && (
-                <label className="check" title="Add entrances on the water at each end, which need Surf. Applies when entrances are picked automatically.">
-                  <input type="checkbox" checked={p.surfEntrances} onChange={(e) => set({ surfEntrances: e.target.checked })} />
-                  Surf entrances on the water
-                </label>
-            )}
-            <label className="check" title="An open clearing beside the path.">
-              <input type="checkbox" checked={p.clearing} onChange={(e) => set({ clearing: e.target.checked })} />
-              Clearing
+            <label className="field" title="A stream crossing the route, with a bridge where it meets the path.">
+              <span>Stream</span>
+              <select value={p.stream} onChange={(e) => set({ stream: e.target.value })}>
+                <option value="auto">Sometimes</option>
+                <option value="yes">Always</option>
+                <option value="no">Never</option>
+              </select>
             </label>
+            {(layout === "coastal" || layout === "river") && (
+              <label className="check" title="Add entrances on the water at each end, which need Surf. Applies when entrances are picked automatically.">
+                <input type="checkbox" checked={p.surfEntrances} onChange={(e) => set({ surfEntrances: e.target.checked })} />
+                Surf entrances on the water
+              </label>
+          )}
+          <label className="check" title="An open clearing beside the path.">
+            <input type="checkbox" checked={p.clearing} onChange={(e) => set({ clearing: e.target.checked })} />
+            Clearing
+          </label>
           </>
         )}
       </details>
 
-      {!town && (
+      {route && (
         <details>
           <summary title="Branches, ledges, HM-gated areas">Structure</summary>
           <label className="check" title="A shorter second way through that's mostly tall grass. Taking the path means trainer battles; taking the grass means wild Pokémon.">
@@ -417,7 +454,7 @@ export function GeneratePanel() {
         <summary title="Trainers, items, HMs the player has">Gameplay</summary>
         {!town && num("trainers", "Trainers", "How many trainers to place. Each faces the path and can be walked around.")}
         {!town && num("trainerSpacing", "Trainer spacing", "Minimum distance between trainers, in cells.")}
-        {!town && num("items", "Extra items", "Item balls besides the ones at dead ends and in HM areas.")}
+        {!town && num("items", "Extra items", forest ? "Item balls at the deepest dead ends (two more than this number)." : "Item balls besides the ones at dead ends and in HM areas.")}
         {num("hiddenItems", "Hidden items", "Hidden items in corners. Quiet dead ends also get one automatically.")}
         {num("levelMin", "Lowest wild level", "The lowest level of wild Pokémon here, for the encounter draft.")}
         {num("levelMax", "Highest wild level", "The highest level of wild Pokémon here, for the encounter draft.")}

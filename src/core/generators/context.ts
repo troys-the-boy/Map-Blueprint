@@ -8,6 +8,7 @@ import type { Rng } from "../rng";
 import { ValueNoise } from "../noise";
 import type { Biome, Entity, MapType, Opening, Warp, Zone } from "../model";
 import type { TownParams } from "./townParams";
+import type { ForestParams } from "./forestParams";
 import type { TownBuilding } from "./town";
 import { BIOMES } from "../model";
 import type { Layout, RouteParams } from "./params";
@@ -68,6 +69,8 @@ export interface GenInput {
   mapConstant?: string;
   /** Town settings (towns only). */
   town?: TownParams;
+  /** Forest settings (forests only). */
+  forest?: ForestParams;
   biome: Biome;
   /** The user's zones (not the generator's own). */
   zones: Zone[];
@@ -123,6 +126,10 @@ export class GenContext {
   warps: Warp[] = [];
   /** Town buildings, with their door cells. */
   buildings: TownBuilding[] = [];
+  /** Forest clearings (their centre cells). */
+  clearings: number[] = [];
+  /** Forest dead ends without an item (hidden items go there first). */
+  quietEnds: number[] = [];
 
   constructor(
     readonly input: GenInput,

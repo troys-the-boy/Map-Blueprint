@@ -139,7 +139,8 @@ export function placeEntities(ctx: GenContext): void {
   for (const c of ctx.ledgePockets) if (!taken[c]) addItem(c, "uncommon");
   if (p.deadEndRewards)
     for (const d of ctx.deadEnds) if (!taken[d] && IS_WALKABLE[ctx.terrain[d]]) addItem(d, "uncommon");
-  let budget = p.items;
+  // In a forest, the Extra items setting is spent on its deepest dead ends (see forest.ts).
+  let budget = ctx.input.mapType === "forest" ? 0 : p.items;
   // Extra items: reachable spots a few steps off the path.
   const pathCells: number[] = [];
   for (let i = 0; i < n; i++) if (pathish(i)) pathCells.push(i);

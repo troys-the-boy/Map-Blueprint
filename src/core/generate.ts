@@ -32,6 +32,8 @@ import { applyMarsh, applyZones, prepareZones, shiftOpeningsOutOfZones } from ".
 import { ELEVATION_LEVELS } from "./terrain";
 import { buildTown } from "./generators/town";
 import { buildingList, readTownParams } from "./generators/townParams";
+import { addGuaranteedHidden, buildForest } from "./generators/forest";
+import { readForestParams } from "./generators/forestParams";
 
 /** Version of the generators. Bumped when the same seed starts giving different maps. */
 export const GENERATOR_VERSION = 5;
@@ -54,7 +56,7 @@ export interface GenerateResult {
 
 /** Map types that have a generator so far. */
 export function canGenerate(map: MapBlueprint): boolean {
-  return map.mapType === "route" || map.mapType === "town";
+  return map.mapType === "route" || map.mapType === "town" || map.mapType === "forest";
 }
 
 /** Final elevation: plateau levels as built, water on the low level marked "water", bridges "bridge". */
@@ -100,11 +102,20 @@ function townStages(ctx: GenContext, geometry: Geometry) {
   placeEntities(ctx); // the town sign and hidden items
 }
 
+/** A forest: a maze through dense forest, clearings, long grass, trainers and items (see generators/forest.ts). */
+function forestStages(ctx: GenContext) {
+  prepareZones(ctx); // biome per cell
+  buildForest(ctx);
+  placeEntities(ctx); // trainers on the main path, items at dead ends, hidden items, the sign
+  addGuaranteedHidden(ctx);
+}
+
 function runOnce(map: MapBlueprint, input: GenInput, geometry: Geometry, seed: number, validate: ValidateOptions): GenerateResult {
   const ctx = new GenContext(input, new Rng(seed));
   // Things placed by hand stay put; the generator works around them.
   for (const e of map.entities) if (e.locked) ctx.entities.push(cloneThing(e));
   if (map.mapType === "town") townStages(ctx, geometry);
+  else if (map.mapType === "forest") forestStages(ctx);
   else routeStages(ctx, geometry);
   return finish(map, input, ctx, validate);
 }
@@ -201,8 +212,13 @@ export function generateRoute(map: MapBlueprint, validate: Omit<ValidateOptions,
   const town = map.mapType === "town" ? readTownParams(map.params) : undefined;
   // Towns share the route settings they use (border, trees, hidden items) but have no trainers,
   // extra items, branches, hills or ledges; a waterfront town is laid out like a coastal route.
+  const forest = map.mapType === "forest" ? readForestParams(map.params) : undefined;
   const routeParams = readRouteParams(map.params);
-  const params = town
+  // Forests use the route settings for paths, grass, border, trainers and items, without hills,
+  // ledges, branches (the maze makes its own), HM areas or a travel direction.
+  const params = forest
+    ? { ...routeParams, elevation: 0, ledges: 0, branches: 0, hmPockets: 0, travel: "auto" as const, layout: "land" as const, grassShortcut: false, pathGrass: 0, snow: 0 }
+    : town
     ? { ...routeParams, trainers: 0, items: 0, branches: 0, deadEndRewards: false, elevation: 0, ledges: 0, hmPockets: 0, travel: "auto" as const, layout: town.townLayout === "waterfront" ? ("coastal" as const) : ("land" as const), surfEntrances: false, water: -0.5 }
     : routeParams;
   const layout = resolveLayout(params, map.biome);
@@ -228,6 +244,7 @@ export function generateRoute(map: MapBlueprint, validate: Omit<ValidateOptions,
     mapType: map.mapType,
     mapConstant: map.header.id,
     town,
+    forest,
   };
   const opts: ValidateOptions = { ...validate, availableHms: hmsFor(params, map.biome) };
   let best: GenerateResult | null = null;
