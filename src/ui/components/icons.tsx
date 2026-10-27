@@ -24,6 +24,7 @@ const paths: Record<string, string> = {
   turn: "M20 12a8 8 0 11-2.3-5.7M20 4v5h-5",
   undo: "M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3",
   redo: "M15 14l5-5-5-5M20 9H10a6 6 0 000 12h3",
+  resize: "M4 4h10v10H4zM14 9h6v11H9v-6M15 15l5 5M20 16v4h-4",
   fit: "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5",
   zoomIn: "M11 4a7 7 0 100 14 7 7 0 000-14zM21 21l-5-5M11 8v6M8 11h6",
   zoomOut: "M11 4a7 7 0 100 14 7 7 0 000-14zM21 21l-5-5M8 11h6",

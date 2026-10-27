@@ -12,7 +12,7 @@ const TYPE_LABELS: Record<string, string> = {
   interior_stub: "Interior",
 };
 
-export function MapsPanel({ onClose, onNewMap }: { onClose: () => void; onNewMap: () => void }) {
+export function MapsPanel({ onClose, onNewMap, onResize }: { onClose: () => void; onNewMap: () => void; onResize: () => void }) {
   const s = useStore();
   return (
     <aside className="drawer left" aria-label="Maps in this project">
@@ -45,6 +45,11 @@ export function MapsPanel({ onClose, onNewMap }: { onClose: () => void; onNewMap
                   {fits ? "" : " · too big"}
                 </span>
               </button>
+              {m.id === s.currentMapId && (
+                <button className="icon-button" title={`Resize ${m.name} (change its width and height)`} aria-label={`Resize ${m.name}`} onClick={onResize}>
+                  <Icon name="resize" size={18} />
+                </button>
+              )}
               <button
                 className="icon-button"
                 title={`Rename ${m.name}`}

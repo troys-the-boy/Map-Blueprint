@@ -85,6 +85,8 @@ Double-click **`start.command`**. If macOS refuses to open it:
 
 ## Editing (Milestone 3)
 
+**Resizing a map.** Open the **Maps** list and tap the resize button next to the open map. Type the new width and height, and pick the **anchor**: the part of the map that stays put. With the anchor top-left, cells are added or cut on the right and bottom; in the middle, equally on every side. New cells are plain ground, not locked, so **Generate** fills them in. Things, locks, zones and entrances move with their cells. When shrinking, a red box lists what would be cut off (locked cells, things, warps, zones, entrances) before you confirm. One **Undo** puts it all back.
+
 **Smart strokes (S).** Pick what to draw in the Paint tab under **Smart strokes**, then draw it. The tool makes it valid:
 
 - **Path:** a line, widened to at least the **Narrowest path** setting (or the brush size, if bigger). Where it crosses water it becomes a bridge.

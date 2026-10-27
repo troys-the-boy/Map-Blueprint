@@ -6,6 +6,7 @@ import { checkMapSize } from "../core/sizeRule";
 import { TERRAIN_TYPES } from "../core/terrain";
 import { MapCanvas, canvasRef } from "./components/MapCanvas";
 import { MapsPanel } from "./components/MapsPanel";
+import { ResizeDialog } from "./components/ResizeDialog";
 import { NewMapDialog } from "./components/NewMapDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { SidePanel } from "./components/SidePanel";
@@ -19,7 +20,7 @@ import { openProject, saveProject } from "./files";
 import { screenLabel } from "./renderer";
 import { store, useStore } from "./store";
 
-type Dialog = null | "newMap" | "settings" | "export";
+type Dialog = null | "newMap" | "settings" | "export" | "resize";
 
 export function App() {
   const s = useStore();
@@ -185,11 +186,16 @@ export function App() {
               setMapsOpen(false);
               setDialog("newMap");
             }}
+            onResize={() => {
+              setMapsOpen(false);
+              setDialog("resize");
+            }}
           />
         </>
       )}
       {dialog === "newMap" && <NewMapDialog onClose={() => setDialog(null)} />}
       {dialog === "settings" && <SettingsDialog onClose={() => setDialog(null)} />}
+      {dialog === "resize" && <ResizeDialog onClose={() => setDialog(null)} />}
       {dialog === "export" && <ExportDialog onClose={() => setDialog(null)} />}
       <VariationsDialog />
     </div>

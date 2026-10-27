@@ -24,16 +24,20 @@ export function MapCanvas({ onHover }: { onHover: (cell: [number, number] | null
     renderer.setMap(store.currentMap);
 
     let shownMapId = store.currentMapId;
+    let shownSize = store.currentMap ? `${store.currentMap.width}x${store.currentMap.height}` : "";
     const offCells = store.onCells((mapId, indices) => {
       renderer.setPalette(store.prefs.paletteId);
       renderer.overlays = { ...store.prefs.overlays };
       if (indices && mapId === shownMapId) {
         renderer.updateCells(indices);
       } else {
-        const changedMap = shownMapId !== store.currentMapId;
+        // Fit the view again when another map opens, or this one is resized.
+        const size = store.currentMap ? `${store.currentMap.width}x${store.currentMap.height}` : "";
+        const refit = shownMapId !== store.currentMapId || size !== shownSize;
         shownMapId = store.currentMapId;
+        shownSize = size;
         renderer.setMap(store.currentMap);
-        if (changedMap) renderer.fit();
+        if (refit) renderer.fit();
       }
     });
     // Overlay toggles that don't change cells (grid, rulers, frame) only need a redraw.

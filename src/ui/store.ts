@@ -28,6 +28,8 @@ import {
   wandArea,
 } from "../core/selection";
 import type { Direction } from "../core/terrain";
+import type { Anchor } from "../core/resize";
+import { resizeMap } from "../core/resize";
 import { entityAt, newThing, setFacing, setSight, sightOf, turnClockwise } from "../core/things";
 import type { SmartKind } from "../core/strokes";
 import type { ZoneKind } from "../core/zones";
@@ -85,10 +87,19 @@ interface MapSnapshot {
   params: MapBlueprint["params"];
 }
 
-/** One undoable action: a paint stroke, or a whole-map change such as Generate. */
+/** Everything a resize changes, sizes included. */
+type MapShape = Pick<MapBlueprint, "width" | "height" | "layers" | "entities" | "warps" | "openings" | "connections" | "edits">;
+
+function shapeOf(map: MapBlueprint): MapShape {
+  const { width, height, layers, entities, warps, openings, connections, edits } = map;
+  return structuredClone({ width, height, layers, entities, warps, openings, connections, edits });
+}
+
+/** One undoable action: a paint stroke, a whole-map change such as Generate, or a resize. */
 type Command =
   | { type: "stroke"; mapId: string; diff: CellDiff; edit: Edit }
-  | { type: "snapshot"; mapId: string; before: MapSnapshot; after: MapSnapshot; edits?: Edit[]; tag?: string };
+  | { type: "snapshot"; mapId: string; before: MapSnapshot; after: MapSnapshot; edits?: Edit[]; tag?: string }
+  | { type: "resize"; mapId: string; before: MapShape; after: MapShape };
 
 function cloneZones(zones: Zone[]): Zone[] {
   return zones.map((z) => ({ ...z, mask: { ...z.mask, data: z.mask.data.slice() }, data: { ...z.data } }));
@@ -582,6 +593,20 @@ class EditorStore {
     this.markDirty();
     this.openMap(map.id);
     return map;
+  }
+
+  /** Change the open map's size (one undo step). See core/resize.ts. */
+  resizeCurrentMap(width: number, height: number, anchor: Anchor) {
+    const map = this.currentMap;
+    if (!map || (width === map.width && height === map.height)) return;
+    this.cancelStroke();
+    this.resetPicks();
+    const before = shapeOf(map);
+    resizeMap(map, width, height, anchor);
+    this.pushUndo({ type: "resize", mapId: map.id, before, after: shapeOf(map) });
+    this.markDirty();
+    this.changed();
+    this.cellsChanged(map.id, null);
   }
 
   renameMap(id: string, name: string) {
@@ -1332,6 +1357,9 @@ class EditorStore {
       applyDiff(map, cmd.diff, "before");
       const i = map.edits.lastIndexOf(cmd.edit);
       if (i >= 0) map.edits.splice(i, 1);
+    } else if (cmd.type === "resize") {
+      this.resetPicks();
+      Object.assign(map, structuredClone(cmd.before));
     } else {
       restore(map, cmd.before);
       for (const e of cmd.edits ?? []) {
@@ -1355,6 +1383,9 @@ class EditorStore {
     if (cmd.type === "stroke") {
       applyDiff(map, cmd.diff, "after");
       map.edits.push(cmd.edit);
+    } else if (cmd.type === "resize") {
+      this.resetPicks();
+      Object.assign(map, structuredClone(cmd.after));
     } else {
       restore(map, cmd.after);
       map.edits.push(...(cmd.edits ?? []));
