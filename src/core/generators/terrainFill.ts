@@ -10,7 +10,7 @@
 //     conifers, rock walls close along the path (narrow passes), and boulder
 //     fields on the open ground.
 
-import { T, cheapestPath, distanceField } from "../grid";
+import { DIRS, T, cheapestPath, distanceField } from "../grid";
 import type { GenContext } from "./context";
 import { Role } from "./context";
 import { resolveBorder } from "./params";
@@ -184,6 +184,12 @@ function addGrass(ctx: GenContext, dist: Float64Array) {
   }
 }
 
+/** Is a cell right beside a path (main path, branch or opening)? */
+function besidePath(ctx: GenContext, i: number): boolean {
+  const [x, y] = ctx.xy(i);
+  return DIRS.some(({ dx, dy }) => ctx.inside(x + dx, y + dy) && PATH_ROLES.has(ctx.role[ctx.idx(x + dx, y + dy)]));
+}
+
 function addBiomeDetail(ctx: GenContext) {
   let anyAlpine = false;
   for (let i = 0; i < ctx.n; i++) {
@@ -194,7 +200,8 @@ function addBiomeDetail(ctx: GenContext) {
     const v = ctx.noise.fractal(x + 1300, y + 1700, 4, 2);
     if (biome === "coastal" && v > 0.6) ctx.set(i, T.sand);
     else if (biome === "wetland" && v > 0.66) ctx.set(i, T.mud);
-    else if (biome === "meadow" && v > 0.68) ctx.set(i, T.flowers);
+    // Meadows are full of flowers: big drifts, and more along the edges of the paths.
+    else if (biome === "meadow" && (v > 0.56 || (v > 0.45 && besidePath(ctx, i)))) ctx.set(i, T.flowers);
   }
   if (anyAlpine) addBoulders(ctx);
 }

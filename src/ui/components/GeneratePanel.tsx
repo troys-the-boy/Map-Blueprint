@@ -61,7 +61,24 @@ function ForestSettings() {
         <span>Path width</span>
         <NumberField min={1} max={3} value={Math.min(3, p.pathWidthMin)} onChange={(v) => set({ pathWidthMin: v, pathWidthMax: Math.max(v, p.pathWidthMax) })} />
       </label>
-      <p className="hint">The biome sets the look: long grass in rainforest and wetland woods (with pools in wetland clearings), tall grass in meadow woods, rock in alpine ones.</p>
+      <label className="field" title="Which way the player first walks through the forest. Trainers face the player coming from the start, the sign stands at the start, and ledges jump from deep in the maze back toward the start, a shortcut home.">
+        <span>Travel direction</span>
+        <select value={p.travel} onChange={(e) => set({ travel: e.target.value })}>
+          {TRAVEL_SETTINGS.map((v) => (
+            <option key={v} value={v}>
+              {TRAVEL_LABELS[v]}
+            </option>
+          ))}
+        </select>
+      </label>
+      {p.travel !== "auto" && (
+        <label className="field inline" title="Ledges from deep in the maze back toward the start (Gen 3 has no north-facing ledges, so a forest travelled north to south gets none).">
+          <span>Ledge shortcuts</span>
+          <NumberField min={0} max={4} value={p.ledges} onChange={(v) => set({ ledges: v })} />
+        </label>
+      )}
+      {p.travel === "north_south" && <p className="hint">No ledge shortcuts going north to south: Gen 3 has no ledges you can jump north.</p>}
+      <p className="hint">The biome sets the look: long grass in rainforest and wetland woods (with pools in wetland clearings), tall grass and lots of flowers in meadow woods, rock in alpine ones.</p>
     </details>
   );
 }
@@ -71,6 +88,10 @@ function TownSettings() {
   const s = useStore();
   const map = s.currentMap!;
   const t = readTownParams(map.params);
+  const rp = readRouteParams(map.params);
+  // Towns are flat, with no side streets, until asked (the route defaults don't apply).
+  const townElevation = typeof map.params.elevation === "number" ? rp.elevation : 0;
+  const townBranches = typeof map.params.branches === "number" ? rp.branches : 0;
   const set = (patch: Record<string, string | number | boolean>) => s.setParams(patch);
   const count = (key: keyof typeof TOWN_RANGES, label: string, tip: string) => {
     const [min, max] = TOWN_RANGES[key];
@@ -113,6 +134,30 @@ function TownSettings() {
       {count("houses", "Houses", "Small houses (4×3).")}
       {count("largeHouses", "Of which large", "How many of the houses are larger (5×4).")}
       {count("people", "People", "People wandering beside the streets.")}
+      <label className="slider" title="Hillsides along the sides of the town, with cliffs, stairs up and ledges down, as on routes. 0 = flat.">
+        <span>
+          Elevation <b>{Math.round(townElevation * 100)}</b>
+        </span>
+        <input type="range" min={0} max={1} step={0.05} value={townElevation} onChange={(e) => set({ elevation: Number(e.target.value) })} />
+      </label>
+      <label className="field inline" title="Side streets off the streets, each ending in a dead end.">
+        <span>Side streets</span>
+        <NumberField min={0} max={6} value={townBranches} onChange={(v) => set({ branches: v })} />
+      </label>
+      {townBranches > 0 && (
+        <>
+          <label className="slider" title="How far the side streets reach.">
+            <span>
+              Side street length <b>{Math.round(rp.branchLength * 100)}</b>
+            </span>
+            <input type="range" min={0} max={1} step={0.05} value={rp.branchLength} onChange={(e) => set({ branchLength: Number(e.target.value) })} />
+          </label>
+          <label className="check" title="Put an item at the end of every side street.">
+            <input type="checkbox" checked={rp.deadEndRewards} onChange={(e) => set({ deadEndRewards: e.target.checked })} />
+            Items at dead ends
+          </label>
+        </>
+      )}
       <label className="slider" title="Small patches of tall grass near the edges. They're never in the way: every exit and door can be reached without stepping in grass.">
         <span>
           Grass at the edges <b>{Math.round(t.edgeGrass * 100)}</b>
@@ -120,7 +165,7 @@ function TownSettings() {
         <input type="range" min={0} max={1} step={0.05} value={t.edgeGrass} onChange={(e) => set({ edgeGrass: Number(e.target.value) })} />
       </label>
       <p className="hint">
-        {buildingList(t).length} buildings. Doors lead to MAP_…_POKEMON_CENTER_1F, _MART, _GYM, _HOUSE1…: make those interiors in Porymap. Buildings that don't fit are left out (Generate says so): make the map bigger or ask
+        Drawn your own streets (locked Path or Road)? Generate uses them: it joins them to the entrances and puts the buildings along them, doors facing south onto east–west streets. {buildingList(t).length} buildings. Doors lead to MAP_…_POKEMON_CENTER_1F, _MART, _GYM, _HOUSE1…: make those interiors in Porymap. Buildings that don't fit are left out (Generate says so): make the map bigger or ask
         for fewer.
       </p>
     </details>

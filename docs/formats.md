@@ -261,6 +261,8 @@ Each HM-gated area becomes a zone with these values:
 - `data.hm` names the HM that seals it.
 - `data.generated` is `true`.
 
+Bridges Generate laid over water the user locked (from Milestone 5) are remembered in a zone with `id` `"generated_bridges"`, `kind` `"bridge"`, `hard` `true` and `data.generated` `true`. The next Generate turns those cells back into deep water before planning, so the bridges can move.
+
 The next Generate replaces zones with `data.generated: true`. Any other zone is kept.
 
 #### Edits

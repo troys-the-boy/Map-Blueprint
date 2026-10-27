@@ -179,22 +179,32 @@ Make a map of type **Town** (sizes S 20×20, M 30×30, L 40×40), then press **G
 - **Buildings:** Pokémon Center (5×4), Mart (4×4), Gym (7×6), a landmark building (6×5), and houses (4×3, some 5×4). Each sits on a lot beside a street with its door in the middle of its front (south) side, a walk to the street, and a **door warp** to its interior: `MAP_<TOWN>_POKEMON_CENTER_1F`, `_MART`, `_GYM`, `_HOUSE1`… (vanilla's naming). The interiors aren't made: build them in Porymap. Buildings that don't fit are left out, and Generate says so.
 - **People** wandering beside the streets, and **Grass at the edges**: small tall-grass patches near the border that are never in the way (every exit and door can be reached without stepping in grass).
 
+- **Elevation:** hillsides along the sides of the town with cliffs, stairs and ledges, as on routes (0 = flat, the default).
+- **Side streets:** streets off the main ones that end in dead ends, with **Side street length** and **Items at dead ends**.
+
+**Drawing your own streets.** Paint the streets you want with Path or Road (locked, as painting is by default), then Generate. It uses your streets instead of making its own: it joins them to the entrances and to each other, and puts the buildings along them. Gen 3 doors face south, so buildings line up on the north side of east–west streets; beside north–south streets they sit a short walk away.
+
+Towns follow your zones (water, edges, keep-clear ground: nothing is built on keep-clear ground), and streets cross rivers and water you painted on bridges.
+
 Generate also adds the town sign, a sign by the Gym, flower beds, fences and trees, a few hidden items, and the Pokémon Center's **heal location** on the step in front of its door. The building sizes are typical Gen 3 sizes, not checked against pokeemerald's (binary) layouts; tell me if one is wrong.
 
 Doors Generate makes are replaced each time you Generate; warps you place yourself are kept. **Check** reports a door that isn't on a building's bottom edge with walkable ground in front of it.
 
 ## Generate a forest (Milestone 5)
 
-Make a map of type **Forest** (sizes S 40×40, M 50×50, L 60×60), then press **Generate**. You get a maze of paths through dense forest, like Petalburg Woods. The **Forest** group in the Generate tab sets:
+Make a map of type **Forest** (sizes S 40×40, M 50×50, L 60×60), then press **Generate**. You get a maze of winding paths through thick forest, like Petalburg Woods: the paths wander and change width, and the woods between them grow in uneven clumps, with dense forest inside and single trees at the edges. The **Forest** group in the Generate tab sets:
 
 - **Maze density** (0–100): low = open woods with a few loops and short side paths; high = one long winding way with long dead ends.
 - **Clearings:** open spaces where three or more paths meet.
 - **Guaranteed hidden items:** always placed, at quiet dead ends first.
-- **Path width:** 1–3 cells.
+- **Path width:** 1–3 cells (it wanders a little either side).
+- **Travel direction:** which way the player first walks through. Trainers face the player coming from the start, the sign stands at the start, and **Ledge shortcuts** jump from deep in the maze back toward the start, so coming back you don't have to find your way through again. Gen 3 has no ledges you can jump north, so a forest travelled north to south gets none.
 
-The deepest dead ends get item balls (two more than **Extra items**), trainers watch the way between the entrances, long grass grows along the paths (**Grass** sets how much), and there's a sign at the entrance. The biome sets the look: long grass in rainforest and wetland woods (wetland clearings hold a little pool and mud), tall grass in meadow woods, snowy grass and outcrops of rock in alpine ones.
+The deepest dead ends get item balls (two more than **Extra items**), trainers watch the way between the entrances, long grass grows along the paths (**Grass** sets how much), and there's a sign at the entrance. The biome sets the look: long grass in rainforest and wetland woods (wetland clearings hold a little pool and mud), tall grass and lots of flowers in meadow woods, snowy grass and outcrops of rock in alpine ones. Big clearings sometimes have a clump of trees standing in them. Forests follow your zones too, and their paths cross rivers and water you painted on bridges.
 
 ## Generate a route (Milestone 2)
+
+**Water you paint** (a stream, a lake) is kept, and the route's path crosses it on a bridge where it needs to. In meadows the ground is full of flowers.
 
 1. Create a map with **Type: Route** (for example the **M (vertical)** preset, 30×60).
 2. Press **Generate**: the ✨ button in the tool strip, the **G** key, or the big button on the **Generate** tab of the right-hand panel. On iPad, tap the colour square in the tool strip to open the panel.
@@ -456,7 +466,7 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 ## Known limitations
 
 - **Routes, towns and forests only.** Caves arrive in the next parts of Milestone 5; until then cave maps stay blank.
-- **Zones apply to routes.** Towns and forests use a biome zone's look, but water, edge and keep-clear zones are only followed on routes so far.
+- **Bridges over painted water.** Water you paint is locked, but Generate may lay a bridge across it where its path has to cross (routes, towns and forests). It's the one change Generate makes to a locked cell; the next Generate can move the bridge.
 - **Waterfront towns** sometimes get wide patches of road where lanes run side by side.
 - **Mountains follow the map's own biome.** A biome zone changes the ground, trees, grass and detail in its area, but elevation (alpine terraces) still follows the map's main biome.
 - **Generate works around drawn features but doesn't route through them.** A path you draw is kept, but the generated main path may run elsewhere; join them with another stroke if you want one route.

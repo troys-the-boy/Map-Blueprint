@@ -44,7 +44,8 @@ function pathCost(ctx: GenContext, margin: number) {
   const winding = ctx.params.winding;
   return (i: number) => {
     const [x, y] = ctx.xy(i);
-    if (ctx.locks[i]) return IS_WALKABLE[ctx.terrain[i]] ? 1 : Infinity;
+    // Locked cells are walls unless walkable, or water a bridge can cross (below).
+    if (ctx.locks[i] && !ctx.crossable[i]) return IS_WALKABLE[ctx.terrain[i]] ? 1 : Infinity;
     const r = ctx.role[i];
     if (r === Role.Opening || r === Role.Stairs) return 1;
     // Cliffs, and walls from the user's edge zones, can't be crossed.
@@ -195,7 +196,7 @@ function canPave(ctx: GenContext, j: number, centre: boolean): boolean {
   if (r === Role.Opening || r === Role.Cliff || r === Role.Stairs || r === Role.Bridge || r === Role.Border) return false;
   if (ctx.edgeDist(j) < ctx.params.borderThickness) return false;
   if (r === Role.Sea) {
-    if (centre && ctx.crossable[j]) ctx.set(j, T.bridge, Role.Bridge);
+    if (centre) ctx.bridge(j);
     return false;
   }
   return true;

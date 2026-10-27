@@ -15,6 +15,7 @@ import type { Layout, RouteParams } from "./params";
 import type { Travel } from "./travel";
 import { travelOf, travelVertical } from "./travel";
 import { IS_WALKABLE, IS_WALL, T } from "../grid";
+import { TERRAIN_TYPES } from "../terrain";
 import { ELEVATION_LEVELS } from "../terrain";
 
 /** Why the generator placed a cell. */
@@ -50,6 +51,9 @@ export const LEVEL = {
   bridge: ELEVATION_LEVELS.indexOf("bridge"),
 };
 
+/** Water deep enough to surf (deep water and currents): what a bridge can cross. */
+const IS_SURF_WATER: readonly boolean[] = TERRAIN_TYPES.map((t) => t.passability === "surf");
+
 /** Plateau levels from the lowest up: RAISED[0] is raised1. */
 export const RAISED = [LEVEL.raised1, LEVEL.raised2, LEVEL.raised3, LEVEL.raised4];
 
@@ -71,6 +75,8 @@ export interface GenInput {
   town?: TownParams;
   /** Forest settings (forests only). */
   forest?: ForestParams;
+  /** Cells where the last Generate laid a bridge over locked water (they go back to water first). */
+  oldBridges?: Uint8Array;
   biome: Biome;
   /** The user's zones (not the generator's own). */
   zones: Zone[];
@@ -130,6 +136,8 @@ export class GenContext {
   clearings: number[] = [];
   /** Forest dead ends without an item (hidden items go there first). */
   quietEnds: number[] = [];
+  /** Bridges laid over water the user locked (remembered so the next Generate can move them). */
+  lockedBridges: number[] = [];
 
   constructor(
     readonly input: GenInput,
@@ -151,6 +159,20 @@ export class GenContext {
         this.terrain[i] = input.terrain[i];
         this.elevation[i] = input.elevation[i];
       } else this.terrain[i] = T.tree;
+    }
+    // Water the user painted (locked) can be crossed on a bridge, like a river: it's laid
+    // where a path must cross. Bridges from the last Generate go back to water first, so
+    // they can move.
+    for (let i = 0; i < this.n; i++) {
+      if (!input.locks[i]) continue;
+      if (input.oldBridges?.[i] && this.terrain[i] === T.bridge) {
+        this.terrain[i] = T.waterDeep;
+        this.elevation[i] = LEVEL.water;
+      }
+      if (IS_SURF_WATER[this.terrain[i]]) {
+        this.role[i] = 10; // Role.Sea
+        this.crossable[i] = 1;
+      }
     }
     const o = input.openings;
     const ns = o.filter((x) => x.edge === "north" || x.edge === "south").length;
@@ -188,6 +210,21 @@ export class GenContext {
   edgeDist(i: number) {
     const [x, y] = this.xy(i);
     return Math.min(x, y, this.width - 1 - x, this.height - 1 - y);
+  }
+
+  /**
+   * Lay a bridge over a river or over water the user locked (the one change made to a
+   * locked cell: the water around it stays as painted). Returns true if it did.
+   */
+  bridge(i: number): boolean {
+    if (this.role[i] !== 10 || !this.crossable[i]) return false;
+    if (this.locks[i]) {
+      this.terrain[i] = T.bridge;
+      this.elevation[i] = LEVEL.bridge;
+      this.lockedBridges.push(i);
+    } else this.terrain[i] = T.bridge;
+    this.role[i] = 7; // Role.Bridge
+    return true;
   }
 
   /** Change a cell's terrain unless it's locked. Returns true if it changed. */

@@ -133,7 +133,12 @@ describe("Milestone 3 goal: drawn features survive Generate", () => {
     for (let seed = 1; seed <= 5; seed++) {
       map.seed = seed;
       const r = generateRoute(map);
-      for (const i of locked) expect(r.terrain[i]).toBe(drawn[i]);
+      // Every drawn cell is kept, except that Generate may lay a bridge over the drawn stream
+      // where its own path crosses it (Milestone 5).
+      for (const i of locked) {
+        if (drawn[i] === T.waterDeep && r.terrain[i] === T.bridge) continue;
+        expect(r.terrain[i]).toBe(drawn[i]);
+      }
     }
   });
 });

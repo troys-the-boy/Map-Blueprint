@@ -1,8 +1,15 @@
 // The town generator (Milestone 5, part A).
 //
 //   1. Ground inside a tree border, the entrances carved through it (and the sea
-//      along one side for a waterfront town).
-//   2. Streets: a grid of roads, winding lanes, or a road along the shore.
+//      along one side for a waterfront town). The user's zones and locked cells
+//      stay as they are. With the Elevation setting, hillsides with cliffs,
+//      stairs and ledges, as on routes.
+//   2. Streets: a grid of roads, winding lanes, or a road along the shore. If
+//      the user drew streets (locked path or road), those are the streets: they
+//      are joined to the entrances and to each other, and the buildings go along
+//      them. Streets cross rivers and locked water on bridges. Then the side
+//      streets ending in dead ends (Side branches setting), with an item at the
+//      end when Items at dead ends is on.
 //   3. Buildings: the Pokémon Center, Mart, Gym, landmark and houses on lots
 //      beside the streets. Every door is on the building's front (south) face,
 //      as Gen 3 tilesets draw buildings, with a walk from the door to the street
@@ -20,6 +27,7 @@ import { MoveGraph, openingCells } from "../reach";
 import type { GenContext } from "./context";
 import { Role } from "./context";
 import { carveOpening } from "./routeSkeleton";
+import { addPlateaus, connectStairs } from "./plateaus";
 import type { BuildingKind } from "./townParams";
 import { BUILDING_TYPES, buildingList } from "./townParams";
 
@@ -28,21 +36,32 @@ const PEOPLE_GRAPHICS = ["BOY_1", "GIRL_1", "MAN_1", "WOMAN_1", "OLD_MAN", "OLD_
 export function buildTown(ctx: GenContext): void {
   const tp = ctx.input.town!;
   const bt = ctx.params.borderThickness;
-  // 1. Ground inside the border (the sea and beach of a waterfront town are already laid).
+  // 1. Ground inside the border. The sea and beach of a waterfront town, the user's zones and
+  // locked cells are already laid; streets the user drew (locked path or road) are streets.
+  let drawn = 0;
   for (let i = 0; i < ctx.n; i++) {
-    const r = ctx.role[i];
-    if (r === Role.Sea || r === Role.Beach || ctx.locks[i]) continue;
+    if (ctx.locks[i]) {
+      if (DRAWN_STREET.has(ctx.terrain[i])) {
+        ctx.role[i] = Role.MainPath;
+        drawn++;
+      }
+      continue;
+    }
+    if (ctx.role[i] !== Role.None) continue;
     if (ctx.edgeDist(i) < bt) ctx.set(i, T.tree, Role.Border);
     else ctx.set(i, T.ground, Role.None);
   }
+  // Hills, like a route's hillsides (only when the Elevation setting is above 0).
+  if (ctx.params.elevation > 0) addPlateaus(ctx);
   const ends = ctx.input.openings.map((o) => ({ o, end: carveOpening(ctx, o) }));
   ctx.openingEnds = ends.filter((e) => e.o.kind === "walk").map((e) => e.end);
 
   // 2. Streets.
   const street = tp.townLayout === "organic" ? T.path : T.road;
   const m = bt + 1;
-  const streetOk = (j: number) => !ctx.locks[j] && (ctx.role[j] === Role.None || ctx.role[j] === Role.MainPath) && ctx.edgeDist(j) >= bt;
-  const pave = (i: number, w = 2) => ctx.stamp(i, w, street, Role.MainPath, streetOk);
+  const streetOk = (j: number) => !ctx.locks[j] && (ctx.role[j] === Role.None || ctx.role[j] === Role.MainPath || ctx.role[j] === Role.Keep) && ctx.edgeDist(j) >= bt;
+  // Over a river or water the user locked, a street becomes a bridge.
+  const pave = (i: number, w = 2) => (ctx.role[i] === Role.Sea ? void ctx.bridge(i) : ctx.stamp(i, w, street, Role.MainPath, streetOk));
   const line = (x0: number, y0: number, x1: number, y1: number, w = 2) => {
     const dx = Math.sign(x1 - x0);
     const dy = Math.sign(y1 - y0);
@@ -69,7 +88,14 @@ export function buildTown(ctx: GenContext): void {
       landLo = Math.min(landLo, across);
       landHi = Math.max(landHi, across);
     }
-  if (tp.townLayout === "grid") {
+  if (drawn >= 8) {
+    // The user drew the streets: join every entrance and every separate piece of street.
+    joinStreets(ctx, (i) => {
+      if (ctx.role[i] === Role.Sea) return ctx.crossable[i] ? 14 : Infinity;
+      if (ctx.role[i] === Role.MainPath || ctx.role[i] === Role.Opening) return 1;
+      return streetOk(i) ? 3 : Infinity;
+    }, (c) => pave(c, 1));
+  } else if (tp.townLayout === "grid") {
     // A main street the long way through, cross streets every few blocks, and a side street if there's room.
     const avg = (k: 0 | 1) => Math.round(endsXY.reduce((s, p) => s + p[k], 0) / Math.max(1, endsXY.length));
     if (ctx.vertical) {
@@ -92,6 +118,7 @@ export function buildTown(ctx: GenContext): void {
     // then a few lanes off it.
     const fromSea = ctx.input.layout === "coastal" ? distanceField(ctx.width, ctx.height, Array.from({ length: ctx.n }, (_, i) => i).filter((i) => ctx.role[i] === Role.Sea)) : null;
     const cost = (i: number) => {
+      if (ctx.role[i] === Role.Sea) return ctx.crossable[i] ? 14 : Infinity;
       if (!streetOk(i) && ctx.role[i] !== Role.Opening) return Infinity;
       if (ctx.edgeDist(i) < m) return 30;
       const [x, y] = ctx.xy(i);
@@ -124,6 +151,9 @@ export function buildTown(ctx: GenContext): void {
   }
   ctx.mainLine = [];
   for (let i = 0; i < ctx.n; i++) if (ctx.role[i] === Role.MainPath) ctx.mainLine.push(i);
+  // Trails up the hillsides' stairs, then side streets ending in dead ends.
+  if (ctx.params.elevation > 0) connectStairs(ctx);
+  addSideStreets(ctx, street, streetOk);
 
   // 3. Buildings.
   placeBuildings(ctx, street);
@@ -137,6 +167,81 @@ export function buildTown(ctx: GenContext): void {
 }
 
 const free = (ctx: GenContext, i: number) => !ctx.locks[i] && ctx.role[i] === Role.None && ctx.terrain[i] === T.ground && ctx.edgeDist(i) >= ctx.params.borderThickness;
+
+/** Streets the user may draw: path, road or a bridge, locked. */
+const DRAWN_STREET = new Set<number>([T.path, T.road, T.bridge]);
+
+/** A street a door's walk can join: a street, a side street, or a trail up the stairs. */
+const isStreet = (ctx: GenContext, i: number) => ctx.role[i] === Role.MainPath || ctx.role[i] === Role.Branch;
+
+/**
+ * Join the user's drawn streets into one network with the entrances: each piece
+ * (and each entrance) is linked to the nearest piece already joined.
+ */
+function joinStreets(ctx: GenContext, cost: (i: number) => number, pave: (i: number) => void): void {
+  const isS = (i: number) => ctx.role[i] === Role.MainPath;
+  const piece = new Int32Array(ctx.n).fill(-1);
+  const pieces: number[][] = [];
+  for (let i = 0; i < ctx.n; i++) {
+    if (!isS(i) || piece[i] >= 0) continue;
+    const id = pieces.length;
+    const cells = [i];
+    piece[i] = id;
+    for (let k = 0; k < cells.length; k++) {
+      const [x, y] = ctx.xy(cells[k]);
+      for (const { dx, dy } of DIRS) {
+        if (!ctx.inside(x + dx, y + dy)) continue;
+        const j = ctx.idx(x + dx, y + dy);
+        if (isS(j) && piece[j] < 0) (piece[j] = id, cells.push(j));
+      }
+    }
+    pieces.push(cells);
+  }
+  const targets = [...pieces, ...ctx.openingEnds.map((e) => [e])];
+  if (!targets.length) return;
+  const joined: number[] = [...targets[0]];
+  for (const t of targets.slice(1)) {
+    // The closest pair of cells between this piece and what's joined so far (sampled for speed).
+    let best: [number, number] | null = null;
+    let bestD = Infinity;
+    const sample = (list: number[]) => (list.length > 60 ? list.filter((_, k) => k % Math.ceil(list.length / 60) === 0) : list);
+    for (const a of sample(t))
+      for (const b of sample(joined)) {
+        const [ax, ay] = ctx.xy(a);
+        const [bx, by] = ctx.xy(b);
+        const d = Math.abs(ax - bx) + Math.abs(ay - by);
+        if (d < bestD) (bestD = d, (best = [a, b]));
+      }
+    if (best && bestD > 1) for (const c of cheapestPath(ctx.width, ctx.height, best[0], best[1], cost) ?? []) pave(c);
+    joined.push(...t);
+  }
+}
+
+/** Side streets off the streets, each ending in a dead end (Side branches setting, length from Branch length). */
+function addSideStreets(ctx: GenContext, street: number, streetOk: (i: number) => boolean): void {
+  const p = ctx.params;
+  if (!p.branches || ctx.mainLine.length < 10) return;
+  const fromStreet = distanceField(ctx.width, ctx.height, ctx.mainLine);
+  for (let b = 0; b < p.branches; b++) {
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const from = ctx.rng.pick(ctx.mainLine);
+      const [fx, fy] = ctx.xy(from);
+      const reach = Math.round(4 + p.branchLength * 8 * ctx.rng.range(0.6, 1));
+      const d = ctx.rng.pick(DIRS);
+      const tx = fx + d.dx * reach;
+      const ty = fy + d.dy * reach;
+      if (!ctx.inside(tx, ty)) continue;
+      const target = ctx.idx(tx, ty);
+      // The end must be well away from the streets, on the same level, on free ground.
+      if (fromStreet[target] < 4 || !free(ctx, target) || ctx.elevation[target] !== ctx.elevation[from]) continue;
+      const leg = cheapestPath(ctx.width, ctx.height, from, target, (i) => (i === from || (streetOk(i) && ctx.elevation[i] === ctx.elevation[from]) ? 1 : Infinity));
+      if (!leg) continue;
+      for (const c of leg.slice(1)) if (ctx.role[c] !== Role.MainPath) ctx.set(c, street, Role.Branch);
+      ctx.deadEnds.push(target);
+      break;
+    }
+  }
+}
 
 function placeBuildings(ctx: GenContext, street: number): void {
   const tp = ctx.input.town!;
@@ -166,8 +271,10 @@ function placeBuildings(ctx: GenContext, street: number): void {
             }
             const i = ctx.idx(xx, yy);
             const inside = xx >= x && xx < x + w && yy >= y;
-            // The building itself on free ground; its margin may be ground or trees, never street or another building.
-            ok = inside ? free(ctx, i) : ctx.role[i] !== Role.MainPath && ctx.role[i] !== Role.Building && ctx.role[i] !== Role.Opening;
+            // The building itself on free, level ground; its margin may be ground or trees, never street or another building.
+            ok = inside
+              ? free(ctx, i) && ctx.elevation[i] === ctx.elevation[ctx.idx(x, y + h - 1)]
+              : ctx.role[i] !== Role.MainPath && ctx.role[i] !== Role.Branch && ctx.role[i] !== Role.Building && ctx.role[i] !== Role.Opening;
           }
         if (!ok) continue;
         // The door is in the middle of the front (bottom) row. From the cell in front of it, a
@@ -244,8 +351,9 @@ function placeBuildings(ctx: GenContext, street: number): void {
  * step is already on a street), or null if there's no street that close.
  */
 function walkToStreet(ctx: GenContext, step: number, inLot: (i: number) => boolean): number[] | null {
-  if (ctx.role[step] === Role.MainPath) return [];
+  if (isStreet(ctx, step)) return [];
   if (!free(ctx, step)) return null;
+  const level = ctx.elevation[step];
   const prev = new Map<number, number>([[step, -1]]);
   let frontier = [step];
   for (let depth = 0; depth < 6 && frontier.length; depth++) {
@@ -255,8 +363,8 @@ function walkToStreet(ctx: GenContext, step: number, inLot: (i: number) => boole
       for (const d of DIRS) {
         if (!ctx.inside(x + d.dx, y + d.dy)) continue;
         const j = ctx.idx(x + d.dx, y + d.dy);
-        if (prev.has(j) || inLot(j)) continue;
-        if (ctx.role[j] === Role.MainPath) {
+        if (prev.has(j) || inLot(j) || ctx.elevation[j] !== level) continue;
+        if (isStreet(ctx, j)) {
           const out: number[] = [];
           for (let k = c; k >= 0; k = prev.get(k)!) out.push(k);
           return out;
@@ -307,6 +415,13 @@ function decorate(ctx: GenContext): void {
       if (ctx.inside(fx, fy) && free(ctx, ctx.idx(fx, fy))) ctx.set(ctx.idx(fx, fy), T.flowers, Role.Clearing);
     }
   }
+  // Meadow towns: drifts of flowers over the open ground.
+  if (ctx.input.biome === "meadow")
+    for (let i = 0; i < ctx.n; i++) {
+      if (!free(ctx, i) || ctx.keepClear.has(i)) continue;
+      const [x, y] = ctx.xy(i);
+      if (ctx.noise.fractal(x + 6100, y + 6300, 5, 2) > 0.58) ctx.set(i, T.flowers, Role.Clearing);
+    }
   // Trees dotted about the open ground, never beside a street, door or another tree group's gap.
   const fromStreet = distanceField(ctx.width, ctx.height, ctx.mainLine);
   for (let i = 0; i < ctx.n; i++) {

@@ -32,11 +32,11 @@ import { applyMarsh, applyZones, prepareZones, shiftOpeningsOutOfZones } from ".
 import { ELEVATION_LEVELS } from "./terrain";
 import { buildTown } from "./generators/town";
 import { buildingList, readTownParams } from "./generators/townParams";
-import { addGuaranteedHidden, buildForest } from "./generators/forest";
+import { addForestLedges, addGuaranteedHidden, buildForest } from "./generators/forest";
 import { readForestParams } from "./generators/forestParams";
 
 /** Version of the generators. Bumped when the same seed starts giving different maps. */
-export const GENERATOR_VERSION = 5;
+export const GENERATOR_VERSION = 6;
 
 export interface GenerateResult {
   ok: boolean;
@@ -99,13 +99,16 @@ function townStages(ctx: GenContext, geometry: Geometry) {
   applyLayout(ctx, geometry); // the sea, for a waterfront town
   applyZones(ctx);
   buildTown(ctx);
+  closeLedgeTraps(ctx); // hillsides' ledges never drop the player somewhere they can't leave
   placeEntities(ctx); // the town sign and hidden items
 }
 
 /** A forest: a maze through dense forest, clearings, long grass, trainers and items (see generators/forest.ts). */
 function forestStages(ctx: GenContext) {
   prepareZones(ctx); // biome per cell
+  applyZones(ctx); // the user's water, edges and keep-clear ground
   buildForest(ctx);
+  addForestLedges(ctx); // with a travel direction: jump back toward the start
   placeEntities(ctx); // trainers on the main path, items at dead ends, hidden items, the sign
   addGuaranteedHidden(ctx);
 }
@@ -157,6 +160,11 @@ function finish(map: MapBlueprint, input: GenInput, ctx: GenContext, validate: V
   // Each thing stands at the elevation of its cell (Porymap events need it to match).
   const levelAt = (x: number, y: number) => ELEVATION_LEVELS[elevation[y * ctx.width + x]];
   const keptZones = map.layers.zones.filter((z) => z.data.generated !== true);
+  if (ctx.lockedBridges.length) {
+    const mask = { width: map.width, height: map.height, data: new Uint8Array(map.width * map.height) };
+    for (const i of ctx.lockedBridges) mask.data[i] = 1;
+    ctx.zones.push({ id: "generated_bridges", name: "Bridges over your water", kind: "bridge", hard: true, fuzziness: 0, mask, data: { generated: true } });
+  }
   const zones = [...keptZones, ...ctx.zones];
   const draft: MapBlueprint = {
     ...map,
@@ -214,12 +222,25 @@ export function generateRoute(map: MapBlueprint, validate: Omit<ValidateOptions,
   // extra items, branches, hills or ledges; a waterfront town is laid out like a coastal route.
   const forest = map.mapType === "forest" ? readForestParams(map.params) : undefined;
   const routeParams = readRouteParams(map.params);
-  // Forests use the route settings for paths, grass, border, trainers and items, without hills,
-  // ledges, branches (the maze makes its own), HM areas or a travel direction.
+  // Forests use the route settings for paths, grass, border, trainers, items, ledge shortcuts and
+  // travel direction, without hills, branches (the maze makes its own) or HM areas.
   const params = forest
-    ? { ...routeParams, elevation: 0, ledges: 0, branches: 0, hmPockets: 0, travel: "auto" as const, layout: "land" as const, grassShortcut: false, pathGrass: 0, snow: 0 }
+    ? { ...routeParams, elevation: 0, branches: 0, hmPockets: 0, layout: "land" as const, grassShortcut: false, pathGrass: 0, snow: 0 }
     : town
-    ? { ...routeParams, trainers: 0, items: 0, branches: 0, deadEndRewards: false, elevation: 0, ledges: 0, hmPockets: 0, travel: "auto" as const, layout: town.townLayout === "waterfront" ? ("coastal" as const) : ("land" as const), surfEntrances: false, water: -0.5 }
+    ? {
+        ...routeParams,
+        trainers: 0,
+        items: 0,
+        // Towns are flat and have no side streets unless asked (the route defaults would make every town hilly).
+        branches: typeof map.params.branches === "number" ? routeParams.branches : 0,
+        elevation: typeof map.params.elevation === "number" ? routeParams.elevation : 0,
+        ledges: 0,
+        hmPockets: 0,
+        travel: "auto" as const,
+        layout: town.townLayout === "waterfront" ? ("coastal" as const) : ("land" as const),
+        surfEntrances: false,
+        water: -0.5, // a narrower sea, so a waterfront town has room for its buildings
+      }
     : routeParams;
   const layout = resolveLayout(params, map.biome);
   const layoutSeed = deriveSeed(map.seed, "layout");
@@ -235,6 +256,7 @@ export function generateRoute(map: MapBlueprint, validate: Omit<ValidateOptions,
     locks: map.layers.locks.data,
     openings,
     warps: map.warps,
+    oldBridges: map.layers.zones.find((z) => z.id === "generated_bridges" && z.data.generated === true)?.mask.data,
     biome: map.biome,
     zones: map.layers.zones.filter((z) => z.data.generated !== true),
     layout,
