@@ -171,6 +171,45 @@ Zones are optional. Without them the generator decides everything; with them it 
 
 Zones are saved with the map and kept every time you generate. Locked cells always win over zones. Automatic entrances move along the edge out of water and wall zones.
 
+## Sketch the region (Milestone 6)
+
+The **region sketch** is a rough plan of your whole region: where the towns, routes, forests, caves, lakes and rivers go. Open it with **Sketch a region** on the start screen, **Region sketch** in the Maps list, or by tapping the region's name at the top left.
+
+The sketch is a grid of 5×5-metatile squares; the stronger lines are every 50 metatiles. Everything is measured in metatiles, so the sizes you see are the sizes of the maps.
+
+**Tools** (left strip):
+
+- **Town:** drag a rectangle. Its size shows as you draw, in red if it's too big for the game.
+- **Route:** drag a rectangle for each straight stretch.
+  - **To carry a route on or bend it,** keep it picked and draw the next rectangle touching its last stretch.
+  - **Long stretches are split.** A stretch longer than the **Segment length** (Sketch settings, 90 at first) becomes several maps, shown with dashed seams and each segment's size.
+- **Forest** and **Cave:** tap a route or town where the entrance is. A forest or cave is its own map, reached by a warp, so its inside takes no room on the sketch.
+  - Set its map size in the panel.
+  - **Add an entrance** for a second way in (say, a forest that splits a route in two).
+  - Tick **Own region map section** for a landmark the fly map should name. Otherwise it counts as part of its route or town.
+- **Paint areas / Erase areas:** biomes, **lakes** and **sea**, with a brush. The edge of the sea is the coastline.
+- **River:** tap points along it, then tap the last point again (or **Finish river**).
+- **Pick and move:** tap a place to see its details. Drag it to move it (forest and cave pins on it come along). Drag a picked place's corner to resize that stretch, and drag a pin to move it.
+- **Move view:** drag to pan. Two fingers pan and pinch to zoom anywhere; the mouse wheel zooms.
+
+Undo and redo work in the sketch (Ctrl+Z, Ctrl+Y). Delete removes the picked place, and Escape lets go of it.
+
+**Check** in the panel lists problems:
+- a route whose stretches don't touch;
+- places that overlap (places meet edge to edge, where maps connect);
+- a map too big for the game;
+- forests or caves with no entrance, or one off any route or town;
+- two places with the same name.
+
+### Trace your own drawing
+
+Under **Drawing to trace**, load a PDF or an image of your own map. It sits under the grid, saved inside the project (up to 15 MB).
+
+1. **Fit to sketch** stretches it across the sketch's width (this happens when you load it).
+2. **Set scale…**: tap two points on the drawing whose distance you know (say, the two ends of a route you want 90 metatiles long), then type that distance. The drawing is scaled about the first point, as when you scale a scanned plan.
+3. **Move**, **↺ 90° / ↻ 90°** and **Turn** line it up. **Opacity** fades it. **Lock in place** stops it moving by accident.
+4. Trace over it with the Town, Route and other tools.
+
 ## Generate a town (Milestone 5)
 
 Make a map of type **Town** (sizes S 20×20, M 30×30, L 40×40), then press **Generate**. The **Town** group in the Generate tab sets:
@@ -500,6 +539,6 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 - **Water currents.** They count as plain Surf water: the forced movement is ignored for now.
 - **Plain export text.** Labels in exported images use a small built-in pixel font, in capitals only.
 - **Not tested on real Apple devices.** Testing used Chromium on Windows, including an iPad-sized viewport. Please try Generate and Export on the real iPad and in desktop Safari.
-- **Region view later.** The breadcrumb shows the region name, but the region sketch view arrives in Milestone 6.
+- **The sketch doesn't build maps yet.** Building every map from the sketch (with connections) comes later in Milestone 6.
 - **Approximate screen frame.** The frame assumes the player stands 7 cells from the left and 4 from the top of the screen. This only affects the overlay.
 - **Unconfirmed presets.** The forest, cave-floor and interior size presets are placeholders.

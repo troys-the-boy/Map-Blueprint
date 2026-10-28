@@ -26,6 +26,16 @@ export function MapsPanel({ onClose, onNewMap, onResize }: { onClose: () => void
         <span>Region name</span>
         <input defaultValue={s.region.name} key={s.region.name} maxLength={100} onBlur={(e) => s.renameRegion(e.target.value)} />
       </label>
+      <button
+        className="secondary"
+        title="Plan the whole region: towns, routes, forests, caves, lakes and rivers"
+        onClick={() => {
+          s.openRegion();
+          onClose();
+        }}
+      >
+        <Icon name="region" size={18} /> Region sketch
+      </button>
       <ul className="map-list">
         {s.region.maps.map((m) => {
           const fits = checkMapSize(m.width, m.height, s.region.settings.engineLimits).ok;

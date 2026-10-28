@@ -2,7 +2,7 @@
 
 import type { Zone } from "../core/model";
 
-const BIOME_COLORS: Record<string, string> = {
+export const BIOME_COLORS: Record<string, string> = {
   temperate_rainforest: "#3f9a55",
   coastal: "#e2c97a",
   wetland: "#55a08c",
@@ -22,3 +22,6 @@ export function zoneColor(z: Zone): string {
   if (z.kind === "keep_clear") return "#f4f4f4";
   return "#cccccc";
 }
+
+/** Colours for the region sketch's painted areas. */
+export const SKETCH_AREA_COLORS: Record<string, string> = { ...BIOME_COLORS, lake: "#3f86e0", sea: "#2f6fd0" };

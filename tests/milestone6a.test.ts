@@ -123,7 +123,7 @@ describe("older maps with the travel direction setting", () => {
     const file = JSON.parse(serializeProject(region, "test"));
     file.schemaVersion = 9;
     file.region.maps[0].params = { travel: "north_south", grass: 0.4 };
-    expect(CURRENT_SCHEMA_VERSION).toBe(10);
+    expect(CURRENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(10);
     const loaded = parseProject(JSON.stringify(file));
     const m = loaded.maps[0] as MapBlueprint;
     expect(m.openings.map((o) => o.role)).toEqual(["start", "finish"]);

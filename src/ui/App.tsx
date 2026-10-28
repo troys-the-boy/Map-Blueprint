@@ -5,6 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import { checkMapSize } from "../core/sizeRule";
 import { TERRAIN_TYPES } from "../core/terrain";
 import { MapCanvas, canvasRef } from "./components/MapCanvas";
+import { SketchCanvas, sketchViewRef } from "./components/SketchCanvas";
+import { SketchPanel } from "./components/SketchPanel";
+import { SketchToolbar } from "./components/SketchToolbar";
+import { sketchIssues } from "../core/sketch";
+import { sketchEditor } from "./sketchEditor";
 import { MapsPanel } from "./components/MapsPanel";
 import { ResizeDialog } from "./components/ResizeDialog";
 import { NewMapDialog } from "./components/NewMapDialog";
@@ -34,7 +39,9 @@ export function App() {
     setPanelOpen(true);
   };
   const [hover, setHover] = useState<[number, number] | null>(null);
-  const map = s.currentMap;
+  const region = s.view === "region";
+  const map = region ? null : s.currentMap;
+  const sketchProblems = region && s.region.sketch ? sketchIssues(s.region.sketch, s.region.settings.targetSegmentLength, s.region.settings.engineLimits) : [];
 
   useKeyboardShortcuts(() => setDialog("newMap"));
 
@@ -63,7 +70,9 @@ export function App() {
           <Icon name="maps" /> <span>Maps</span>
         </button>
         <nav className="breadcrumbs" aria-label="Location">
-          <span className="crumb">{s.region.name}</span>
+          <button className={`crumb crumb-button ${region ? "current" : ""}`} title="Show the region sketch" onClick={() => s.openRegion()}>
+            {s.region.name}
+          </button>
           {map && (
             <>
               <span className="sep">›</span>
@@ -125,16 +134,20 @@ export function App() {
 
       <main className="workspace">
         <div className="canvas-wrap">
-          <MapCanvas onHover={setHover} />
+          {region ? <SketchCanvas onHover={setHover} /> : <MapCanvas onHover={setHover} />}
+          {region && <SketchToolbar onShowPanel={() => setPanelOpen(true)} />}
           {map && <Toolbar onShowTab={showTab} />}
           {map && <EditBar />}
-          {!map && (
+          {!map && !region && (
             <div className="welcome">
               <h1>Gen 3 Map Blueprint</h1>
               <p>Plan maps for your pokeemerald hack, then rebuild them in Porymap.</p>
               <div className="welcome-actions">
                 <button className="primary" onClick={() => setDialog("newMap")}>
                   <Icon name="plus" size={18} /> Create a map
+                </button>
+                <button className="secondary" title="Plan the whole region: towns, routes, forests, caves, lakes and rivers" onClick={() => s.openRegion()}>
+                  <Icon name="region" size={18} /> Sketch a region
                 </button>
                 <button className="secondary" onClick={() => void openProject(store)}>
                   <Icon name="open" size={18} /> Open a project file
@@ -143,6 +156,11 @@ export function App() {
             </div>
           )}
         </div>
+        {region && (
+          <div className={`terrain-dock ${panelOpen ? "open" : ""}`}>
+            <SketchPanel onClose={panelOpen ? () => setPanelOpen(false) : undefined} />
+          </div>
+        )}
         {map && (
           <div className={`terrain-dock ${panelOpen ? "open" : ""}`}>
             <SidePanel tab={tab} onTab={setTab} onClose={panelOpen ? () => setPanelOpen(false) : undefined} />
@@ -171,6 +189,18 @@ export function App() {
               {s.issues.length === 0 ? "✓ OK" : `${s.issues.filter((i) => i.severity === "error").length} errors · ${s.issues.filter((i) => i.severity === "warning").length} warnings`}
             </button>
             <span title="Seed for this map">Seed {map.seed}</span>
+          </>
+        ) : region ? (
+          <>
+            <span title="Position under the pointer, in metatiles from the sketch's top-left corner">{hover ? `x ${hover[0]}, y ${hover[1]}` : "x –, y –"}</span>
+            <span className="grow" />
+            <button
+              className={`status-check ${sketchProblems.some((i) => i.severity === "error") ? "bad" : sketchProblems.length ? "warn" : "good"}`}
+              title="Problems in the sketch. Click to see them."
+              onClick={() => setPanelOpen(true)}
+            >
+              {sketchProblems.length === 0 ? "✓ OK" : `${sketchProblems.filter((i) => i.severity === "error").length} errors · ${sketchProblems.filter((i) => i.severity === "warning").length} warnings`}
+            </button>
           </>
         ) : (
           <span>No map open</span>
@@ -212,6 +242,22 @@ function useKeyboardShortcuts(openNewMap: () => void) {
       if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT") return;
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
+      if (store.view === "region") {
+        const ed = sketchEditor;
+        if (mod && key === "z" && !e.shiftKey) ed.undo();
+        else if (mod && (key === "y" || (key === "z" && e.shiftKey))) ed.redo();
+        else if (mod && key === "s") void saveProject(store);
+        else if (mod) return;
+        else if (key === "enter" && ed.riverPoints) ed.finishRiver();
+        else if (key === "escape") ed.riverPoints ? ed.cancelRiver() : ed.tool === "calibrate" || ed.tool === "pin" ? ed.setTool("select") : ed.select(null);
+        else if ((key === "delete" || key === "backspace") && ed.selected) ed.deleteSelected();
+        else if (key === "0") sketchViewRef.fit?.();
+        else if (key === "+" || key === "=") sketchViewRef.zoom?.(1.25);
+        else if (key === "-") sketchViewRef.zoom?.(0.8);
+        else return;
+        e.preventDefault();
+        return;
+      }
       const selecting = store.selecting;
       const centre = () => {
         const r = canvasRef.renderer;

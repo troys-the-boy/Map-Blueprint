@@ -41,6 +41,8 @@ import {
 } from "./model";
 import { MAX_SEED } from "./rng";
 import { markTravel } from "./generators/travel";
+import type { Sketch } from "./sketch";
+import { MAX_SKETCH_SIDE, PLACE_KINDS, SKETCH_AREAS, SKETCH_CELL } from "./sketch";
 import type { Check } from "./schema";
 import {
   FileFormatError,
@@ -48,7 +50,6 @@ import {
   bool,
   intArray,
   literal,
-  nullValue,
   nullable,
   num,
   object,
@@ -59,7 +60,7 @@ import {
 import { ELEVATION_LEVELS, TERRAIN_TYPES, terrainIndex } from "./terrain";
 
 export const FILE_FORMAT_ID = "gen3-map-blueprint-project";
-export const CURRENT_SCHEMA_VERSION = 10;
+export const CURRENT_SCHEMA_VERSION = 11;
 
 /** Safety limits for opened files. Anything bigger is rejected. */
 export const FILE_LIMITS = {
@@ -185,6 +186,22 @@ function saveMap(m: MapBlueprint) {
   };
 }
 
+/** The sketch's painted areas are saved like a map layer: a legend of names, then rows. */
+const SKETCH_AREA_NAMES = ["none", ...SKETCH_AREAS];
+
+function saveSketch(s: Sketch) {
+  const cols = s.width / SKETCH_CELL;
+  return {
+    width: s.width,
+    height: s.height,
+    areas: encodeGrid({ width: cols, height: s.height / SKETCH_CELL, data: s.areas }, SKETCH_AREA_NAMES),
+    places: s.places,
+    rivers: s.rivers,
+    underlay: s.underlay,
+    nextId: s.nextId,
+  };
+}
+
 /** Build the saved-file object for a region. */
 export function toProjectFile(region: Region, appVersion: string, savedAt: Date = new Date()): ProjectFile {
   return {
@@ -195,7 +212,7 @@ export function toProjectFile(region: Region, appVersion: string, savedAt: Date 
     region: {
       name: region.name,
       seed: region.seed,
-      sketch: region.sketch,
+      sketch: region.sketch ? saveSketch(region.sketch) : null,
       speciesPool: region.speciesPool,
       settings: region.settings,
       progression: region.progression,
@@ -439,10 +456,59 @@ const progressionCheck: Check<ProgressionStep> = object({
   hms: arrayOf(oneOf(HMS), HMS.length),
 });
 
+const sketchCoord = num(-MAX_SKETCH_SIDE, 2 * MAX_SKETCH_SIDE);
+const sketchRectCheck = object({ x: sketchCoord, y: sketchCoord, w: num(1, MAX_SKETCH_SIDE), h: num(1, MAX_SKETCH_SIDE) });
+const sketchPlaceCheck = object({
+  id: str(64, ID),
+  kind: oneOf(PLACE_KINDS),
+  name: text(),
+  rects: arrayOf(sketchRectCheck, 64),
+  pins: arrayOf(object({ x: sketchCoord, y: sketchCoord }), 16),
+  size: nullable(object({ w: num(1, FILE_LIMITS.maxMapSide), h: num(1, FILE_LIMITS.maxMapSide) })),
+  ownSection: bool,
+  mapIds: arrayOf(str(64, ID), 256),
+});
+/** A PDF or image saved inside the project, as a data: URL. */
+const UNDERLAY_MAX = 20 * 1024 * 1024;
+const sketchCheck = object({
+  width: num(SKETCH_CELL, MAX_SKETCH_SIDE),
+  height: num(SKETCH_CELL, MAX_SKETCH_SIDE),
+  areas: savedGridCheck,
+  places: arrayOf(sketchPlaceCheck, 2000),
+  rivers: arrayOf(object({ id: str(64, ID), points: intArray(-MAX_SKETCH_SIDE, 2 * MAX_SKETCH_SIDE, 2000), width: num(1, 50) }), 500),
+  underlay: nullable(
+    object({
+      kind: oneOf(["pdf", "image"] as const),
+      name: text(),
+      data: str(UNDERLAY_MAX, /^data:(application\/pdf|image\/(png|jpeg|webp|gif));base64,[A-Za-z0-9+/=]*$/),
+      page: num(1, 10000),
+      x: num(-1e6, 1e6, false),
+      y: num(-1e6, 1e6, false),
+      scale: num(1e-6, 1e6, false),
+      rotation: num(-360, 360, false),
+      opacity: num(0, 1, false),
+      visible: bool,
+      locked: bool,
+    }),
+  ),
+  nextId: num(1, 1e9),
+});
+
+function loadSketch(saved: ReturnType<typeof sketchCheck>, path: string): Sketch {
+  if (saved.width % SKETCH_CELL || saved.height % SKETCH_CELL) throw new FileFormatError(path, `the sketch size must be a multiple of ${SKETCH_CELL}`);
+  const cols = saved.width / SKETCH_CELL;
+  const rows = saved.height / SKETCH_CELL;
+  const areas = decodeGrid(saved.areas, cols, rows, (n) => SKETCH_AREA_NAMES.indexOf(n), `${path}.areas`, "painted area");
+  saved.rivers.forEach((r, i) => {
+    if (r.points.length % 2 !== 0 || r.points.length < 4) throw new FileFormatError(`${path}.rivers[${i}].points`, "expected two or more x, y points");
+  });
+  return { ...saved, areas: areas.data };
+}
+
 const regionCheck = object({
   name: text(),
   seed: num(0, MAX_SEED),
-  sketch: nullValue,
+  sketch: nullable(sketchCheck),
   speciesPool: arrayOf(speciesCheck, 2000),
   settings: object({
     defaultBiome: oneOf(BIOMES) as Check<Biome>,
@@ -561,6 +627,9 @@ export const MIGRATIONS: Record<number, Migration> = {
       settings = { ...(settings as object), targetSegmentLength: 90 };
     return { ...file, schemaVersion: 10, region: region && maps ? { ...region, settings, maps: maps.map(upgradeMap) } : region };
   },
+  // v10 → v11 (Milestone 6, part B): the region sketch ("sketch"), which was always null
+  // before. Nothing in a version-10 file needs changing.
+  10: (file) => ({ ...file, schemaVersion: 11 }),
 };
 
 /** Upgrade an old file step by step to the target version. */
@@ -684,7 +753,7 @@ export function parseProject(textContent: string): Region {
     }),
   );
 
-  return { ...r, maps };
+  return { ...r, sketch: r.sketch ? loadSketch(r.sketch, "region.sketch") : null, maps };
 }
 
 /** Turn any error from parseProject into one readable sentence for the user. */

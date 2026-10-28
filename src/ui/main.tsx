@@ -4,6 +4,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { store } from "./store";
+import { sketchEditor } from "./sketchEditor";
 import { canvasRef } from "./components/MapCanvas";
 import "./styles.css";
 
@@ -20,7 +21,7 @@ if (restored) {
 }
 
 // Development only: expose the state for debugging in the browser console.
-if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__g3mb = { store, canvasRef };
+if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__g3mb = { store, canvasRef, sketchEditor };
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

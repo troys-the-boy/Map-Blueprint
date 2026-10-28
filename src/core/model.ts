@@ -14,6 +14,8 @@ import type { Seed } from "./rng";
 export const MAP_TYPES = ["route", "town", "forest", "cave", "interior_stub"] as const;
 export type MapType = (typeof MAP_TYPES)[number];
 
+import type { Sketch } from "./sketch";
+
 export const BIOMES = ["temperate_rainforest", "coastal", "wetland", "alpine", "meadow", "urban_edge"] as const;
 export type Biome = (typeof BIOMES)[number];
 
@@ -322,8 +324,8 @@ export interface RegionSettings {
 export interface Region {
   name: string;
   seed: Seed;
-  /** The coarse region sketch (Milestone 6). Always null in this version. */
-  sketch: null;
+  /** The coarse region sketch (see sketch.ts), or null before one is started. */
+  sketch: Sketch | null;
   /** The species list pasted by the user, shared by every map's encounter draft. */
   speciesPool: SpeciesEntry[];
   maps: MapBlueprint[];

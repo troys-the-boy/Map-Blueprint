@@ -45,6 +45,7 @@ import type { Issue } from "../core/validate";
 import { validateMap } from "../core/validate";
 import { runGenerate } from "./generation";
 import { addNewMap, newRegion } from "../core/model";
+import { newSketch } from "../core/sketch";
 import type { CellDiff } from "../core/paint";
 import { applyDiff, brushCells, emptyDiff, lineCells, paintCell, paintElevation, paintLock } from "../core/paint";
 import { parseProject, serializeProject } from "../core/project";
@@ -171,6 +172,8 @@ export interface AutosaveInfo {
 class EditorStore {
   region: Region = newRegion("Untitled region", 1);
   currentMapId: string | null = null;
+  /** Which screen is showing: one map, or the region sketch. */
+  view: "map" | "region" = "map";
   tool: Tool = "pencil";
   /** The tool to go back to after a one-off "pick" (eyedropper). */
   private toolBeforePick: Tool = "pencil";
@@ -711,9 +714,25 @@ class EditorStore {
   openMap(id: string) {
     this.cancelStroke();
     this.resetPicks();
+    this.view = "map";
     this.currentMapId = id;
     this.changed();
     this.cellsChanged(id, null);
+  }
+
+  /** Show the region sketch (starting an empty one the first time). */
+  openRegion() {
+    this.cancelStroke();
+    this.resetPicks();
+    if (!this.region.sketch) this.region.sketch = newSketch();
+    this.view = "region";
+    this.changed();
+  }
+
+  /** Called by the sketch editor after it changes the sketch (or only its own state). */
+  sketchChanged(edited: boolean) {
+    if (edited) this.markDirty();
+    this.changed();
   }
 
   createMap(opts: NewMapOptions) {
@@ -1613,6 +1632,7 @@ class EditorStore {
     this.resetPicks();
     this.region = region;
     this.currentMapId = region.maps[0]?.id ?? null;
+    this.view = "map";
     this.undoStacks.clear();
     this.redoStacks.clear();
     this.fileName = fileName;
@@ -1655,6 +1675,7 @@ class EditorStore {
         dirty: this.dirty,
         fileName: this.fileName,
         currentMapId: this.currentMapId,
+        view: this.view,
         project: this.serialize(),
       });
       localStorage.setItem(AUTOSAVE_KEY, payload);
@@ -1668,10 +1689,11 @@ class EditorStore {
     try {
       const raw = localStorage.getItem(AUTOSAVE_KEY);
       if (!raw) return null;
-      const saved = JSON.parse(raw) as { savedAt: string; dirty: boolean; fileName: string | null; currentMapId: string | null; project: string };
+      const saved = JSON.parse(raw) as { savedAt: string; dirty: boolean; fileName: string | null; currentMapId: string | null; view?: string; project: string };
       const region = parseProject(saved.project);
       this.loadRegion(region, typeof saved.fileName === "string" ? saved.fileName : null, null, saved.dirty === true);
       if (saved.currentMapId && region.maps.some((m) => m.id === saved.currentMapId)) this.openMap(saved.currentMapId);
+      if (saved.view === "region") this.openRegion();
       return { savedAt: String(saved.savedAt), dirty: saved.dirty === true };
     } catch {
       return null;

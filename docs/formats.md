@@ -4,7 +4,7 @@ This document defines the tool's file formats. The terrain vocabulary and the ti
 
 | File | Identifier (`format`) | Version field | Current |
 | --- | --- | --- | --- |
-| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 10 |
+| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 11 |
 | Terrain vocabulary (`profiles/terrain.json`) | `gen3-terrain-vocabulary` | `formatVersion` | 1 |
 | Terrain palette (`profiles/palettes/*.json`) | `gen3-terrain-palette` | `formatVersion` | 1 |
 | Tileset profile (`profiles/tilesets/*.json`) | `gen3-tileset-profile` | `formatVersion` | 1 (draft) |
@@ -13,7 +13,7 @@ Coordinates are in **metatiles** (16×16 px). The origin (0, 0) is the top-left 
 
 ---
 
-## Project file, schemaVersion 10
+## Project file, schemaVersion 11
 
 A project is a single JSON file holding one region and all of its maps. The app treats it as untrusted data when opening it:
 
@@ -35,6 +35,8 @@ When the format changes, `schemaVersion` goes up and a migration in `src/core/pr
 | 7 | 4 (part B) | Entities may have `"accepted"` (warnings marked OK). Entity edits may have `"kind": "warp"`. New kinds placed by hand (berry tree, trigger, secret base, heal location, warp). Version-6 files need no changes. |
 | 8 | 4 (part C) | The region gains `speciesPool` (added empty to older files); a map's `encounterPlan` may hold draft tables. |
 | 9 | 5 (part A) | Warps may have `"locked"` (placed by hand; all warps in older files get `true`). Towns generate door warps (not locked). New smart-stroke kind `building`. |
+| 10 | 6 (part A) | Openings may have `role`: `start` or `finish`, replacing the route setting `travel` (moved onto the entrances when opened). `targetSegmentLength` 80 becomes 90. |
+| 11 | 6 (part B) | The region's `sketch` may be filled in (see Region sketch below). Version-10 files need no changes. |
 
 ```jsonc
 {
@@ -45,7 +47,7 @@ When the format changes, `schemaVersion` goes up and a migration in `src/core/pr
   "region": {
     "name": "Cascadia",
     "seed": 42,                       // 0 … 4294967295
-    "sketch": null,                   // region sketch: Milestone 6 (must be null in v1)
+    "sketch": null,                   // the region sketch, or null before one is started (from version 11; see Region sketch below)
     "speciesPool": [ … ],             // the species list for encounter drafts (from version 8; see below)
     "settings": {
       "defaultBiome": "temperate_rainforest",
@@ -71,6 +73,50 @@ When the format changes, `schemaVersion` goes up and a migration in `src/core/pr
 ```
 
 The region's connection graph isn't stored separately. It's derived from each map's `connections`, so there is only one source of truth.
+
+### Region sketch (from version 11)
+
+The sketch is a rough plan of the whole region. Everything is in metatiles; rectangles and pins snap to a grid of 5×5 metatiles.
+
+```jsonc
+"sketch": {
+  "width": 600, "height": 400,           // metatiles, multiples of 5 (up to 4000)
+  "areas": { "legend": ["none", "lake"], "rows": [[0, 0, 1, …], …] },   // one value per 5×5 square, like a map layer
+  "places": [
+    { "id": "p1", "kind": "route", "name": "Route 1",
+      "rects": [ { "x": 100, "y": 0, "w": 30, "h": 150 }, { "x": 130, "y": 120, "w": 90, "h": 30 } ],
+      "pins": [], "size": null, "ownSection": false, "mapIds": [] },
+    { "id": "p2", "kind": "cave", "name": "Moss Cave",
+      "rects": [], "pins": [ { "x": 112, "y": 40 } ], "size": { "w": 40, "h": 40 }, "ownSection": false, "mapIds": [] }
+  ],
+  "rivers": [ { "id": "r3", "points": [0, 50, 80, 60, 140, 200], "width": 3 } ],
+  "underlay": null,
+  "nextId": 4
+}
+```
+
+- **`areas`** legend names: `none`, the six biomes, `lake`, `sea`. The coastline is the edge of the sea.
+- **`places`**:
+  - `kind` is `town`, `route`, `forest` or `cave`.
+  - A town has one rectangle. A route has a chain of them, one per straight stretch, each touching the one before edge to edge.
+  - A stretch longer than the region's `targetSegmentLength` becomes several maps (segments), split into near-equal lengths of whole 5-metatile squares. A town is always one map.
+  - Forests and caves have no rectangles. Their `pins` are entrances on routes or towns (the route or town under the first pin is the one they belong to), `size` is their map's size, and `ownSection` says whether they get their own region map section.
+  - `mapIds` lists the maps built from the place (empty until the region is built).
+- **`rivers`**: lines through `points` (x0, y0, x1, y1, …), `width` metatiles across (1–50).
+- **`underlay`**: a drawing to trace over, or null:
+
+```jsonc
+"underlay": {
+  "kind": "pdf",                          // "pdf" or "image"
+  "name": "region plan.pdf",
+  "data": "data:application/pdf;base64,…",  // the file itself (PDF, PNG, JPEG, WebP or GIF), up to 20 MB of text
+  "page": 1,                              // which PDF page
+  "x": 0, "y": 0,                         // where its top-left corner sits (metatiles)
+  "scale": 0.8,                           // metatiles per image pixel, or per PDF point (1/72 inch)
+  "rotation": 0,                          // degrees clockwise, about its top-left corner
+  "opacity": 0.5, "visible": true, "locked": false
+}
+```
 
 ### MapBlueprint
 
