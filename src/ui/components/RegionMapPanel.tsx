@@ -8,6 +8,8 @@ import { deliverFile } from "../files";
 import { sketchEditor } from "../sketchEditor";
 import { store, useStore } from "../store";
 import { sectionColor } from "../zoneColors";
+import type { Sketch } from "../../core/sketch";
+import { parentOf } from "../../core/sketch";
 
 const SQUARE = 10;
 
@@ -23,7 +25,7 @@ export function RegionMapPanel() {
   return (
     <details className="sketch-section" open>
       <summary title="The Town Map / Fly map, worked out from the sketch">Region map</summary>
-      <Thumbnail draft={draft} selected={e.selectedId} />
+      <Thumbnail draft={draft} selected={e.selectedId} line={journeyOnMap(sketch, draft)} />
       <p className="hint">
         The in-game map is {draft.width} × {draft.height} squares (as in Emerald). It follows the sketch as you draw. Tap <b>Region map</b> in the tool strip to see it over the sketch; there, drag a section to move it or a corner to resize it, and it stays where you put it.
       </p>
@@ -62,7 +64,26 @@ export function RegionMapPanel() {
 }
 
 /** The region map as coloured squares, redrawn whenever the sketch changes. */
-function Thumbnail({ draft, selected }: { draft: RegionMapDraft; selected: string | null }) {
+/**
+ * The journey on the region map: the middle of each stop's section, in order (a forest or cave
+ * without its own section uses its route's or town's).
+ */
+function journeyOnMap(sketch: Sketch, draft: RegionMapDraft): number[] {
+  const out: number[] = [];
+  for (const id of sketch.journey.stops) {
+    const place = sketch.places.find((p) => p.id === id);
+    if (!place) continue;
+    const sec = draft.sections.find((x) => x.placeId === id) ?? draft.sections.find((x) => x.placeId === parentOf(sketch, place)?.id);
+    if (!sec || !sec.w) continue;
+    const x = sec.x + sec.w / 2;
+    const y = sec.y + sec.h / 2;
+    if (out.length >= 2 && out[out.length - 2] === x && out[out.length - 1] === y) continue;
+    out.push(x, y);
+  }
+  return out;
+}
+
+function Thumbnail({ draft, selected, line }: { draft: RegionMapDraft; selected: string | null; line: number[] }) {
   const el = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = el.current;
@@ -91,7 +112,15 @@ function Thumbnail({ draft, selected }: { draft: RegionMapDraft; selected: strin
       ctx.lineWidth = sec.placeId === selected ? 2 : 1.5;
       ctx.strokeRect(sec.x * SQUARE + 1, sec.y * SQUARE + 1, sec.w * SQUARE - 2, sec.h * SQUARE - 2);
     }
-  }, [draft, selected]);
+    if (line.length >= 4) {
+      ctx.strokeStyle = "#f0c25a";
+      ctx.lineWidth = 2;
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      for (let k = 0; k < line.length; k += 2) (k ? ctx.lineTo : ctx.moveTo).call(ctx, line[k] * SQUARE, line[k + 1] * SQUARE);
+      ctx.stroke();
+    }
+  }, [draft, selected, line.join(",")]);
   return (
     <canvas
       ref={el}

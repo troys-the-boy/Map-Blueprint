@@ -5,7 +5,7 @@
 import { useState } from "react";
 import type { Biome } from "../../core/model";
 import type { SketchArea } from "../../core/sketch";
-import { MAX_SKETCH_SIDE, SKETCH_AREAS, SKETCH_CELL, isOutdoor, parentOf, placePieces, resizeSketch, sketchIssues } from "../../core/sketch";
+import { MAX_SKETCH_SIDE, SKETCH_AREAS, SKETCH_CELL, isOutdoor, parentOf, placePieces, resizeSketch } from "../../core/sketch";
 import { checkMapSize } from "../../core/sizeRule";
 import { sketchEditor } from "../sketchEditor";
 import { store, useStore } from "../store";
@@ -13,6 +13,8 @@ import { underlayError, underlayPicture } from "../underlay";
 import { SKETCH_AREA_COLORS } from "../zoneColors";
 import { NumberField } from "./NumberField";
 import { Icon } from "./icons";
+import { JourneyPanel } from "./JourneyPanel";
+import { sketchProblems } from "../sketchProblems";
 import { RegionMapPanel } from "./RegionMapPanel";
 
 const BIOME_LABELS: Record<Biome, string> = {
@@ -36,7 +38,7 @@ export function SketchPanel({ onClose }: { onClose?: () => void }) {
   if (!sketch) return null;
   const target = s.region.settings.targetSegmentLength;
   const limits = s.region.settings.engineLimits;
-  const issues = sketchIssues(sketch, target, limits);
+  const issues = sketchProblems(s.region);
   const sel = e.selected;
 
   return (
@@ -138,6 +140,8 @@ export function SketchPanel({ onClose }: { onClose?: () => void }) {
           </ul>
         )}
       </section>
+
+      <JourneyPanel />
 
       <RegionMapPanel />
 
@@ -256,6 +260,8 @@ function ToolHelp() {
       return <p className="hint tool-help">Tap the route or town where the {e.tool}'s entrance is. Its own size is set in this panel once it's placed.</p>;
     case "underlay":
       return <p className="hint tool-help">Drag the drawing to move it.</p>;
+    case "journey":
+      return <p className="hint tool-help">Journey: tap the places in the order the player first visits them (a forest or cave: tap its pin). Tap the last stop again to take it off.</p>;
     case "sections":
       return <p className="hint tool-help">Region map: tap a section to pick it, drag it to move it, or drag a picked section's corner to resize it. Sections you move stay put (✋); the rest follow the sketch.</p>;
     default:

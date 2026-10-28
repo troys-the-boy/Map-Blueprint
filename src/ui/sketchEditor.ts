@@ -22,10 +22,19 @@ import {
   touching,
 } from "../core/sketch";
 import { store } from "./store";
+import type { Hm } from "../core/constants";
+import type { ProgressionStep } from "../core/model";
 import type { SectionOverride } from "../core/regionMap";
 import { draftRegionMap, sectionAt, sectionCells } from "../core/regionMap";
 
-export type SketchTool = "select" | "town" | "route" | "forest" | "cave" | "pin" | "paint" | "erase" | "river" | "pan" | "underlay" | "calibrate" | "sections";
+export type SketchTool = "select" | "town" | "route" | "forest" | "cave" | "pin" | "paint" | "erase" | "river" | "pan" | "underlay" | "calibrate" | "sections" | "journey";
+
+/** One undo step: the sketch, plus the region's progression steps and level curve (the journey uses them). */
+interface Snap {
+  sketch: Sketch;
+  progression: ProgressionStep[];
+  curve: { start: number; end: number };
+}
 
 const UNDO_LIMIT = 100;
 
@@ -54,8 +63,8 @@ export class SketchEditor {
   drag: Drag | null = null;
   /** Bumped on every change, so the canvas knows to redraw. */
   version = 0;
-  private undoStack: Sketch[] = [];
-  private redoStack: Sketch[] = [];
+  private undoStack: Snap[] = [];
+  private redoStack: Snap[] = [];
   /** The sketch as it was before the current drag, for its undo step. */
   private before: Sketch | null = null;
 
@@ -91,7 +100,7 @@ export class SketchEditor {
   /** Remember the sketch before a change, for undo. */
   private checkpoint() {
     if (!this.sketch) return;
-    this.undoStack.push(cloneSketch(this.sketch));
+    this.undoStack.push(this.snap(cloneSketch(this.sketch)));
     if (this.undoStack.length > UNDO_LIMIT) this.undoStack.shift();
     this.redoStack = [];
   }
@@ -115,17 +124,27 @@ export class SketchEditor {
   undo() {
     const prev = this.undoStack.pop();
     if (!prev || !this.sketch) return;
-    this.redoStack.push(cloneSketch(this.sketch));
-    store.region.sketch = prev;
+    this.redoStack.push(this.snap(cloneSketch(this.sketch)));
+    this.restoreSnap(prev);
     this.afterRestore();
   }
 
   redo() {
     const next = this.redoStack.pop();
     if (!next || !this.sketch) return;
-    this.undoStack.push(cloneSketch(this.sketch));
-    store.region.sketch = next;
+    this.undoStack.push(this.snap(cloneSketch(this.sketch)));
+    this.restoreSnap(next);
     this.afterRestore();
+  }
+
+  private snap(sketch: Sketch): Snap {
+    return { sketch, progression: structuredClone(store.region.progression), curve: { ...store.region.settings.levelCurve } };
+  }
+
+  private restoreSnap(snap: Snap) {
+    store.region.sketch = snap.sketch;
+    store.region.progression = snap.progression;
+    store.region.settings.levelCurve = snap.curve;
   }
 
   private afterRestore() {
@@ -196,6 +215,9 @@ export class SketchEditor {
       }
       case "sections":
         return this.sectionDown(s, x, y, tol);
+      case "journey":
+        this.pressTol = tol;
+        break;
       case "underlay":
         if (s.underlay && !s.underlay.locked) this.drag = { kind: "underlay", startX: x, startY: y, ox: s.underlay.x, oy: s.underlay.y, moved: false };
         this.before = cloneSketch(s);
@@ -310,18 +332,113 @@ export class SketchEditor {
       case "calibrate":
         if (tap) this.calibrateTap(x, y);
         return;
+      case "journey":
+        if (tap) this.journeyTap(s, x, y, this.pressTol);
+        return;
     }
     // Drags that changed the sketch become one undo step.
     const changed = d && (d.kind === "paint" ? d.changed : d.kind === "move" || d.kind === "resize" || d.kind === "pin" || d.kind === "underlay" || d.kind === "section" ? d.moved : false);
     // A section only tapped (not moved) stays as it was worked out.
     if (d?.kind === "section" && !d.moved && this.before) store.region.sketch = this.before;
     if (changed && this.before) {
-      this.undoStack.push(this.before);
+      this.undoStack.push(this.snap(this.before));
       if (this.undoStack.length > UNDO_LIMIT) this.undoStack.shift();
       this.redoStack = [];
     }
     this.before = null;
     this.notify(!!changed);
+  }
+
+  private pressTol = 1;
+
+  // ----- the journey -----
+
+  /** Tap a place to add it as the next stop; tap the last stop again to take it off. */
+  private journeyTap(s: Sketch, x: number, y: number, tol: number) {
+    const pinned = s.places.find((p) => !isOutdoor(p.kind) && p.pins.some((q) => Math.hypot(q.x + 0.5 - x, q.y + 0.5 - y) <= tol * 1.2));
+    const place = pinned ?? outdoorPlaceAt(s, x, y);
+    if (!place) return;
+    const stops = s.journey.stops;
+    if (stops[stops.length - 1] === place.id) return this.removeStop(stops.length - 1);
+    if (stops.includes(place.id)) {
+      store.setNotice({ kind: "info", text: `${place.name} is already stop ${stops.indexOf(place.id) + 1} of the journey. Each place is on it once (where the player first visits it).` });
+      this.selectedId = place.id;
+      return this.notify(false);
+    }
+    this.edit((sk) => sk.journey.stops.push(place.id));
+    this.selectedId = place.id;
+    this.notify(false);
+  }
+
+  removeStop(i: number) {
+    this.edit((s) => {
+      const [id] = s.journey.stops.splice(i, 1);
+      for (const [step, at] of Object.entries(s.journey.stepStarts)) if (at === id) delete s.journey.stepStarts[step];
+    });
+  }
+
+  moveStop(i: number, by: -1 | 1) {
+    this.edit((s) => {
+      const j = i + by;
+      if (j < 0 || j >= s.journey.stops.length) return;
+      const st = s.journey.stops;
+      [st[i], st[j]] = [st[j], st[i]];
+    });
+  }
+
+  clearJourney() {
+    this.edit((s) => {
+      s.journey = { stops: [], stepStarts: {} };
+    });
+  }
+
+  setLevelCurve(start: number, end: number) {
+    this.edit(() => {
+      store.region.settings.levelCurve = { start: Math.max(1, Math.min(100, start)), end: Math.max(1, Math.min(100, end)) };
+    });
+  }
+
+  // ----- progression steps (the badges and HMs the player has by each part of the journey) -----
+
+  addStep() {
+    this.edit(() => {
+      const steps = store.region.progression;
+      const used = new Set(steps.map((x) => x.id));
+      let n = steps.length + 1;
+      while (used.has(`step${n}`)) n++;
+      const badges = Math.min(8, steps.length ? steps[steps.length - 1].badges + 1 : 0);
+      steps.push({ id: `step${n}`, name: badges ? `After badge ${badges}` : "Start", badges, hms: steps.length ? [...steps[steps.length - 1].hms] : [] });
+    });
+  }
+
+  updateStep(id: string, patch: Partial<Pick<ProgressionStep, "name" | "badges">>) {
+    this.edit(() => {
+      const step = store.region.progression.find((x) => x.id === id);
+      if (step) Object.assign(step, patch);
+    });
+  }
+
+  toggleStepHm(id: string, hm: Hm, on: boolean) {
+    this.edit(() => {
+      const step = store.region.progression.find((x) => x.id === id);
+      if (!step) return;
+      step.hms = on ? [...new Set([...step.hms, hm])] : step.hms.filter((h) => h !== hm);
+    });
+  }
+
+  removeStep(id: string) {
+    this.edit((s) => {
+      store.region.progression = store.region.progression.filter((x) => x.id !== id);
+      delete s.journey.stepStarts[id];
+    });
+  }
+
+  /** Where a step starts on the journey (a stop's place id), or "" for nowhere yet. */
+  setStepStart(id: string, placeId: string) {
+    this.edit((s) => {
+      if (placeId) s.journey.stepStarts[id] = placeId;
+      else delete s.journey.stepStarts[id];
+    });
   }
 
   /** Stop the drag in progress and put back what it changed (a second finger landed: it's a pinch). */
@@ -584,6 +701,8 @@ export class SketchEditor {
     this.edit((s) => {
       s.places = s.places.filter((p) => p.id !== sel.id);
       delete s.regionMap.overrides[sel.id];
+      s.journey.stops = s.journey.stops.filter((id) => id !== sel.id);
+      for (const [step, at] of Object.entries(s.journey.stepStarts)) if (at === sel.id) delete s.journey.stepStarts[step];
     });
     this.selectedId = null;
     this.notify(false);

@@ -16,6 +16,7 @@ export const SKETCH_TOOLS: Array<{ tool: SketchTool; icon: string; label: string
   { tool: "paint", icon: "pencil", label: "Paint areas", tip: "Paint areas: biomes, lakes and sea (pick one in the panel). The coastline is the edge of the sea." },
   { tool: "erase", icon: "erase", label: "Erase areas", tip: "Erase areas: clear painted biomes, lakes and sea." },
   { tool: "river", icon: "river", label: "River", tip: "River: tap points along the river; tap the last point again (or Finish in the panel) to end it." },
+  { tool: "journey", icon: "journey", label: "Journey", tip: "Journey: tap the places in the order the player first visits them. Tap the last one again to take it off. This sets each route's Start and Finish, the order of levels, and where badges and HMs are expected." },
   { tool: "pan", icon: "pan", label: "Move view", tip: "Move view: drag to pan. You can also drag with two fingers, or with the right mouse button." },
 ];
 

@@ -20,6 +20,7 @@ import type { Biome, EngineLimits } from "./model";
 import { BIOMES, DEFAULT_ENGINE_LIMITS } from "./model";
 import { checkMapSize } from "./sizeRule";
 import type { RegionMapPlan } from "./regionMap";
+import type { Journey } from "./journey";
 
 /** Metatiles per sketch cell. */
 export const SKETCH_CELL = 5;
@@ -104,6 +105,8 @@ export interface Sketch {
   underlay: SketchUnderlay | null;
   /** The in-game region map's grid size and sections placed by hand (see regionMap.ts). */
   regionMap: RegionMapPlan;
+  /** The order the player visits the places, and where progression steps start (see journey.ts). */
+  journey: Journey;
   /** Counter for new ids ("p1", "r1"…). */
   nextId: number;
 }
@@ -121,6 +124,7 @@ export function newSketch(width = DEFAULT_SKETCH_SIZE.width, height = DEFAULT_SK
     underlay: null,
     // Vanilla Emerald's grid: MAP_WIDTH × MAP_HEIGHT in src/region_map.c (see regionMap.ts).
     regionMap: { width: 28, height: 15, overrides: {} },
+    journey: { stops: [], stepStarts: {} },
     nextId: 1,
   };
 }
@@ -390,6 +394,7 @@ export function cloneSketch(s: Sketch): Sketch {
     places: s.places.map((p) => ({ ...p, rects: p.rects.map((r) => ({ ...r })), pins: p.pins.map((q) => ({ ...q })), size: p.size ? { ...p.size } : null, mapIds: [...p.mapIds] })),
     rivers: s.rivers.map((r) => ({ ...r, points: [...r.points] })),
     underlay: s.underlay ? { ...s.underlay } : null,
+    journey: { stops: [...s.journey.stops], stepStarts: { ...s.journey.stepStarts } },
     regionMap: { ...s.regionMap, overrides: Object.fromEntries(Object.entries(s.regionMap.overrides).map(([k, r]) => [k, { ...r, ...(r.cells ? { cells: [...r.cells] } : {}) }])) },
   };
 }

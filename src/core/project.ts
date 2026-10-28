@@ -61,7 +61,7 @@ import {
 import { ELEVATION_LEVELS, TERRAIN_TYPES, terrainIndex } from "./terrain";
 
 export const FILE_FORMAT_ID = "gen3-map-blueprint-project";
-export const CURRENT_SCHEMA_VERSION = 12;
+export const CURRENT_SCHEMA_VERSION = 13;
 
 /** Safety limits for opened files. Anything bigger is rejected. */
 export const FILE_LIMITS = {
@@ -200,6 +200,7 @@ function saveSketch(s: Sketch) {
     rivers: s.rivers,
     underlay: s.underlay,
     regionMap: s.regionMap,
+    journey: s.journey,
     nextId: s.nextId,
   };
 }
@@ -498,6 +499,10 @@ const sketchCheck = object({
     height: num(1, 128),
     overrides: recordOf(object({ x: num(0, 127), y: num(0, 127), w: num(1, 128), h: num(1, 128), cells: intArray(0, 1, 128 * 128) }, ["cells"]), 2000),
   }),
+  journey: object({
+    stops: arrayOf(str(64, ID), 2000),
+    stepStarts: recordOf(str(64, ID), 64),
+  }),
   nextId: num(1, 1e9),
 });
 
@@ -508,6 +513,12 @@ function loadSketch(saved: ReturnType<typeof sketchCheck>, path: string): Sketch
   const areas = decodeGrid(saved.areas, cols, rows, (n) => SKETCH_AREA_NAMES.indexOf(n), `${path}.areas`, "painted area");
   saved.rivers.forEach((r, i) => {
     if (r.points.length % 2 !== 0 || r.points.length < 4) throw new FileFormatError(`${path}.rivers[${i}].points`, "expected two or more x, y points");
+  });
+  // The journey only names places in the sketch, each once.
+  const ids = new Set(saved.places.map((p) => p.id));
+  saved.journey.stops.forEach((id, i) => {
+    if (!ids.has(id)) throw new FileFormatError(`${path}.journey.stops[${i}]`, `no place with id "${id}" in the sketch`);
+    if (saved.journey.stops.indexOf(id) !== i) throw new FileFormatError(`${path}.journey.stops[${i}]`, `"${id}" is on the journey twice`);
   });
   return { ...saved, areas: areas.data };
 }
@@ -637,6 +648,14 @@ export const MIGRATIONS: Record<number, Migration> = {
   // v10 → v11 (Milestone 6, part B): the region sketch ("sketch"), which was always null
   // before. Nothing in a version-10 file needs changing.
   10: (file) => ({ ...file, schemaVersion: 11 }),
+  // v12 → v13 (Milestone 6, part D): the sketch gains "journey" (the order the player visits
+  // the places, and where progression steps start). Older sketches get an empty one.
+  12: (file) => {
+    const region = file.region as Record<string, unknown> | null;
+    const sketch = region?.sketch;
+    if (!region || !sketch || typeof sketch !== "object" || Array.isArray(sketch)) return { ...file, schemaVersion: 13 };
+    return { ...file, schemaVersion: 13, region: { ...region, sketch: { ...(sketch as object), journey: { stops: [], stepStarts: {} } } } };
+  },
   // v11 → v12 (Milestone 6, part C): the sketch gains "regionMap" (the in-game region map's
   // grid size and sections placed by hand). A version-11 sketch gets vanilla's 28 × 15 grid.
   11: (file) => {

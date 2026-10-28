@@ -8,7 +8,7 @@ import { MapCanvas, canvasRef } from "./components/MapCanvas";
 import { SketchCanvas, sketchViewRef } from "./components/SketchCanvas";
 import { SketchPanel } from "./components/SketchPanel";
 import { SketchToolbar } from "./components/SketchToolbar";
-import { sketchIssues } from "../core/sketch";
+import { sketchProblems } from "./sketchProblems";
 import { sketchEditor } from "./sketchEditor";
 import { MapsPanel } from "./components/MapsPanel";
 import { ResizeDialog } from "./components/ResizeDialog";
@@ -41,7 +41,7 @@ export function App() {
   const [hover, setHover] = useState<[number, number] | null>(null);
   const region = s.view === "region";
   const map = region ? null : s.currentMap;
-  const sketchProblems = region && s.region.sketch ? sketchIssues(s.region.sketch, s.region.settings.targetSegmentLength, s.region.settings.engineLimits) : [];
+  const sketchTroubles = region ? sketchProblems(s.region) : [];
 
   useKeyboardShortcuts(() => setDialog("newMap"));
 
@@ -195,11 +195,11 @@ export function App() {
             <span title="Position under the pointer, in metatiles from the sketch's top-left corner">{hover ? `x ${hover[0]}, y ${hover[1]}` : "x –, y –"}</span>
             <span className="grow" />
             <button
-              className={`status-check ${sketchProblems.some((i) => i.severity === "error") ? "bad" : sketchProblems.length ? "warn" : "good"}`}
+              className={`status-check ${sketchTroubles.some((i) => i.severity === "error") ? "bad" : sketchTroubles.length ? "warn" : "good"}`}
               title="Problems in the sketch. Click to see them."
               onClick={() => setPanelOpen(true)}
             >
-              {sketchProblems.length === 0 ? "✓ OK" : `${sketchProblems.filter((i) => i.severity === "error").length} errors · ${sketchProblems.filter((i) => i.severity === "warning").length} warnings`}
+              {sketchTroubles.length === 0 ? "✓ OK" : `${sketchTroubles.filter((i) => i.severity === "error").length} errors · ${sketchTroubles.filter((i) => i.severity === "warning").length} warnings`}
             </button>
           </>
         ) : (

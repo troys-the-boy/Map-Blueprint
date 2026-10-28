@@ -14,6 +14,7 @@ import { store } from "../store";
 import { underlayPicture } from "../underlay";
 import { SKETCH_AREA_COLORS, sectionColor } from "../zoneColors";
 import { draftRegionMap } from "../../core/regionMap";
+import { planJourney, stopPoints } from "../../core/journey";
 
 const PLACE_COLORS = { town: "#d98b4a", route: "#c9b48a", forest: "#3f9a55", cave: "#9a8a78" } as const;
 const TAP_MAX_MS = 400;
@@ -445,6 +446,53 @@ function drawSketch(ctx: CanvasRenderingContext2D, s: Sketch, view: SketchView, 
         ])
           ctx.fillRect(GX(cx) - 6, GY(cy) - 6, 12, 12);
       }
+    });
+  }
+
+  // The journey: a line through the stops in order, numbered, with arrows the way it goes.
+  if (s.journey.stops.length) {
+    const stops = stopPoints(s, planJourney(s, store.region));
+    const pts = stops.flat();
+    const strong = sketchEditor.tool === "journey";
+    ctx.strokeStyle = "#f0c25a";
+    ctx.globalAlpha = strong ? 1 : 0.8;
+    ctx.lineWidth = strong ? 4 : 3;
+    if (pts.length >= 4) {
+      polyline(pts);
+      ctx.stroke();
+      // An arrowhead halfway along each leg.
+      ctx.fillStyle = "#f0c25a";
+      for (let k = 0; k + 3 < pts.length; k += 2) {
+        const ax = X(pts[k]);
+        const ay = Y(pts[k + 1]);
+        const bx = X(pts[k + 2]);
+        const by = Y(pts[k + 3]);
+        const len = Math.hypot(bx - ax, by - ay);
+        if (len < 24) continue;
+        const a = Math.atan2(by - ay, bx - ax);
+        const mx = (ax + bx) / 2;
+        const my = (ay + by) / 2;
+        ctx.beginPath();
+        ctx.moveTo(mx + 7 * Math.cos(a), my + 7 * Math.sin(a));
+        ctx.lineTo(mx + 7 * Math.cos(a + 2.5), my + 7 * Math.sin(a + 2.5));
+        ctx.lineTo(mx + 7 * Math.cos(a - 2.5), my + 7 * Math.sin(a - 2.5));
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+    stops.forEach((p, k) => {
+      if (p.length < 2) return;
+      const x = X(p[0]);
+      const y = Y(p[1]);
+      ctx.beginPath();
+      ctx.arc(x, y, 10, 0, Math.PI * 2);
+      ctx.fillStyle = "#f0c25a";
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "#0f1417";
+      ctx.stroke();
+      ctx.fillStyle = "#0f1417";
+      ctx.fillText(String(k + 1), x, y + 0.5);
     });
   }
 
