@@ -46,6 +46,8 @@ import { validateMap } from "../core/validate";
 import { runGenerate } from "./generation";
 import { addNewMap, newRegion } from "../core/model";
 import { newSketch } from "../core/sketch";
+import type { BuildReport } from "../core/buildRegion";
+import { buildRegion, pairRegionWarps } from "../core/buildRegion";
 import { idbGet, idbPut } from "./idb";
 
 /** A drawing bigger than this (characters) is autosaved to IndexedDB instead of localStorage. */
@@ -179,6 +181,10 @@ class EditorStore {
   currentMapId: string | null = null;
   /** The drawing last written to IndexedDB by autosave, so it isn't written again unchanged. */
   private underlaySaved: string | null = null;
+  /** The last Build maps: what it did, and the project before it (for Undo build). */
+  lastBuild: { report: BuildReport; before: Pick<Region, "maps" | "routes" | "sketch" | "nextId"> | null } | null = null;
+  /** Generating several maps: how far along. */
+  batch: { done: number; total: number; failed: string[] } | null = null;
   /** Which screen is showing: one map, or the region sketch. */
   view: "map" | "region" = "map";
   tool: Tool = "pencil";
@@ -363,6 +369,74 @@ class EditorStore {
     this.changed();
     this.cellsChanged(target.id, null);
     if (target.mapType === "cave") await this.syncCaveFloors(target);
+    // Generate renumbers warps: point forest and cave entrances at the right ones again.
+    if (this.region.sketch) pairRegionWarps(this.region);
+  }
+
+  // ----- building the region from its sketch (see core/buildRegion.ts) -----------
+
+  /** Make or update every map from the sketch. One step back with undoBuild(). */
+  buildFromSketch() {
+    if (!this.region.sketch || this.batch) return;
+    const before = structuredClone({ maps: this.region.maps, routes: this.region.routes, sketch: this.region.sketch, nextId: this.region.nextId });
+    const report = buildRegion(this.region);
+    this.lastBuild = { report, before: report.blocked.length ? null : before };
+    if (!report.blocked.length) {
+      this.markDirty();
+      this.scheduleValidate();
+    }
+    this.changed();
+  }
+
+  /** Put the maps back as they were before the last Build maps. */
+  undoBuild() {
+    const before = this.lastBuild?.before;
+    if (!before || this.batch) return;
+    // Keep the region object (the sketch editor follows it), and put its maps, routes and sketch back.
+    Object.assign(this.region, structuredClone(before));
+    if (this.currentMapId && !this.region.maps.some((m) => m.id === this.currentMapId)) this.currentMapId = null;
+    this.lastBuild = null;
+    this.markDirty();
+    this.changed();
+    if (this.currentMapId) this.cellsChanged(this.currentMapId, null);
+  }
+
+  /** Generate several maps one after another (each its own undo step on its map). */
+  async generateMaps(ids: string[]) {
+    if (this.batch || this.generating) return;
+    const list = ids.map((id) => this.region.maps.find((m) => m.id === id)).filter((m): m is MapBlueprint => !!m && canGenerate(m));
+    this.batch = { done: 0, total: list.length, failed: [] };
+    this.changed();
+    for (const map of list) {
+      if (map.mapType === "cave") this.setLadderCounts(map);
+      try {
+        const result = await runGenerate(map, this.region.settings.engineLimits);
+        const target = this.region.maps.find((m) => m.id === map.id);
+        if (target) {
+          const before = snapshot(target);
+          applyResult(target, result);
+          this.redraftAfterGenerate(target);
+          this.pushUndo({ type: "snapshot", mapId: target.id, before, after: snapshot(target), edits: [] });
+          if (!result.ok) this.batch.failed.push(target.name);
+          if (target.mapType === "cave") await this.syncCaveFloors(target);
+        }
+      } catch {
+        this.batch.failed.push(map.name);
+      }
+      this.batch.done++;
+      this.changed();
+    }
+    pairRegionWarps(this.region);
+    const failed = this.batch.failed;
+    this.batch = null;
+    if (this.lastBuild) this.lastBuild = { report: { ...this.lastBuild.report, needsGenerate: [] }, before: this.lastBuild.before };
+    this.markDirty();
+    this.validateNow();
+    if (this.currentMapId) this.cellsChanged(this.currentMapId, null);
+    this.setNotice({
+      kind: failed.length ? "error" : "info",
+      text: failed.length ? `Generated ${list.length} maps. Still with problems after retries: ${failed.join(", ")} (open them to see why).` : `Generated ${list.length} map${list.length === 1 ? "" : "s"}.`,
+    });
   }
 
   // ----- multi-floor caves (see core/caves.ts) ---------------------------------

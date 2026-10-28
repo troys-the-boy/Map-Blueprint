@@ -14,6 +14,7 @@ import { SKETCH_AREA_COLORS } from "../zoneColors";
 import { NumberField } from "./NumberField";
 import { Icon } from "./icons";
 import { JourneyPanel } from "./JourneyPanel";
+import { BuildPanel, PlaceMaps } from "./BuildPanel";
 import { sketchProblems } from "../sketchProblems";
 import { RegionMapPanel } from "./RegionMapPanel";
 
@@ -53,6 +54,8 @@ export function SketchPanel({ onClose }: { onClose?: () => void }) {
       </div>
 
       <ToolHelp />
+
+      <BuildPanel errors={issues.filter((i) => i.severity === "error").length} />
 
       {sel && (
         <section className="sketch-section">
@@ -117,6 +120,7 @@ export function SketchPanel({ onClose }: { onClose?: () => void }) {
               </label>
             </>
           )}
+          <PlaceMaps mapIds={sel.mapIds} />
           <button className="secondary danger" onClick={() => e.deleteSelected()}>
             <Icon name="trash" size={18} /> Delete {sel.name}
           </button>
