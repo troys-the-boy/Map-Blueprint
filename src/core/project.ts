@@ -61,7 +61,7 @@ import {
 import { ELEVATION_LEVELS, TERRAIN_TYPES, terrainIndex } from "./terrain";
 
 export const FILE_FORMAT_ID = "gen3-map-blueprint-project";
-export const CURRENT_SCHEMA_VERSION = 13;
+export const CURRENT_SCHEMA_VERSION = 14;
 
 /** Safety limits for opened files. Anything bigger is rejected. */
 export const FILE_LIMITS = {
@@ -501,7 +501,7 @@ const sketchCheck = object({
   }),
   journey: object({
     stops: arrayOf(str(64, ID), 2000),
-    stepStarts: recordOf(str(64, ID), 64),
+    stepStarts: recordOf(num(0, 1999), 64),
   }),
   nextId: num(1, 1e9),
 });
@@ -514,12 +514,13 @@ function loadSketch(saved: ReturnType<typeof sketchCheck>, path: string): Sketch
   saved.rivers.forEach((r, i) => {
     if (r.points.length % 2 !== 0 || r.points.length < 4) throw new FileFormatError(`${path}.rivers[${i}].points`, "expected two or more x, y points");
   });
-  // The journey only names places in the sketch, each once.
+  // The journey only names places in the sketch, and steps start at its stops.
   const ids = new Set(saved.places.map((p) => p.id));
   saved.journey.stops.forEach((id, i) => {
     if (!ids.has(id)) throw new FileFormatError(`${path}.journey.stops[${i}]`, `no place with id "${id}" in the sketch`);
-    if (saved.journey.stops.indexOf(id) !== i) throw new FileFormatError(`${path}.journey.stops[${i}]`, `"${id}" is on the journey twice`);
   });
+  for (const [step, at] of Object.entries(saved.journey.stepStarts))
+    if (at >= saved.journey.stops.length) throw new FileFormatError(`${path}.journey.stepStarts.${step}`, `there's no stop ${at + 1} on the journey`);
   return { ...saved, areas: areas.data };
 }
 
@@ -648,6 +649,22 @@ export const MIGRATIONS: Record<number, Migration> = {
   // v10 → v11 (Milestone 6, part B): the region sketch ("sketch"), which was always null
   // before. Nothing in a version-10 file needs changing.
   10: (file) => ({ ...file, schemaVersion: 11 }),
+  // v13 → v14 (Milestone 6, part D revision): a place may come up on the journey again (going back
+  // through it), so a step starts at a stop number, not a place: each becomes that place's stop.
+  13: (file) => {
+    const region = file.region as Record<string, unknown> | null;
+    const sketch = region?.sketch as Record<string, unknown> | null | undefined;
+    const journey = sketch?.journey as { stops?: unknown; stepStarts?: unknown } | undefined;
+    if (!region || !sketch || !journey || !Array.isArray(journey.stops) || !journey.stepStarts || typeof journey.stepStarts !== "object")
+      return { ...file, schemaVersion: 14 };
+    const stops = journey.stops as unknown[];
+    const stepStarts: Record<string, number> = {};
+    for (const [step, at] of Object.entries(journey.stepStarts as Record<string, unknown>)) {
+      const k = stops.indexOf(at);
+      if (k >= 0) stepStarts[step] = k;
+    }
+    return { ...file, schemaVersion: 14, region: { ...region, sketch: { ...sketch, journey: { ...journey, stepStarts } } } };
+  },
   // v12 → v13 (Milestone 6, part D): the sketch gains "journey" (the order the player visits
   // the places, and where progression steps start). Older sketches get an empty one.
   12: (file) => {

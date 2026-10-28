@@ -353,28 +353,23 @@ export class SketchEditor {
 
   // ----- the journey -----
 
-  /** Tap a place to add it as the next stop; tap the last stop again to take it off. */
+  /**
+   * Tap a place to add it as the next stop (a place already on the journey comes up again:
+   * going back through it); tap the last stop again to take it off.
+   */
   private journeyTap(s: Sketch, x: number, y: number, tol: number) {
     const pinned = s.places.find((p) => !isOutdoor(p.kind) && p.pins.some((q) => Math.hypot(q.x + 0.5 - x, q.y + 0.5 - y) <= tol * 1.2));
     const place = pinned ?? outdoorPlaceAt(s, x, y);
     if (!place) return;
     const stops = s.journey.stops;
     if (stops[stops.length - 1] === place.id) return this.removeStop(stops.length - 1);
-    if (stops.includes(place.id)) {
-      store.setNotice({ kind: "info", text: `${place.name} is already stop ${stops.indexOf(place.id) + 1} of the journey. Each place is on it once (where the player first visits it).` });
-      this.selectedId = place.id;
-      return this.notify(false);
-    }
     this.edit((sk) => sk.journey.stops.push(place.id));
     this.selectedId = place.id;
     this.notify(false);
   }
 
   removeStop(i: number) {
-    this.edit((s) => {
-      const [id] = s.journey.stops.splice(i, 1);
-      for (const [step, at] of Object.entries(s.journey.stepStarts)) if (at === id) delete s.journey.stepStarts[step];
-    });
+    this.edit((s) => dropStops(s, (k) => k === i));
   }
 
   moveStop(i: number, by: -1 | 1) {
@@ -383,6 +378,8 @@ export class SketchEditor {
       if (j < 0 || j >= s.journey.stops.length) return;
       const st = s.journey.stops;
       [st[i], st[j]] = [st[j], st[i]];
+      // Steps keep starting at the same stop (it moved with them).
+      for (const [step, at] of Object.entries(s.journey.stepStarts)) s.journey.stepStarts[step] = at === i ? j : at === j ? i : at;
     });
   }
 
@@ -433,10 +430,10 @@ export class SketchEditor {
     });
   }
 
-  /** Where a step starts on the journey (a stop's place id), or "" for nowhere yet. */
-  setStepStart(id: string, placeId: string) {
+  /** Where a step starts on the journey (a stop number, 0 = the first), or null for nowhere yet. */
+  setStepStart(id: string, stop: number | null) {
     this.edit((s) => {
-      if (placeId) s.journey.stepStarts[id] = placeId;
+      if (stop !== null) s.journey.stepStarts[id] = stop;
       else delete s.journey.stepStarts[id];
     });
   }
@@ -701,8 +698,7 @@ export class SketchEditor {
     this.edit((s) => {
       s.places = s.places.filter((p) => p.id !== sel.id);
       delete s.regionMap.overrides[sel.id];
-      s.journey.stops = s.journey.stops.filter((id) => id !== sel.id);
-      for (const [step, at] of Object.entries(s.journey.stepStarts)) if (at === sel.id) delete s.journey.stepStarts[step];
+      dropStops(s, (_, id) => id === sel.id);
     });
     this.selectedId = null;
     this.notify(false);
@@ -744,6 +740,27 @@ export class SketchEditor {
       sel.rects[k] = rect;
     });
   }
+}
+
+/**
+ * Take stops off the journey, keeping each step at the same stop (steps on a removed stop
+ * are dropped). Then, where that leaves a place twice in a row, it's one stop.
+ */
+function dropStops(s: Sketch, drop: (k: number, id: string) => boolean) {
+  const j = s.journey;
+  const keep: number[] = [];
+  j.stops.forEach((id, k) => {
+    if (drop(k, id)) return;
+    if (keep.length && j.stops[keep[keep.length - 1]] === id) return;
+    keep.push(k);
+  });
+  const newIndex = new Map(keep.map((k, n) => [k, n]));
+  for (const [step, at] of Object.entries(j.stepStarts)) {
+    const n = newIndex.get(at);
+    if (n === undefined) delete j.stepStarts[step];
+    else j.stepStarts[step] = n;
+  }
+  j.stops = keep.map((k) => j.stops[k]);
 }
 
 export const sketchEditor = new SketchEditor();

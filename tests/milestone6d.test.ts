@@ -113,11 +113,11 @@ describe("planning the journey", () => {
       { id: "s2", name: "After badge 1", badges: 1, hms: ["cut"] },
     ];
     s.journey.stops = [fir.id, route.id, cedar.id];
-    s.journey.stepStarts = { s1: fir.id, s2: cedar.id };
+    s.journey.stepStarts = { s1: 0, s2: 2 };
     const plan = planJourney(s, r);
     expect([fir, route, cedar].map((p) => plan.places.get(p.id)!.stepId)).toEqual(["s1", "s1", "s2"]);
     // Out of order with the list: a warning.
-    s.journey.stepStarts = { s1: cedar.id, s2: fir.id };
+    s.journey.stepStarts = { s1: 2, s2: 0 };
     expect(planJourney(s, r).problems.some((p) => /comes before it/.test(p.message))).toBe(true);
   });
 
@@ -135,7 +135,7 @@ describe("saving the journey", () => {
   it("round-trips, and older sketches (format 12) get an empty one", () => {
     const { r, s, fir, route } = region();
     r.progression = [{ id: "s1", name: "Start", badges: 0, hms: [] }];
-    s.journey = { stops: [fir.id, route.id], stepStarts: { s1: fir.id } };
+    s.journey = { stops: [fir.id, route.id, fir.id], stepStarts: { s1: 2 } };
     const loaded = parseProject(serializeProject(r, "test"));
     expect(loaded.sketch!.journey).toEqual(s.journey);
     const file = JSON.parse(serializeProject(r, "test"));
@@ -144,10 +144,62 @@ describe("saving the journey", () => {
     expect(parseProject(JSON.stringify(file)).sketch!.journey).toEqual({ stops: [], stepStarts: {} });
   });
 
-  it("rejects a journey naming a place that isn't there", () => {
-    const { r, s } = region();
+  it("rejects a journey naming a place that isn't there, or a step at a stop that isn't there", () => {
+    const { r, s, fir } = region();
     s.journey.stops = ["p99"];
     expect(() => parseProject(serializeProject(r, "test"))).toThrow(/journey\.stops\[0\]/);
+    s.journey = { stops: [fir.id], stepStarts: { s1: 1 } };
+    expect(() => parseProject(serializeProject(r, "test"))).toThrow(/stepStarts/);
+  });
+
+  it("format 13 steps (started at a place) become that place's stop", () => {
+    const { r, s, fir, route, cedar } = region();
+    s.journey.stops = [fir.id, route.id, cedar.id];
+    const file = JSON.parse(serializeProject(r, "test"));
+    file.schemaVersion = 13;
+    file.region.sketch.journey.stepStarts = { s1: fir.id, s2: cedar.id, s3: "p99" };
+    expect(parseProject(JSON.stringify(file)).sketch!.journey.stepStarts).toEqual({ s1: 0, s2: 2 });
+  });
+});
+
+describe("going back through a place", () => {
+  it("keeps the levels, step and Start/Finish of its first visit", () => {
+    const { r, s, fir, route, cedar } = region();
+    r.progression = [
+      { id: "s1", name: "Start", badges: 0, hms: [] },
+      { id: "s2", name: "Surf", badges: 4, hms: ["surf"] },
+    ];
+    // Fir Town → Route 1 → Cedar City, then back through Route 1 to Fir Town with Surf.
+    s.journey.stops = [fir.id, route.id, cedar.id, route.id, fir.id];
+    s.journey.stepStarts = { s1: 0, s2: 3 };
+    const plan = planJourney(s, r);
+    const rp = plan.places.get(route.id)!;
+    expect(rp).toMatchObject({ stop: 1, visits: [1, 3], order: 1, stepId: "s1" });
+    expect(plan.places.get(fir.id)).toMatchObject({ stop: 0, visits: [0, 4], stepId: "s1" });
+    // Levels are spread over the 3 places, not the 5 stops.
+    expect(plan.places.get(cedar.id)!.levels).toEqual({ min: 41, max: 60 });
+    // The route's maps keep their first trip's direction (south, then east)…
+    expect(rp.pieces[0].from).toBe("north");
+    // …while the line follows the way back too.
+    expect(plan.stops[3]).toMatchObject({ placeId: route.id, first: false });
+    expect(plan.stops[3].pieces[0].from).toBe("east");
+    expect(plan.problems).toEqual([]);
+  });
+
+  it("a route entered from its long side starts at the segment that place touches", () => {
+    const r = newRegion("r", 1);
+    const s = newSketch();
+    r.sketch = s;
+    // A long east–west route (2 segments) with a city sitting on top of its east end, and a town at its west end.
+    const route = addOutdoor(s, "route", { x: 100, y: 100, w: 150, h: 30 });
+    const city = addOutdoor(s, "town", { x: 200, y: 60, w: 40, h: 40 });
+    const town = addOutdoor(s, "town", { x: 70, y: 100, w: 30, h: 30 });
+    s.journey.stops = [city.id, route.id, town.id];
+    const pieces = planJourney(s, r).places.get(route.id)!.pieces;
+    expect(pieces.map((p) => [p.x, p.from, p.to])).toEqual([
+      [175, "north", "west"],
+      [100, "east", "west"],
+    ]);
   });
 });
 

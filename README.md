@@ -203,17 +203,20 @@ Undo and redo work in the sketch (Ctrl+Z, Ctrl+Y). Delete removes the picked pla
 
 ### The journey
 
-The **Journey** tool draws the player's path through the region: tap the places in the order the player first visits them. For a forest or cave, tap its pin.
+The **Journey** tool draws the player's path through the region: tap the places in the order the player goes through them. For a forest or cave, tap its pin.
 
 - **The line.** A gold line joins the stops, numbered, with arrows the way it goes. It's also drawn on the region map picture.
 - **Changing it.** Tap the last stop again to take it off, or use ↑ ↓ ✕ in the **Journey** list.
-- **Once only.** Each place is on the journey once, where the player first visits it.
+- **Going back through.** Tap a place again later when the player goes back through it (say, back down a route to a town). Those stops are listed as **Back through**, and the line follows the way back. A place keeps everything from its **first visit**: its levels, its progression step and its routes' Start and Finish.
 
 **What the journey sets** (they go onto the maps when the region is built, in the next part):
 
 - **Start and Finish.** Each route map is given the edge the player comes in by and the edge they leave by, the way they walk it, bends included. The list shows each route's way in → way out. A forest that splits a route is entered by the pin nearer the stop before and left by the other.
 - **Levels.** The **Levels** start and end (3 to 60 at first) are spread evenly along the journey, and each stop shows its band. Places off the journey (a side cave) take the levels of the route or town they're on.
-- **Progression steps.** These say what the player has by each part of the journey: a name, the number of badges, and the HMs they can use. Set where each step **starts at**; it lasts until the next one starts, and each map is checked only with its step's HMs.
+- **Progression steps.** These say what the player has by each part of the journey: a name, the number of badges, and the HMs they can use.
+  - Set the stop each step **starts at**. That can be a stop where the player goes back through somewhere, such as the trip back after getting Surf.
+  - A step lasts until the next one starts.
+  - Each map is checked only with the HMs of the step it was first visited in.
 
 **Check** also warns when two stops in a row don't meet (the player couldn't walk between them), when steps start out of order, and when a town or route isn't on the journey.
 
@@ -582,6 +585,7 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 - **Some PDF pictures may not show.** Images stored in the JPEG 2000 format inside a PDF need a decoder the tool leaves out to stay small (most scans and drawings use ordinary JPEG or vector lines, which work).
 - **Bigger app file.** The PDF reader makes the single-file version about 2.4 MB (it was about 0.7 MB).
 - **The region map draft is the layout only.** The picture of the map (its tiles) is drawn by you; the sections and grid are what the tool works out. Its size is fixed at Emerald's 28 × 15.
+- **Taking a stop off** can leave a place twice in a row; those become one stop.
 - **The journey doesn't change the maps yet.** Its Start and Finish, levels and HMs go onto the maps when the region is built (the next part).
 - **The sketch doesn't build maps yet.** Building every map from the sketch (with connections) comes later in Milestone 6.
 - **Approximate screen frame.** The frame assumes the player stands 7 cells from the left and 4 from the top of the screen. This only affects the overlay.

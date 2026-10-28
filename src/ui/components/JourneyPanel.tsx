@@ -25,23 +25,25 @@ export function JourneyPanel() {
 
   return (
     <details className="sketch-section" open={e.tool === "journey" || stops.length > 0}>
-      <summary title="The order the player first visits the places">Journey ({stops.length} stop{stops.length === 1 ? "" : "s"})</summary>
-      {stops.length === 0 && <p className="hint">Pick the <b>Journey</b> tool and tap the places in the order the player first visits them: towns, routes, and the forests and caves on the way.</p>}
+      <summary title="The order the player goes through the places">Journey ({stops.length} stop{stops.length === 1 ? "" : "s"})</summary>
+      {stops.length === 0 && <p className="hint">Pick the <b>Journey</b> tool and tap the places in the order the player goes through them: towns, routes, and the forests and caves on the way. Tap a place again later when the player goes back through it.</p>}
       <ol className="stop-list">
         {stops.map((id, i) => {
           const p = byId.get(id)!;
           const pj = plan.places.get(id);
+          const way = plan.stops[i];
+          const again = pj?.stop !== i;
           const step = stepName(pj?.stepId ?? null);
           return (
-            <li key={id} className={e.selectedId === id ? "active" : ""}>
+            <li key={i} className={`${e.selectedId === id ? "active" : ""} ${again ? "again" : ""}`}>
               <button className="stop-name" title={`Pick ${p.name}`} onClick={() => e.select(id)}>
                 <b>
                   {i + 1}. {p.name}
                 </b>
                 <span className="map-meta">
-                  {pj?.levels ? `Lv ${pj.levels.min}–${pj.levels.max}` : ""}
-                  {step ? ` · ${step}` : ""}
-                  {pj && pj.pieces.length ? ` · ${pj.pieces[0].from ?? "?"} → ${pj.pieces[pj.pieces.length - 1].to ?? "?"}` : ""}
+                  {again ? `Back through (as at stop ${(pj?.stop ?? 0) + 1})` : pj?.levels ? `Lv ${pj.levels.min}–${pj.levels.max}` : ""}
+                  {!again && step ? ` · ${step}` : ""}
+                  {way && way.pieces.length ? ` · ${way.pieces[0].from ?? "?"} → ${way.pieces[way.pieces.length - 1].to ?? "?"}` : ""}
                 </span>
               </button>
               <button className="icon-button" title="Earlier in the journey" aria-label={`Move ${p.name} earlier`} disabled={i === 0} onClick={() => e.moveStop(i, -1)}>
@@ -58,7 +60,7 @@ export function JourneyPanel() {
         })}
       </ol>
       {stops.length > 0 && (
-        <p className="hint">Routes show where they're entered → left. When the region is built, each route map gets its Start and Finish from this, and each map its levels and HMs.</p>
+        <p className="hint">Routes show where they're entered → left. Going back through a place doesn't change it: when the region is built, each map gets its Start and Finish, levels and HMs from its first visit.</p>
       )}
 
       <h3>Levels</h3>
@@ -75,7 +77,7 @@ export function JourneyPanel() {
       <p className="hint">Spread evenly along the journey. Places off it take the levels of the route or town they're on.</p>
 
       <h3>Progression steps</h3>
-      <p className="hint">What the player has by each part of the journey. A step lasts from where it starts until the next one starts; each map is checked only with the HMs of its step.</p>
+      <p className="hint">What the player has by each part of the journey. A step lasts from where it starts until the next one starts. Each map is checked only with the HMs of the step it was first visited in; going back through later doesn't change that.</p>
       {steps.map((step) => (
         <div key={step.id} className="step-card">
           <div className="field-row">
@@ -94,11 +96,12 @@ export function JourneyPanel() {
             </label>
             <label className="field" title="The stop where this step starts.">
               <span>Starts at</span>
-              <select value={sketch.journey.stepStarts[step.id] ?? ""} onChange={(ev) => e.setStepStart(step.id, ev.target.value)}>
+              <select value={sketch.journey.stepStarts[step.id] ?? ""} onChange={(ev) => e.setStepStart(step.id, ev.target.value === "" ? null : Number(ev.target.value))}>
                 <option value="">Not on the journey</option>
                 {stops.map((id, i) => (
-                  <option key={id} value={id}>
+                  <option key={i} value={i}>
                     {i + 1}. {byId.get(id)!.name}
+                    {plan.places.get(id)?.stop !== i ? " (back through)" : ""}
                   </option>
                 ))}
               </select>

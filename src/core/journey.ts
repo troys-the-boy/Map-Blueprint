@@ -1,13 +1,16 @@
-// The journey: the order the player first visits the region's places, drawn as
-// a line through the sketch. From it come:
+// The journey: the order the player goes through the region's places, drawn as
+// a line through the sketch. A place can come up again (going back through a
+// town or route); everything about a place comes from its FIRST visit:
 //
-//   • each place's order, and from that its wild level band (the region's level
-//     curve, start to end, spread evenly along the journey);
+//   • its order, and from that its wild level band (the region's level curve,
+//     start to end, spread evenly over the places in first-visit order);
 //   • which progression step (badges and HMs) applies there: a step starts at a
-//     stop and lasts until the next step starts;
+//     stop (any stop, a return visit included) and lasts until the next step
+//     starts, but a place keeps the step it had when first visited;
 //   • for each route segment, the edge it's entered by (Start) and left by
-//     (Finish), and for a forest or cave, which entrance pin is the way in and
-//     which the way out. Building the region (part E) puts these on the maps.
+//     (Finish) on the first trip, and for a forest or cave, which entrance pin is
+//     the way in and which the way out. Building the region (part E) puts these
+//     on the maps.
 //
 // Places off the journey (a side cave, say) take the order and step of the
 // route or town they're on.
@@ -17,10 +20,10 @@ import type { Sketch, SketchPiece, SketchPlace, SketchRect } from "./sketch";
 import { inRect, isOutdoor, parentOf, placePieces } from "./sketch";
 
 export interface Journey {
-  /** Place ids, in the order the player first visits them. */
+  /** Place ids, in the order the player goes through them (a place may come up again). */
   stops: string[];
-  /** Progression step id → the place where it starts (a stop). */
-  stepStarts: Record<string, string>;
+  /** Progression step id → the stop where it starts (an index into stops). */
+  stepStarts: Record<string, number>;
 }
 
 export function newJourney(): Journey {
@@ -35,9 +38,11 @@ export interface PieceTravel extends SketchPiece {
 
 export interface PlaceJourney {
   placeId: string;
-  /** Position on the journey (0 = first stop), or null when it's off the line. */
+  /** Its first stop on the journey (0 = the first stop), or null when it's off the line. */
   stop: number | null;
-  /** The stop whose order it takes (its own, or its route's or town's). Null: no order. */
+  /** Every stop where it comes up. */
+  visits: number[];
+  /** Its place in first-visit order (its own, or its route's or town's). Null: no order. */
   order: number | null;
   stepId: string | null;
   levels: { min: number; max: number } | null;
@@ -54,8 +59,20 @@ export interface JourneyProblem {
   message: string;
 }
 
+/** One stop: the way the player goes through the place that time (the line follows it). */
+export interface StopTravel {
+  placeId: string;
+  pieces: PieceTravel[];
+  entryPin: number | null;
+  exitPin: number | null;
+  /** Its first visit (false: going back through). */
+  first: boolean;
+}
+
 export interface JourneyPlan {
   places: Map<string, PlaceJourney>;
+  /** One per stop, in order. */
+  stops: StopTravel[];
   problems: JourneyProblem[];
 }
 
@@ -88,6 +105,8 @@ interface Link {
   pin: number;
   /** For a pin: the edge of the rectangle nearest it. */
   near?: Edge;
+  /** What it meets: the other place's rectangle, or the pin's square. */
+  meets?: SketchRect;
 }
 
 function nearestEdge(r: SketchRect, x: number, y: number): Edge {
@@ -107,7 +126,7 @@ function linkBetween(place: SketchPlace, other: SketchPlace): Link | null {
     for (const [k, r] of place.rects.entries())
       for (const o of other.rects) {
         const side = facingSide(r, o);
-        if (side) return { rect: k, side, pin: -1 };
+        if (side) return { rect: k, side, pin: -1, meets: o };
       }
     return null;
   }
@@ -116,7 +135,7 @@ function linkBetween(place: SketchPlace, other: SketchPlace): Link | null {
     // toward the edge nearest that entrance, so it still gets a Start or Finish edge.
     for (const [pin, q] of other.pins.entries()) {
       const k = place.rects.findIndex((r) => inRect(r, q.x, q.y));
-      if (k >= 0) return { rect: k, side: null, pin, near: nearestEdge(place.rects[k], q.x, q.y) };
+      if (k >= 0) return { rect: k, side: null, pin, near: nearestEdge(place.rects[k], q.x, q.y), meets: { x: q.x, y: q.y, w: 1, h: 1 } };
     }
     return null;
   }
@@ -146,10 +165,18 @@ function routePieces(route: SketchPlace, target: number, entry: Link | null, exi
     const vertical = r.h >= r.w;
     // The segment nearest where the player comes into this stretch goes first.
     const prev = ordered[ordered.length - 1];
+    // Does the far (high) end segment meet a rectangle while the near one doesn't?
+    const highEndMeets = (o: SketchRect) => {
+      const hit = (seg: SketchRect) => !!facingSide(seg, o) || (o.w === 1 && o.h === 1 && inRect(seg, o.x, o.y));
+      return own.length > 1 && hit(own[own.length - 1]) && !hit(own[0]);
+    };
     let startsHigh: boolean;
     if (prev) {
       // Whichever end segment touches the stretch walked before (at a bend that can be its side).
-      startsHigh = own.length > 1 && !!facingSide(own[own.length - 1], prev) && !facingSide(own[0], prev);
+      startsHigh = highEndMeets(prev);
+    } else if (k === entry?.rect && entry.meets) {
+      // Start at the segment that meets where the player came from (at its end, its side, or by a pin).
+      startsHigh = highEndMeets(entry.meets);
     } else {
       let comesFrom: Edge | null = k === entry?.rect ? (entry.side ?? entry.near ?? null) : null;
       if (!comesFrom && own.length > 1) {
@@ -178,28 +205,33 @@ function routePieces(route: SketchPlace, target: number, entry: Link | null, exi
 export function planJourney(sketch: Sketch, region: Pick<Region, "progression" | "settings">): JourneyPlan {
   const journey = sketch.journey;
   const byId = new Map(sketch.places.map((p) => [p.id, p]));
-  const stops = journey.stops.map((id) => byId.get(id)).filter((p): p is SketchPlace => !!p);
-  const n = stops.length;
+  const stops = journey.stops.map((id) => byId.get(id) ?? null);
   const target = region.settings.targetSegmentLength;
   const problems: JourneyProblem[] = [];
   const places = new Map<string, PlaceJourney>();
+  const travel: StopTravel[] = [];
+
+  // Levels are spread over the places in first-visit order.
+  const firsts: string[] = [];
+  for (const p of stops) if (p && !firsts.includes(p.id)) firsts.push(p.id);
+  const rank = new Map(firsts.map((id, k) => [id, k]));
 
   // Steps: each starts at a stop and lasts until the next one starts.
-  const stopIndex = new Map(stops.map((p, i) => [p.id, i]));
   const starts = region.progression
-    .map((step, listed) => ({ step, listed, at: stopIndex.get(journey.stepStarts[step.id] ?? "") }))
-    .filter((x): x is { step: ProgressionStep; listed: number; at: number } => x.at !== undefined)
+    .map((step, listed) => ({ step, listed, at: journey.stepStarts[step.id] }))
+    .filter((x): x is { step: ProgressionStep; listed: number; at: number } => typeof x.at === "number" && x.at >= 0 && x.at < stops.length)
     .sort((a, b) => a.at - b.at || a.listed - b.listed);
   for (let k = 1; k < starts.length; k++)
     if (starts[k].listed < starts[k - 1].listed)
       problems.push({ severity: "warning", placeId: null, message: `"${starts[k].step.name}" starts after "${starts[k - 1].step.name}" on the journey but comes before it in the list of steps.` });
   const stepAt = (i: number) => {
     let id: string | null = null;
-    for (const s of starts) if (s.at <= i) id = s.step.id;
+    for (const st of starts) if (st.at <= i) id = st.step.id;
     return id;
   };
 
   stops.forEach((p, i) => {
+    if (!p) return;
     const prev = stops[i - 1];
     const next = stops[i + 1];
     const entry = prev ? linkBetween(p, prev) : null;
@@ -210,15 +242,31 @@ export function planJourney(sketch: Sketch, region: Pick<Region, "progression" |
         placeId: p.id,
         message: !isOutdoor(p.kind) && !isOutdoor(prev.kind) ? `${prev.name} and ${p.name} are both reached by warps: make sure a warp joins them, or put a route between them.` : `${prev.name} and ${p.name} don't meet, so the player can't walk from one to the other. Make them touch, or put the ${isOutdoor(p.kind) ? (isOutdoor(prev.kind) ? "two places" : `${prev.name}'s entrance`) : `${p.name}'s entrance`} on the other.`,
       });
-    places.set(p.id, {
+    const way: StopTravel = {
       placeId: p.id,
-      stop: i,
-      order: i,
-      stepId: stepAt(i),
-      levels: levelBand(i, n, region.settings.levelCurve),
       pieces: p.kind === "route" ? routePieces(p, target, entry, exit) : [],
       entryPin: !isOutdoor(p.kind) ? (entry?.pin ?? (p.pins.length ? 0 : null)) : null,
       exitPin: !isOutdoor(p.kind) ? (exit?.pin ?? (p.pins.length > 1 ? p.pins.length - 1 : null)) : null,
+      first: !places.has(p.id),
+    };
+    travel.push(way);
+    const known = places.get(p.id);
+    if (known) {
+      // Going back through: the place keeps everything from its first visit.
+      known.visits.push(i);
+      return;
+    }
+    const k = rank.get(p.id)!;
+    places.set(p.id, {
+      placeId: p.id,
+      stop: i,
+      visits: [i],
+      order: k,
+      stepId: stepAt(i),
+      levels: levelBand(k, firsts.length, region.settings.levelCurve),
+      pieces: way.pieces,
+      entryPin: way.entryPin,
+      exitPin: way.exitPin,
     });
   });
 
@@ -227,10 +275,10 @@ export function planJourney(sketch: Sketch, region: Pick<Region, "progression" |
     if (places.has(p.id)) continue;
     const parent = isOutdoor(p.kind) ? null : parentOf(sketch, p);
     const from = parent ? places.get(parent.id) : undefined;
-    places.set(p.id, { placeId: p.id, stop: null, order: from?.order ?? null, stepId: from?.stepId ?? null, levels: from?.levels ?? null, pieces: [], entryPin: null, exitPin: null });
-    if (n > 0 && isOutdoor(p.kind)) problems.push({ severity: "warning", placeId: p.id, message: `${p.name} isn't on the journey, so it has no levels or step. Add it with the Journey tool.` });
+    places.set(p.id, { placeId: p.id, stop: null, visits: [], order: from?.order ?? null, stepId: from?.stepId ?? null, levels: from?.levels ?? null, pieces: [], entryPin: null, exitPin: null });
+    if (firsts.length > 0 && isOutdoor(p.kind)) problems.push({ severity: "warning", placeId: p.id, message: `${p.name} isn't on the journey, so it has no levels or step. Add it with the Journey tool.` });
   }
-  return { places, problems };
+  return { places, stops: travel, problems };
 }
 
 /**
@@ -244,20 +292,16 @@ export function journeyLine(sketch: Sketch, plan: JourneyPlan): number[] {
 
 /** Each stop's points along the journey line (see journeyLine), one list per stop. */
 export function stopPoints(sketch: Sketch, plan: JourneyPlan): number[][] {
-  const all: number[][] = [];
   const byId = new Map(sketch.places.map((p) => [p.id, p]));
-  for (const id of sketch.journey.stops) {
-    const p = byId.get(id);
-    const pj = plan.places.get(id);
-    if (!p || !pj) continue;
+  return plan.stops.map((way) => {
+    const p = byId.get(way.placeId)!;
     const out: number[] = [];
-    all.push(out);
     if (p.kind === "town") for (const r of p.rects) out.push(r.x + r.w / 2, r.y + r.h / 2);
-    else if (p.kind === "route") for (const piece of pj.pieces) out.push(piece.x + piece.w / 2, piece.y + piece.h / 2);
+    else if (p.kind === "route") for (const piece of way.pieces) out.push(piece.x + piece.w / 2, piece.y + piece.h / 2);
     else {
-      const pins = [pj.entryPin, pj.exitPin].filter((k, i, a): k is number => k !== null && a.indexOf(k) === i);
+      const pins = [way.entryPin, way.exitPin].filter((k, i, a): k is number => k !== null && a.indexOf(k) === i);
       for (const k of pins) out.push(p.pins[k].x + 0.5, p.pins[k].y + 0.5);
     }
-  }
-  return all;
+    return out;
+  });
 }
