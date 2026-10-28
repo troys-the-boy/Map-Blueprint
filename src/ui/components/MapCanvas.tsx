@@ -22,6 +22,7 @@ export function MapCanvas({ onHover }: { onHover: (cell: [number, number] | null
     renderer.setPalette(store.prefs.paletteId);
     renderer.overlays = { ...store.prefs.overlays };
     renderer.setMap(store.currentMap);
+    renderer.setNeighbours(store.currentMap, store.region.maps);
 
     let shownMapId = store.currentMapId;
     let shownSize = store.currentMap ? `${store.currentMap.width}x${store.currentMap.height}` : "";
@@ -37,6 +38,7 @@ export function MapCanvas({ onHover }: { onHover: (cell: [number, number] | null
         shownMapId = store.currentMapId;
         shownSize = size;
         renderer.setMap(store.currentMap);
+        renderer.setNeighbours(store.currentMap, store.region.maps);
         if (refit) renderer.fit();
       }
     });

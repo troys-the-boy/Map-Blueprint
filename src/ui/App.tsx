@@ -19,6 +19,7 @@ import type { SideTab } from "./components/SidePanel";
 import { ExportDialog } from "./components/ExportDialog";
 import { Toolbar } from "./components/Toolbar";
 import { EditBar } from "./components/EditBar";
+import { NeighbourLinks } from "./components/NeighbourLinks";
 import { VariationsDialog } from "./components/VariationsDialog";
 import { Icon } from "./components/icons";
 import { openProject, saveProject } from "./files";
@@ -138,6 +139,7 @@ export function App() {
           {region && <SketchToolbar onShowPanel={() => setPanelOpen(true)} />}
           {map && <Toolbar onShowTab={showTab} />}
           {map && <EditBar />}
+          {map && <NeighbourLinks />}
           {!map && !region && (
             <div className="welcome">
               <h1>Gen 3 Map Blueprint</h1>

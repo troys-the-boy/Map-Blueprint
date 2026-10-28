@@ -386,3 +386,12 @@ details.sketch-section[open] > summary { margin-bottom: 4px; }
 .hm-checks legend { font-size: 12px; color: var(--muted); padding: 0; }
 .stop-list li.again .stop-name b { font-weight: 500; color: var(--muted); }
 .build-section progress { width: 100%; }
+
+/* ---- stitched view: open a connected map ---- */
+.nb-links { position: absolute; display: flex; gap: 6px; z-index: 5; pointer-events: none; }
+.nb-links.top { top: 8px; left: 50%; transform: translateX(-50%); }
+.nb-links.bottom { bottom: 8px; left: 50%; transform: translateX(-50%); }
+.nb-links.left { left: 118px; top: 50%; transform: translateY(-50%); flex-direction: column; }
+.nb-links.right { right: 8px; top: 50%; transform: translateY(-50%); flex-direction: column; }
+.nb-link { pointer-events: auto; background: rgba(30,36,40,0.9); border: 1px solid var(--line); border-radius: 16px; padding: 0 12px; min-height: 36px; font-size: 13px; }
+.nb-link:hover { background: var(--panel-2); }

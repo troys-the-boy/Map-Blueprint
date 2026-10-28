@@ -115,6 +115,13 @@ The sketch is a rough plan of the whole region. Everything is in metatiles; rect
   - `stops` lists place ids in the order the player goes through them. A place can come up again (going back through it), but not twice in a row.
   - `stepStarts` maps a progression step's id (`region.progression`) to the stop where it starts, as an index into `stops` (0 = the first). A step lasts until the next one starts.
   - Everything else is worked out from it each time, so it isn't saved: levels (from `settings.levelCurve`, spread evenly over the places in first-visit order), each route map's Start and Finish edges, and each place's step. All of these come from the place's first visit.
+- **Maps built from the sketch** (Milestone 6, part E) record where they came from in `params`:
+  - `sketchPlace`: the place id;
+  - `sketchPiece`: which segment, 0 = first;
+  - `sketchX`, `sketchY`: the map's top-left on the sketch, for towns and routes.
+  - The place's `mapIds` lists its maps in order.
+  - Zones made from painted water, biomes and rivers have `data.fromSketch: true`, and are replaced each time the region is built.
+  - Each route gets a record in `region.routes` with id `route_<place id>`.
 - **`rivers`**: lines through `points` (x0, y0, x1, y1, …), `width` metatiles across (1–50).
 - **`underlay`**: a drawing to trace over, or null:
 
@@ -141,7 +148,7 @@ The sketch is a rough plan of the whole region. Everything is in metatiles; rect
   "width": 40, "height": 20,
   "seed": 7,
   "biome": "temperate_rainforest",    // temperate_rainforest | coastal | wetland | alpine | meadow | urban_edge
-  "params": { "winding": 0.5, "trainers": 3, "availableHms": "cut,surf" },  // generator settings (see below)
+  "params": { "winding": 0.5, "trainers": 3, "availableHms": "cut,surf" },  // generator settings (see below); maps built from the sketch also have sketchPlace, sketchPiece, sketchX, sketchY
   "layers": {
     "terrain":   { "legend": ["ground", "tree"], "rows": [[1,1,0, …], …] },
     "elevation": { "legend": ["ground"], "rows": [[0,0,0, …], …] },

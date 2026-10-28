@@ -19,6 +19,8 @@ export interface Overlays {
   elevation: boolean;
   /** The user's zones (biome, water, edges, keep-clear). */
   zones: boolean;
+  /** Connected maps, faded, beyond the edges (the stitched view). */
+  neighbours: boolean;
 }
 
 export interface Prefs {
@@ -42,7 +44,7 @@ export const DEFAULT_PREFS: Prefs = {
   fingerMode: "auto",
   penSeen: false,
   paletteId: "pnw",
-  overlays: { grid: true, rulers: true, screenFrame: true, locks: false, sight: true, issues: true, reach: false, elevation: false, zones: true },
+  overlays: { grid: true, rulers: true, screenFrame: true, locks: false, sight: true, issues: true, reach: false, elevation: false, zones: true, neighbours: true },
   lockWhenPainting: true,
   elevationOpacity: 0.6,
   gapFill: "regenerate",
@@ -67,6 +69,7 @@ export function loadPrefs(): Prefs {
         reach: p.overlays?.reach === true,
         elevation: p.overlays?.elevation === true,
         zones: p.overlays?.zones !== false,
+        neighbours: p.overlays?.neighbours !== false,
       },
       lockWhenPainting: p.lockWhenPainting !== false,
       gapFill: p.gapFill === "ground" ? "ground" : "regenerate",

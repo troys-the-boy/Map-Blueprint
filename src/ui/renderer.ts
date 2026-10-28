@@ -96,6 +96,8 @@ export class MapRenderer {
   selectedThing: string | null = null;
   /** The zone being painted (drawn stronger, with an outline). */
   activeZoneId: string | null = null;
+  /** Connected maps, drawn faded beyond the edges (cell offsets from this map's top-left). */
+  neighbours: Array<{ name: string; dx: number; dy: number; w: number; h: number; bitmap: HTMLCanvasElement }> = [];
 
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -129,6 +131,32 @@ export class MapRenderer {
           this.chunks.push({ canvas, ctx });
         }
       for (let i = 0; i < map.width * map.height; i++) this.drawCell(i);
+    }
+    this.requestFrame();
+  }
+
+  /**
+   * The maps connected to this one, placed as the game joins them: a map connected "down"
+   * sits below, `offset` cells to the right (pokeemerald src/fieldmap.c), and so on.
+   */
+  setNeighbours(map: MapBlueprint | null, all: MapBlueprint[]) {
+    this.neighbours = [];
+    if (!map) return;
+    for (const c of map.connections) {
+      const n = all.find((m) => m.id === c.map);
+      if (!n) continue;
+      const at =
+        c.direction === "up" ? [c.offset, -n.height] : c.direction === "down" ? [c.offset, map.height] : c.direction === "left" ? [-n.width, c.offset] : c.direction === "right" ? [map.width, c.offset] : null;
+      if (!at) continue;
+      const bitmap = document.createElement("canvas");
+      bitmap.width = n.width;
+      bitmap.height = n.height;
+      const ctx = bitmap.getContext("2d")!;
+      for (let i = 0; i < n.width * n.height; i++) {
+        ctx.fillStyle = this.colors[n.layers.terrain.data[i]] ?? "#ff00ff";
+        ctx.fillRect(i % n.width, Math.floor(i / n.width), 1, 1);
+      }
+      this.neighbours.push({ name: n.name, dx: at[0], dy: at[1], w: n.width, h: n.height, bitmap });
     }
     this.requestFrame();
   }
@@ -250,8 +278,34 @@ export class MapRenderer {
     if (!map) return;
     const { scale, offsetX, offsetY } = this.view;
 
-    // Terrain: stretch each visible chunk bitmap onto the screen, without blurring.
+    // Connected maps, faded, where the game joins them on (the stitched view).
     ctx.imageSmoothingEnabled = false;
+    if (this.overlays.neighbours)
+      for (const n of this.neighbours) {
+        const x = offsetX + n.dx * scale;
+        const y = offsetY + n.dy * scale;
+        ctx.globalAlpha = 0.4;
+        ctx.drawImage(n.bitmap, x, y, n.w * scale, n.h * scale);
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = "rgba(255,255,255,0.35)";
+        ctx.setLineDash([6, 4]);
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, n.w * scale, n.h * scale);
+        ctx.setLineDash([]);
+        // The name, in the part of it nearest this map that's on screen.
+        const cx = Math.max(x + 60, Math.min(x + n.w * scale - 60, offsetX + (map.width * scale) / 2));
+        const cy = Math.max(y + 14, Math.min(y + n.h * scale - 14, offsetY + (map.height * scale) / 2));
+        ctx.font = "600 12px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const w = ctx.measureText(n.name).width + 10;
+        ctx.fillStyle = "rgba(15,20,23,0.75)";
+        ctx.fillRect(cx - w / 2, cy - 9, w, 18);
+        ctx.fillStyle = "#dfe5e8";
+        ctx.fillText(n.name, cx, cy);
+      }
+
+    // Terrain: stretch each visible chunk bitmap onto the screen, without blurring.
     this.chunks.forEach((chunk, k) => {
       const cx = (k % this.chunkCols) * CHUNK;
       const cy = Math.floor(k / this.chunkCols) * CHUNK;

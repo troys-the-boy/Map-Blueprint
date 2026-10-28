@@ -242,6 +242,46 @@ The panel's **Region map** is a draft of the in-game Town Map / Fly map. It foll
 
 Paste them over (or merge them into) yours, or enter the same values in Porymap's Region Map Editor.
 
+### Build the maps
+
+When the sketch has no errors, **Build the maps** (top of the sketch panel) makes a map for:
+- every town;
+- every route segment, named *Route 1 (1)*, *Route 1 (2)*… when a route has several;
+- every forest and cave.
+
+Then **Generate all** generates them one after another.
+
+What each map gets from the sketch:
+
+- **Size:** the size of its rectangle (forests and caves: their size setting).
+- **Biome:** the biome painted over most of it, or the region's default.
+- **Connections:** neighbouring maps are connected the way pokeemerald joins them. The offset is how far along the edge the neighbour starts, so the maps line up in game.
+  - Each shared edge gets an entrance in the same place on both maps, in the middle of the shared stretch.
+  - Routes get their **Start** and **Finish** from the journey.
+- **Forests and caves:**
+  - The route or town gets a warp where each pin is: a cave mouth for a cave, a gate warp for a forest.
+  - A cave gets one exit per pin. A forest gets an entrance per pin (the way in at the south, the way out at the north) with a warp on it.
+  - The warps are paired both ways, and paired again whenever any of these maps is generated, since Generate renumbers warps.
+- **Water and biomes:**
+  - Painted lakes and sea become water zones on the maps they cover.
+  - Painted biomes other than the map's own become biome zones.
+  - Rivers become exact river zones, so a river crossing from one map to the next meets itself at the edge.
+  - Your own zones are kept.
+- **From the journey and region map:** the level band, the progression step and its HMs (the checks use them), and the region map section. Every segment of a route shares its section, and all of them are listed together as one route.
+
+**Building again** (**Update the maps from the sketch**) updates the maps it made, and keeps everything you've drawn or generated on them:
+- **Size and position:** if a place grew or moved, its map is resized on the side that changed, so what's on it stays where it was on the sketch.
+- **What's reset:** entrances, connections, warps to forests and caves, region map section, levels, HMs and the zones from the sketch.
+- **Generating:** maps that are new, or whose size or entrances changed, are listed to generate.
+- **Removed places:** maps whose place you removed from the sketch are listed, not deleted.
+- **Undo build** puts the maps back as they were before the last build.
+
+A picked place has **Open** buttons for its maps.
+
+### Connected maps (the stitched view)
+
+In a map built from the sketch, the maps connected to it show faded beyond its edges, lined up as the game joins them, so you can see a path or river carry on. Buttons at the edges of the screen (↑ Route 1 (1), → Cedar City…) open them. Turn it off with **Connected maps** in the Paint tab's view list.
+
 ### Trace your own drawing
 
 Under **Drawing to trace**, load a PDF or an image of your own map. It sits under the grid, saved inside the project (up to 15 MB).
@@ -577,7 +617,7 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 - **Moving across elevation** isn't smoothed: an area moved onto raised ground keeps its own elevation, so check the Elevation view (and the Check tab) afterwards.
 - **What Generate places.** Generate places trainers, items, hidden items, Cut trees, Rock Smash rocks and a sign. Berry trees, people, triggers, Secret Base spots, heal locations and warps are placed by hand (towns and caves place their own in Milestone 5). Field values are suggestions to check in Porymap.
 - **Generated trainers are always avoidable.** Place a trainer by hand (and tick "on purpose" in Details) for a battle you can't avoid.
-- **Connections aren't checked against the neighbour yet.** The rebuild checklist reminds you to line up the entrances; region mode (Milestone 6) will check both sides.
+- **Connections you set by hand aren't checked against the neighbour.** Maps built from the sketch get matching connections and entrances on both sides; for others, the rebuild checklist reminds you to line them up.
 - **The map.json draft is a starting point.** Scripts, flags and trainer data it names don't exist in your project until you write them.
 - **Water currents.** They count as plain Surf water: the forced movement is ignored for now.
 - **Plain export text.** Labels in exported images use a small built-in pixel font, in capitals only.
@@ -586,7 +626,9 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 - **Bigger app file.** The PDF reader makes the single-file version about 2.4 MB (it was about 0.7 MB).
 - **The region map draft is the layout only.** The picture of the map (its tiles) is drawn by you; the sections and grid are what the tool works out. Its size is fixed at Emerald's 28 × 15.
 - **Taking a stop off** can leave a place twice in a row; those become one stop.
-- **The journey doesn't change the maps yet.** Its Start and Finish, levels and HMs go onto the maps when the region is built (the next part).
-- **The sketch doesn't build maps yet.** Building every map from the sketch (with connections) comes later in Milestone 6.
+- **Building resets the entrances** of the maps it made (they must match their neighbours). Entrances you moved by hand on those maps go back to the middle of the shared edge; generate again afterwards.
+- **One entrance per shared edge.** Two maps that meet get one entrance between them, 3 wide, in the middle of where they meet.
+- **Sea connections** are walked, not surfed: a coast or open-water route built from the sketch gets a walking entrance at each connection.
+- **Forest entrances** are always at the south (way in) and north (way out) of the forest map, wherever the pins are.
 - **Approximate screen frame.** The frame assumes the player stands 7 cells from the left and 4 from the top of the screen. This only affects the overlay.
 - **Unconfirmed presets.** The forest, cave-floor and interior size presets are placeholders.
