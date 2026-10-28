@@ -19,6 +19,7 @@
 import type { Biome, EngineLimits } from "./model";
 import { BIOMES, DEFAULT_ENGINE_LIMITS } from "./model";
 import { checkMapSize } from "./sizeRule";
+import type { RegionMapPlan } from "./regionMap";
 
 /** Metatiles per sketch cell. */
 export const SKETCH_CELL = 5;
@@ -101,6 +102,8 @@ export interface Sketch {
   places: SketchPlace[];
   rivers: SketchRiver[];
   underlay: SketchUnderlay | null;
+  /** The in-game region map's grid size and sections placed by hand (see regionMap.ts). */
+  regionMap: RegionMapPlan;
   /** Counter for new ids ("p1", "r1"…). */
   nextId: number;
 }
@@ -109,7 +112,17 @@ export const DEFAULT_SKETCH_SIZE = { width: 600, height: 400 };
 export const MAX_SKETCH_SIDE = 4000;
 
 export function newSketch(width = DEFAULT_SKETCH_SIZE.width, height = DEFAULT_SKETCH_SIZE.height): Sketch {
-  return { width, height, areas: new Uint8Array((width / SKETCH_CELL) * (height / SKETCH_CELL)), places: [], rivers: [], underlay: null, nextId: 1 };
+  return {
+    width,
+    height,
+    areas: new Uint8Array((width / SKETCH_CELL) * (height / SKETCH_CELL)),
+    places: [],
+    rivers: [],
+    underlay: null,
+    // Vanilla Emerald's grid: MAP_WIDTH × MAP_HEIGHT in src/region_map.c (see regionMap.ts).
+    regionMap: { width: 28, height: 15, overrides: {} },
+    nextId: 1,
+  };
 }
 
 export function sketchCols(s: Sketch): number {
@@ -377,5 +390,6 @@ export function cloneSketch(s: Sketch): Sketch {
     places: s.places.map((p) => ({ ...p, rects: p.rects.map((r) => ({ ...r })), pins: p.pins.map((q) => ({ ...q })), size: p.size ? { ...p.size } : null, mapIds: [...p.mapIds] })),
     rivers: s.rivers.map((r) => ({ ...r, points: [...r.points] })),
     underlay: s.underlay ? { ...s.underlay } : null,
+    regionMap: { ...s.regionMap, overrides: Object.fromEntries(Object.entries(s.regionMap.overrides).map(([k, r]) => [k, { ...r, ...(r.cells ? { cells: [...r.cells] } : {}) }])) },
   };
 }

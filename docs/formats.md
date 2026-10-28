@@ -4,7 +4,7 @@ This document defines the tool's file formats. The terrain vocabulary and the ti
 
 | File | Identifier (`format`) | Version field | Current |
 | --- | --- | --- | --- |
-| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 11 |
+| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 12 |
 | Terrain vocabulary (`profiles/terrain.json`) | `gen3-terrain-vocabulary` | `formatVersion` | 1 |
 | Terrain palette (`profiles/palettes/*.json`) | `gen3-terrain-palette` | `formatVersion` | 1 |
 | Tileset profile (`profiles/tilesets/*.json`) | `gen3-tileset-profile` | `formatVersion` | 1 (draft) |
@@ -13,7 +13,7 @@ Coordinates are in **metatiles** (16×16 px). The origin (0, 0) is the top-left 
 
 ---
 
-## Project file, schemaVersion 11
+## Project file, schemaVersion 12
 
 A project is a single JSON file holding one region and all of its maps. The app treats it as untrusted data when opening it:
 
@@ -37,6 +37,7 @@ When the format changes, `schemaVersion` goes up and a migration in `src/core/pr
 | 9 | 5 (part A) | Warps may have `"locked"` (placed by hand; all warps in older files get `true`). Towns generate door warps (not locked). New smart-stroke kind `building`. |
 | 10 | 6 (part A) | Openings may have `role`: `start` or `finish`, replacing the route setting `travel` (moved onto the entrances when opened). `targetSegmentLength` 80 becomes 90. |
 | 11 | 6 (part B) | The region's `sketch` may be filled in (see Region sketch below). Version-10 files need no changes. |
+| 12 | 6 (part C) | The sketch gains `regionMap` (the in-game region map's grid size and sections placed by hand). Version-11 sketches get Emerald's 28 × 15 grid and none placed by hand. |
 
 ```jsonc
 {
@@ -91,6 +92,7 @@ The sketch is a rough plan of the whole region. Everything is in metatiles; rect
   ],
   "rivers": [ { "id": "r3", "points": [0, 50, 80, 60, 140, 200], "width": 3 } ],
   "underlay": null,
+  "regionMap": { "width": 28, "height": 15, "overrides": { "p1": { "x": 3, "y": 0, "w": 2, "h": 3, "cells": [1, 1, 1, 0, 1, 0] } } },
   "nextId": 4
 }
 ```
@@ -102,6 +104,10 @@ The sketch is a rough plan of the whole region. Everything is in metatiles; rect
   - A stretch longer than the region's `targetSegmentLength` becomes several maps (segments), split into near-equal lengths of whole 5-metatile squares. A town is always one map.
   - Forests and caves have no rectangles. Their `pins` are entrances on routes or towns (the route or town under the first pin is the one they belong to), `size` is their map's size, and `ownSection` says whether they get their own region map section.
   - `mapIds` lists the maps built from the place (empty until the region is built).
+- **`regionMap`**: the in-game region map (Town Map / Fly map).
+  - `width` × `height` squares: 28 × 15 in Emerald (MAP_WIDTH, MAP_HEIGHT in src/region_map.c).
+  - `overrides` holds the sections placed by hand, by place id: the section's entry rectangle on the grid, and optionally `cells`, which squares in it are the section's (row by row, 1 = yes; no `cells` = all of them).
+  - Everything else is worked out from the sketch each time, so it isn't saved.
 - **`rivers`**: lines through `points` (x0, y0, x1, y1, …), `width` metatiles across (1–50).
 - **`underlay`**: a drawing to trace over, or null:
 

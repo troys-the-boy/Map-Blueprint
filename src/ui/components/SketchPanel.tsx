@@ -13,6 +13,7 @@ import { underlayError, underlayPicture } from "../underlay";
 import { SKETCH_AREA_COLORS } from "../zoneColors";
 import { NumberField } from "./NumberField";
 import { Icon } from "./icons";
+import { RegionMapPanel } from "./RegionMapPanel";
 
 const BIOME_LABELS: Record<Biome, string> = {
   temperate_rainforest: "Temperate rainforest",
@@ -108,7 +109,7 @@ export function SketchPanel({ onClose }: { onClose?: () => void }) {
               <button className="secondary" title="Tap the route or town where another entrance is (a forest that splits a route has one on each side)." onClick={() => e.setTool("pin")}>
                 Add an entrance
               </button>
-              <label className="check" title="On the in-game region map: off = part of its route or town (the fly map shows that name); on = its own location on one of their squares.">
+              <label className="check" title="Off: it counts as part of its route or town, and shows that name when you enter it. On: it gets its own region map section (its own name when you enter it, and the player's marker on one of its route's squares), as Petalburg Woods and Granite Cave do. The fly map still names the route under that square.">
                 <input type="checkbox" checked={sel.ownSection} onChange={(ev) => e.updateSelected({ ownSection: ev.target.checked })} />
                 Own region map section
               </label>
@@ -137,6 +138,8 @@ export function SketchPanel({ onClose }: { onClose?: () => void }) {
           </ul>
         )}
       </section>
+
+      <RegionMapPanel />
 
       {sketch.rivers.length > 0 && (
         <details className="sketch-section">
@@ -253,6 +256,8 @@ function ToolHelp() {
       return <p className="hint tool-help">Tap the route or town where the {e.tool}'s entrance is. Its own size is set in this panel once it's placed.</p>;
     case "underlay":
       return <p className="hint tool-help">Drag the drawing to move it.</p>;
+    case "sections":
+      return <p className="hint tool-help">Region map: tap a section to pick it, drag it to move it, or drag a picked section's corner to resize it. Sections you move stay put (✋); the rest follow the sketch.</p>;
     default:
       return null;
   }

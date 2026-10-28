@@ -54,13 +54,14 @@ import {
   num,
   object,
   oneOf,
+  recordOf,
   simpleRecord,
   str,
 } from "./schema";
 import { ELEVATION_LEVELS, TERRAIN_TYPES, terrainIndex } from "./terrain";
 
 export const FILE_FORMAT_ID = "gen3-map-blueprint-project";
-export const CURRENT_SCHEMA_VERSION = 11;
+export const CURRENT_SCHEMA_VERSION = 12;
 
 /** Safety limits for opened files. Anything bigger is rejected. */
 export const FILE_LIMITS = {
@@ -198,6 +199,7 @@ function saveSketch(s: Sketch) {
     places: s.places,
     rivers: s.rivers,
     underlay: s.underlay,
+    regionMap: s.regionMap,
     nextId: s.nextId,
   };
 }
@@ -491,6 +493,11 @@ const sketchCheck = object({
       locked: bool,
     }),
   ),
+  regionMap: object({
+    width: num(1, 128),
+    height: num(1, 128),
+    overrides: recordOf(object({ x: num(0, 127), y: num(0, 127), w: num(1, 128), h: num(1, 128), cells: intArray(0, 1, 128 * 128) }, ["cells"]), 2000),
+  }),
   nextId: num(1, 1e9),
 });
 
@@ -630,6 +637,14 @@ export const MIGRATIONS: Record<number, Migration> = {
   // v10 → v11 (Milestone 6, part B): the region sketch ("sketch"), which was always null
   // before. Nothing in a version-10 file needs changing.
   10: (file) => ({ ...file, schemaVersion: 11 }),
+  // v11 → v12 (Milestone 6, part C): the sketch gains "regionMap" (the in-game region map's
+  // grid size and sections placed by hand). A version-11 sketch gets vanilla's 28 × 15 grid.
+  11: (file) => {
+    const region = file.region as Record<string, unknown> | null;
+    const sketch = region?.sketch;
+    if (!region || !sketch || typeof sketch !== "object" || Array.isArray(sketch)) return { ...file, schemaVersion: 12 };
+    return { ...file, schemaVersion: 12, region: { ...region, sketch: { ...(sketch as object), regionMap: { width: 28, height: 15, overrides: {} } } } };
+  },
 };
 
 /** Upgrade an old file step by step to the target version. */

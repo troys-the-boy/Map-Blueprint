@@ -22,8 +22,10 @@ import {
   touching,
 } from "../core/sketch";
 import { store } from "./store";
+import type { SectionOverride } from "../core/regionMap";
+import { draftRegionMap, sectionAt, sectionCells } from "../core/regionMap";
 
-export type SketchTool = "select" | "town" | "route" | "forest" | "cave" | "pin" | "paint" | "erase" | "river" | "pan" | "underlay" | "calibrate";
+export type SketchTool = "select" | "town" | "route" | "forest" | "cave" | "pin" | "paint" | "erase" | "river" | "pan" | "underlay" | "calibrate" | "sections";
 
 const UNDO_LIMIT = 100;
 
@@ -33,7 +35,8 @@ type Drag =
   | { kind: "pin"; placeId: string; pin: number; moved: boolean }
   | { kind: "paint"; value: number; changed: boolean; x: number; y: number }
   | { kind: "draw"; ax: number; ay: number; bx: number; by: number }
-  | { kind: "underlay"; startX: number; startY: number; ox: number; oy: number; moved: boolean };
+  | { kind: "underlay"; startX: number; startY: number; ox: number; oy: number; moved: boolean }
+  | { kind: "section"; placeId: string; startX: number; startY: number; rect: SectionOverride; corner: -1 | 0 | 1 | 2 | 3; moved: boolean };
 
 export class SketchEditor {
   tool: SketchTool = "select";
@@ -44,6 +47,8 @@ export class SketchEditor {
   riverWidth = 3;
   /** The river being drawn: x0, y0, x1, y1… in metatiles. */
   riverPoints: number[] | null = null;
+  /** Show the in-game region map's grid and sections over the sketch. */
+  showRegionMap = false;
   /** Calibrating the underlay: the two points tapped on it so far. */
   calibration: Array<[number, number]> = [];
   drag: Drag | null = null;
@@ -189,6 +194,8 @@ export class SketchEditor {
         this.drag = { kind: "paint", value, changed: paintAreas(s, x, y, this.brush, value), x, y };
         break;
       }
+      case "sections":
+        return this.sectionDown(s, x, y, tol);
       case "underlay":
         if (s.underlay && !s.underlay.locked) this.drag = { kind: "underlay", startX: x, startY: y, ox: s.underlay.x, oy: s.underlay.y, moved: false };
         this.before = cloneSketch(s);
@@ -227,6 +234,37 @@ export class SketchEditor {
         if (p) p.pins[index] = { x: pin.x + dx, y: pin.y + dy };
       }
       if (dx || dy) d.moved = true;
+    } else if (d.kind === "section") {
+      const draft = draftRegionMap(s);
+      const gx = (x - draft.ox) / draft.size;
+      const gy = (y - draft.oy) / draft.size;
+      const W = s.regionMap.width;
+      const H = s.regionMap.height;
+      const r = d.rect;
+      let next: SectionOverride;
+      if (d.corner < 0) {
+        // Move: by whole squares, kept on the grid, keeping the section's shape.
+        const dx = Math.round(gx - d.startX);
+        const dy = Math.round(gy - d.startY);
+        next = { x: Math.max(0, Math.min(W - r.w, r.x + dx)), y: Math.max(0, Math.min(H - r.h, r.y + dy)), w: r.w, h: r.h, ...(r.cells ? { cells: r.cells } : {}) };
+      } else {
+        // Resize: the section becomes a plain rectangle.
+        // Resize: the opposite corner stays put.
+        const fx = d.corner === 0 || d.corner === 3 ? r.x + r.w : r.x;
+        const fy = d.corner === 0 || d.corner === 1 ? r.y + r.h : r.y;
+        const ex = Math.max(0, Math.min(W, Math.round(gx)));
+        const ey = Math.max(0, Math.min(H, Math.round(gy)));
+        const x0 = Math.min(fx, ex);
+        const y0 = Math.min(fy, ey);
+        next = { x: x0, y: y0, w: Math.max(1, Math.abs(ex - fx)), h: Math.max(1, Math.abs(ey - fy)) };
+        if (next.x + next.w > W) next.x = W - next.w;
+        if (next.y + next.h > H) next.y = H - next.h;
+      }
+      const old = s.regionMap.overrides[d.placeId];
+      if (!old || old.x !== next.x || old.y !== next.y || old.w !== next.w || old.h !== next.h) {
+        s.regionMap.overrides[d.placeId] = next;
+        d.moved = d.moved || next.x !== r.x || next.y !== r.y || next.w !== r.w || next.h !== r.h;
+      }
     } else if (d.kind === "resize") {
       const place = s.places.find((p) => p.id === d.placeId);
       const r = place?.rects[d.rect];
@@ -274,7 +312,9 @@ export class SketchEditor {
         return;
     }
     // Drags that changed the sketch become one undo step.
-    const changed = d && (d.kind === "paint" ? d.changed : d.kind === "move" || d.kind === "resize" || d.kind === "pin" || d.kind === "underlay" ? d.moved : false);
+    const changed = d && (d.kind === "paint" ? d.changed : d.kind === "move" || d.kind === "resize" || d.kind === "pin" || d.kind === "underlay" || d.kind === "section" ? d.moved : false);
+    // A section only tapped (not moved) stays as it was worked out.
+    if (d?.kind === "section" && !d.moved && this.before) store.region.sketch = this.before;
     if (changed && this.before) {
       this.undoStack.push(this.before);
       if (this.undoStack.length > UNDO_LIMIT) this.undoStack.shift();
@@ -339,6 +379,64 @@ export class SketchEditor {
       this.drag = { kind: "move", placeId: place.id, startX: x, startY: y, rects: place.rects.map((r) => ({ ...r })), pins, moved: false };
     }
     this.notify(false);
+  }
+
+  /** The region map: pick a section, then drag it to move it or drag a corner to resize it. */
+  private sectionDown(s: Sketch, x: number, y: number, tol: number) {
+    this.before = cloneSketch(s);
+    const draft = draftRegionMap(s);
+    const gx = (x - draft.ox) / draft.size;
+    const gy = (y - draft.oy) / draft.size;
+    const t = tol / draft.size;
+    const rectOf = (placeId: string): SectionOverride | null => {
+      const sec = draft.sections.find((q) => q.placeId === placeId);
+      if (!sec || sec.w <= 0) return null;
+      // Keep the squares it has now, unless that's the whole rectangle (or it's a one-square entry).
+      const cells = sec.inside ? [] : sectionCells(draft, sec);
+      return { x: sec.x, y: sec.y, w: sec.w, h: sec.h, ...(cells.includes(0) ? { cells } : {}) };
+    };
+    const sel = this.selectedId ? rectOf(this.selectedId) : null;
+    if (sel && this.selectedId) {
+      const corners: Array<[number, number]> = [
+        [sel.x, sel.y],
+        [sel.x + sel.w, sel.y],
+        [sel.x + sel.w, sel.y + sel.h],
+        [sel.x, sel.y + sel.h],
+      ];
+      const c = corners.findIndex(([cx, cy]) => Math.abs(cx - gx) <= Math.max(t, 0.3) && Math.abs(cy - gy) <= Math.max(t, 0.3));
+      if (c >= 0) {
+        this.drag = { kind: "section", placeId: this.selectedId, startX: gx, startY: gy, rect: sel, corner: c as 0 | 1 | 2 | 3, moved: false };
+        return this.notify(false);
+      }
+    }
+    // Forest and cave entries (one square each) sit on top of their route's squares.
+    const sx = Math.floor(gx);
+    const sy = Math.floor(gy);
+    const inside = draft.sections.find((q) => q.inside && q.x === sx && q.y === sy);
+    const sec = inside ?? sectionAt(draft, sx, sy);
+    this.selectedId = sec?.placeId ?? null;
+    if (sec) this.drag = { kind: "section", placeId: sec.placeId, startX: gx, startY: gy, rect: rectOf(sec.placeId)!, corner: -1, moved: false };
+    this.notify(false);
+  }
+
+  toggleRegionMap() {
+    this.showRegionMap = !this.showRegionMap;
+    this.tool = this.showRegionMap ? "sections" : "select";
+    this.drag = null;
+    this.notify(false);
+  }
+
+  /** Let the region map work a section out from the sketch again. */
+  resetSection(placeId: string) {
+    this.edit((s) => {
+      delete s.regionMap.overrides[placeId];
+    });
+  }
+
+  resetAllSections() {
+    this.edit((s) => {
+      s.regionMap.overrides = {};
+    });
   }
 
   private addShape(s: Sketch, rect: SketchRect) {
@@ -485,6 +583,7 @@ export class SketchEditor {
     if (!sel) return;
     this.edit((s) => {
       s.places = s.places.filter((p) => p.id !== sel.id);
+      delete s.regionMap.overrides[sel.id];
     });
     this.selectedId = null;
     this.notify(false);

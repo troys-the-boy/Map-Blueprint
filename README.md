@@ -186,7 +186,7 @@ The sketch is a grid of 5×5-metatile squares; the stronger lines are every 50 m
 - **Forest** and **Cave:** tap a route or town where the entrance is. A forest or cave is its own map, reached by a warp, so its inside takes no room on the sketch.
   - Set its map size in the panel.
   - **Add an entrance** for a second way in (say, a forest that splits a route in two).
-  - Tick **Own region map section** for a landmark the fly map should name. Otherwise it counts as part of its route or town.
+  - Tick **Own region map section** for a landmark with its own name (see Region map below). Otherwise it counts as part of its route or town.
 - **Paint areas / Erase areas:** biomes, **lakes** and **sea**, with a brush. The edge of the sea is the coastline.
 - **River:** tap points along it, then tap the last point again (or **Finish river**).
 - **Pick and move:** tap a place to see its details. Drag it to move it (forest and cave pins on it come along). Drag a picked place's corner to resize that stretch, and drag a pin to move it.
@@ -200,6 +200,28 @@ Undo and redo work in the sketch (Ctrl+Z, Ctrl+Y). Delete removes the picked pla
 - a map too big for the game;
 - forests or caves with no entrance, or one off any route or town;
 - two places with the same name.
+
+### Region map
+
+The panel's **Region map** is a draft of the in-game Town Map / Fly map. It follows the sketch as you draw.
+
+- **The grid** is 28 × 15 squares, as in Emerald (MAP_WIDTH and MAP_HEIGHT in pokeemerald's src/region_map.c).
+- **Towns and routes** are scaled all together to fit it, and each square goes to the place that covers most of it. Every route segment shares its route's one section, and every place gets at least one square.
+- **Section names** are made from the place names: *Route 1* becomes **MAPSEC_ROUTE_1**, shown as **ROUTE 1**. The panel warns about names over 16 letters (the game's limit), or two places that would get the same section.
+- **Forests and caves:**
+  - By default a forest or cave is part of its route's section, and shows that name when you walk in.
+  - With **Own region map section** ticked, it gets its own section, so it shows its own name when you enter it, and the player's marker sits on one of its route's squares.
+  - The fly map still names the route on that square. That's how Emerald does Petalburg Woods (on a Route 104 square) and Granite Cave (on a Route 106 square).
+
+**To adjust it**, tap **Region map** in the tool strip: the grid shows over the sketch, lined up with your places.
+- Drag a section to move it. Drag a picked section's corner to resize it, which makes it a plain rectangle.
+- A section you move is marked ✋ and stays put when the sketch changes. **Follow the sketch again** in the panel undoes that.
+
+**Downloads**, in pokeemerald's own formats:
+- **Sections (.json)**: the entries for src/data/region_map/region_map_sections.json (id, name, x, y, width, height).
+- **Layout (.h)**: the grid for src/data/region_map/region_map_layout.h.
+
+Paste them over (or merge them into) yours, or enter the same values in Porymap's Region Map Editor.
 
 ### Trace your own drawing
 
@@ -543,6 +565,7 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 - **Not tested on real Apple devices.** Testing used Chromium on Windows, including an iPad-sized viewport. Please try Generate and Export on the real iPad and in desktop Safari.
 - **Some PDF pictures may not show.** Images stored in the JPEG 2000 format inside a PDF need a decoder the tool leaves out to stay small (most scans and drawings use ordinary JPEG or vector lines, which work).
 - **Bigger app file.** The PDF reader makes the single-file version about 2.4 MB (it was about 0.7 MB).
+- **The region map draft is the layout only.** The picture of the map (its tiles) is drawn by you; the sections and grid are what the tool works out. Its size is fixed at Emerald's 28 × 15.
 - **The sketch doesn't build maps yet.** Building every map from the sketch (with connections) comes later in Milestone 6.
 - **Approximate screen frame.** The frame assumes the player stands 7 cells from the left and 4 from the top of the screen. This only affects the overlay.
 - **Unconfirmed presets.** The forest, cave-floor and interior size presets are placeholders.

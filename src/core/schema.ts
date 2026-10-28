@@ -145,3 +145,18 @@ export const simpleRecord =
     }
     return { ...out };
   };
+
+/** An object used as a dictionary whose values all pass the same check (keys are ids). */
+export const recordOf =
+  <T>(item: Check<T>, maxKeys: number): Check<Record<string, T>> =>
+  (v, path) => {
+    if (typeof v !== "object" || v === null || Array.isArray(v)) fail(path, `expected a group of fields, found ${describe(v)}`);
+    const keys = Object.keys(v);
+    if (keys.length > maxKeys) fail(path, `too many fields (${keys.length}, limit ${maxKeys})`);
+    const out: Record<string, T> = Object.create(null);
+    for (const key of keys) {
+      if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(key) || FORBIDDEN_KEYS.has(key)) fail(path, `field name "${key.slice(0, 40)}" is not allowed`);
+      out[key] = item((v as Record<string, unknown>)[key], `${path}.${key}`);
+    }
+    return { ...out };
+  };

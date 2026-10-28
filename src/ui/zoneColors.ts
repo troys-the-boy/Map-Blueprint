@@ -23,5 +23,10 @@ export function zoneColor(z: Zone): string {
   return "#cccccc";
 }
 
+/** A colour for the k-th region map section: well spread round the colour wheel. */
+export function sectionColor(k: number): string {
+  return `hsl(${Math.round((k * 137.5) % 360)}, 55%, 58%)`;
+}
+
 /** Colours for the region sketch's painted areas. */
 export const SKETCH_AREA_COLORS: Record<string, string> = { ...BIOME_COLORS, lake: "#3f86e0", sea: "#2f6fd0" };

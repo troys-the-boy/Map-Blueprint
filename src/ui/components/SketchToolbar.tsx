@@ -50,6 +50,15 @@ export function SketchToolbar({ onShowPanel }: { onShowPanel: () => void }) {
       <button className="tool narrow-only" title="Show the panel: the picked place, problems, the drawing to trace and settings" aria-label="Show the sketch panel" onClick={onShowPanel}>
         <Icon name="layers" />
       </button>
+      <button
+        className={`tool ${e.showRegionMap ? "active" : ""}`}
+        title="Region map: show the in-game region map's 28 × 15 grid over the sketch. Drag a section to move it, or a corner to resize it; sections you move stay put."
+        aria-label="Show the region map"
+        aria-pressed={e.showRegionMap}
+        onClick={() => e.toggleRegionMap()}
+      >
+        <Icon name="region" />
+      </button>
       <hr />
       <button className="tool" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!e.canUndo()} onClick={() => e.undo()}>
         <Icon name="undo" />

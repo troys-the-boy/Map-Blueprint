@@ -12,7 +12,8 @@ import { checkMapSize } from "../../core/sizeRule";
 import { sketchEditor } from "../sketchEditor";
 import { store } from "../store";
 import { underlayPicture } from "../underlay";
-import { SKETCH_AREA_COLORS } from "../zoneColors";
+import { SKETCH_AREA_COLORS, sectionColor } from "../zoneColors";
+import { draftRegionMap } from "../../core/regionMap";
 
 const PLACE_COLORS = { town: "#d98b4a", route: "#c9b48a", forest: "#3f9a55", cave: "#9a8a78" } as const;
 const TAP_MAX_MS = 400;
@@ -387,6 +388,63 @@ function drawSketch(ctx: CanvasRenderingContext2D, s: Sketch, view: SketchView, 
       ctx.fillStyle = "#0f1417";
       ctx.fillText(p.kind === "forest" ? "F" : "C", x, y + 0.5);
       if (k === 0) label(p.name, x, y - 20);
+    });
+  }
+
+  // The in-game region map's grid and sections, over the sketch.
+  if (sketchEditor.showRegionMap) {
+    const d = draftRegionMap(s);
+    const sq = d.size * scale;
+    const GX = (gx: number) => X(d.ox + gx * d.size);
+    const GY = (gy: number) => Y(d.oy + gy * d.size);
+    ctx.fillStyle = "rgba(10,14,16,0.35)";
+    ctx.fillRect(GX(0), GY(0), d.width * sq, d.height * sq);
+    for (let gy = 0; gy < d.height; gy++)
+      for (let gx = 0; gx < d.width; gx++) {
+        const k = d.layout[gy * d.width + gx];
+        if (k < 0) continue;
+        ctx.globalAlpha = d.sections[k].placeId === selected ? 0.75 : 0.5;
+        ctx.fillStyle = sectionColor(k);
+        ctx.fillRect(GX(gx) + 1, GY(gy) + 1, sq - 2, sq - 2);
+      }
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = "rgba(255,255,255,0.25)";
+    ctx.lineWidth = 1;
+    for (let gx = 0; gx <= d.width; gx++) {
+      ctx.beginPath();
+      ctx.moveTo(GX(gx), GY(0));
+      ctx.lineTo(GX(gx), GY(d.height));
+      ctx.stroke();
+    }
+    for (let gy = 0; gy <= d.height; gy++) {
+      ctx.beginPath();
+      ctx.moveTo(GX(0), GY(gy));
+      ctx.lineTo(GX(d.width), GY(gy));
+      ctx.stroke();
+    }
+    ctx.strokeStyle = "#e6b450";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(GX(0), GY(0), d.width * sq, d.height * sq);
+    // Entries: the rectangle the game uses for each section, with its name.
+    d.sections.forEach((sec, k) => {
+      if (!sec.w) return;
+      const picked = sec.placeId === selected;
+      ctx.strokeStyle = picked ? "#9fd0bd" : sectionColor(k);
+      ctx.lineWidth = picked ? 3 : 2;
+      ctx.setLineDash(sec.inside ? [4, 3] : []);
+      ctx.strokeRect(GX(sec.x), GY(sec.y), sec.w * sq, sec.h * sq);
+      ctx.setLineDash([]);
+      label(sec.name + (sec.manual ? " ✋" : ""), GX(sec.x + sec.w / 2), GY(sec.y + sec.h / 2) + (sec.inside ? 12 : 0), picked ? "#9fd0bd" : "#f2f5f6");
+      if (picked && sketchEditor.tool === "sections") {
+        ctx.fillStyle = "#9fd0bd";
+        for (const [cx, cy] of [
+          [sec.x, sec.y],
+          [sec.x + sec.w, sec.y],
+          [sec.x + sec.w, sec.y + sec.h],
+          [sec.x, sec.y + sec.h],
+        ])
+          ctx.fillRect(GX(cx) - 6, GY(cy) - 6, 12, 12);
+      }
     });
   }
 
