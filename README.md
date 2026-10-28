@@ -4,7 +4,7 @@ A planning tool for a pokeemerald ROM hack. You lay out maps here as colored ter
 
 **Status:** Milestones 1–4 are done:
 
-- **Generate routes** from a seed, with settings for paths, grass, water, ledges, HM-gated areas, trainers and items, and a travel direction.
+- **Generate routes** from a seed, with settings for paths, grass, water, ledges, HM-gated areas, trainers and items, and a Start and Finish entrance that set which way the player travels.
 - **Edit by hand:** smart strokes, selections, zones, every kind of Porymap event (with all their fields), wild encounter tables.
 - **Check every map** for Gen 3 problems, such as an entrance you can't reach or a ledge trap.
 - **Export a rebuild packet:** everything you need beside Porymap to rebuild a map by hand, with a step-by-step checklist.
@@ -198,7 +198,7 @@ Make a map of type **Forest** (sizes S 40×40, M 50×50, L 60×60), then press *
 - **Clearings:** open spaces where three or more paths meet.
 - **Guaranteed hidden items:** always placed, at quiet dead ends first.
 - **Path width:** 1–3 cells (it wanders a little either side).
-- **Travel direction:** which way the player first walks through. Trainers face the player coming from the start, the sign stands at the start, and **Ledge shortcuts** jump from deep in the maze back toward the start, so coming back you don't have to find your way through again. Gen 3 has no ledges you can jump north, so a forest travelled north to south gets none.
+- **Start and Finish** (under Entrances): which way the player first walks through. Trainers face the player coming from the Start, the sign stands at the Start, and **Ledge shortcuts** jump from deep in the maze back toward the Start, so coming back you don't have to find your way through again. Gen 3 has no ledges you can jump north, so a forest whose Start is to the north gets none.
 
 The deepest dead ends get item balls (two more than **Extra items**), trainers watch the way between the entrances, long grass grows along the paths (**Grass** sets how much), and there's a sign at the entrance. The biome sets the look: long grass in rainforest and wetland woods (wetland clearings hold a little pool and mud), tall grass and lots of flowers in meadow woods, snowy grass and outcrops of rock in alpine ones. Big clearings sometimes have a clump of trees standing in them. Forests follow your zones too, and their paths cross rivers and water you painted on bridges.
 
@@ -247,17 +247,22 @@ Trainers watch the main way between the exits, the far corners get items and hid
 - **River:** a river runs the length of the route. The path follows the banks and crosses on bridges, and there are surf entrances on the river at both ends.
 - **Open water:** sea or lake with islands. It's a surfing route with swimmers on the water and items on the islands, and the checks assume the player has Surf.
 
-**Travel direction** (Basic → Travel direction) says which way the player first walks the route: South → North, North → South, West → East or East → West. Players see a route going forward first and come back through it later, so the map is shaped for that:
+**Start and Finish** (Entrances → the last box on each entrance) say which way the player first walks the route: mark the entrance they arrive at **Start** and the one they leave by **Finish**. Players see a route going forward first and come back through it later, so the map is shaped for that:
 
 - **Ledge rows jump back toward the start.** Walking forward, the path winds round each ledge, past the trainers; coming back, you jump down as a shortcut.
 - **A ledge pocket:** a little room in the trees with a ledge in and a ledge out and an item inside. Going forward you can see it over the ledge but can't climb in; on the way back you drop in, grab it and drop out onto the path.
-- **Trainers** mostly face the player coming from the start, wait on the way round ledge rows, and none stand within 10 cells of the start entrance.
-- **Hills** are lower near the start and rise toward the end.
-- **The route sign** stands at the start entrance.
+- **Trainers** mostly face the player coming from the Start, wait on the way round ledge rows, and none stand within 10 cells of the Start's edge.
+- **Hills** are lower near the Start and rise toward the Finish.
+- **The route sign** stands at the Start.
 
-Gen 3 has no ledges you can jump north. So on a **North → South** route the ledges jump forward instead: there are half as many ledge rows, and the ledge pocket is a reward on the way forward.
+Gen 3 has no ledges you can jump north. So when the **Start is on the north edge** the ledges jump forward, toward the Finish, instead: there are half as many ledge rows, and the ledge pocket is a reward on the way forward.
 
-The route runs the way you pick, even across a map's short side, and automatic entrances go at the start and end edges. With entrances you placed yourself, there must be one on each of those two edges, or the direction is ignored (the panel says so). "Either way" (the default) makes routes exactly as before. Only straight routes for now: bends such as West → South come later.
+- **Bends work too.** Put the Start and Finish on edges that meet at a corner (say Start on the west edge, Finish on the north) and the route bends. Ledge rows then run across the leg nearer the Start.
+- **The Start and Finish must be on different edges.** Marking only one of them, or both on the same edge, gives no direction (the Entrances group says so).
+- **Marking another entrance Start** moves the mark there; the same goes for Finish.
+- **New maps have no direction.** Generate once to get automatic entrances, then mark the Start and Finish and Generate again. Without them, routes come out exactly as before.
+- **Towns ignore Start and Finish**, and caves have no edge entrances.
+- **Older projects** that used the Travel direction setting are converted when opened: the entrances on its start and end edges are marked Start and Finish. A map whose entrances were still automatic gets them marked on its next Generate.
 
 **Elevation** (Basic → Elevation, 0–100) makes the route hilly, like Hoenn's. Stretches of ground along the sides of the route rise in terraces toward the map edge, each with a cliff face, stairs up, and ledges you jump down. A path leads to every flight of stairs. It works on every route size, even the smallest.
 

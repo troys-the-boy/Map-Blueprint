@@ -8,15 +8,14 @@ import { canGenerate } from "../../core/generate";
 import { DEFAULT_ROUTE_PARAMS, PARAM_RANGES, POCKET_HMS, readRouteParams, resolveBorder, resolveLayout, writeRouteParams } from "../../core/generators/params";
 import type { Layout, LayoutSetting } from "../../core/generators/params";
 import type { RouteParams } from "../../core/generators/params";
-import { TRAVEL_LABELS, TRAVEL_SETTINGS, travelOf, travelVertical } from "../../core/generators/travel";
+import { backDir, travelFromOpenings, travelOf, travelProblem } from "../../core/generators/travel";
 import { BUILDING_TYPES, TOWN_LAYOUTS, TOWN_LAYOUT_LABELS, TOWN_RANGES, buildingList, readTownParams } from "../../core/generators/townParams";
 import type { TownLayout } from "../../core/generators/townParams";
 import { FOREST_RANGES, readForestParams } from "../../core/generators/forestParams";
 import { CAVE_RANGES, readCaveParams } from "../../core/generators/caveParams";
 import { cavePlan, floorName, floorOf } from "../../core/caves";
-import type { TravelSetting } from "../../core/generators/travel";
 import { BIOMES, EDGES } from "../../core/model";
-import type { Biome, Edge, Opening, OpeningKind } from "../../core/model";
+import type { Biome, Edge, Opening, OpeningKind, OpeningRole } from "../../core/model";
 import { MAX_SEED } from "../../core/rng";
 import { useStore } from "../store";
 import { NumberField } from "./NumberField";
@@ -91,6 +90,7 @@ function ForestSettings() {
   const map = s.currentMap!;
   const f = readForestParams(map.params);
   const p = readRouteParams(map.params);
+  const travel = travelFromOpenings(map.openings);
   const set = (patch: Record<string, string | number | boolean>) => s.setParams(patch);
   return (
     <details open>
@@ -113,23 +113,14 @@ function ForestSettings() {
         <span>Path width</span>
         <NumberField min={1} max={3} value={Math.min(3, p.pathWidthMin)} onChange={(v) => set({ pathWidthMin: v, pathWidthMax: Math.max(v, p.pathWidthMax) })} />
       </label>
-      <label className="field" title="Which way the player first walks through the forest. Trainers face the player coming from the start, the sign stands at the start, and ledges jump from deep in the maze back toward the start, a shortcut home.">
-        <span>Travel direction</span>
-        <select value={p.travel} onChange={(e) => set({ travel: e.target.value })}>
-          {TRAVEL_SETTINGS.map((v) => (
-            <option key={v} value={v}>
-              {TRAVEL_LABELS[v]}
-            </option>
-          ))}
-        </select>
-      </label>
-      {p.travel !== "auto" && (
+      {!travel && <p className="hint">Mark a Start and a Finish under Entrances for ledge shortcuts back toward the start.</p>}
+      {travel && (
         <label className="field inline" title="Ledges from deep in the maze back toward the start (Gen 3 has no north-facing ledges, so a forest travelled north to south gets none).">
           <span>Ledge shortcuts</span>
           <NumberField min={0} max={4} value={p.ledges} onChange={(v) => set({ ledges: v })} />
         </label>
       )}
-      {p.travel === "north_south" && <p className="hint">No ledge shortcuts going north to south: Gen 3 has no ledges you can jump north.</p>}
+      {travel && backDir(travel) === "n" && <p className="hint">No ledge shortcuts when the Start is to the north: Gen 3 has no ledges you can jump north.</p>}
       <p className="hint">The biome sets the look: long grass in rainforest and wetland woods (with pools in wetland clearings), tall grass and lots of flowers in meadow woods, rock in alpine ones.</p>
     </details>
   );
@@ -241,23 +232,18 @@ export function GeneratePanel() {
     if (next !== layout && map.openings.length) s.setOpenings([]);
   };
   const set = (patch: Partial<Record<keyof RouteParams, string | number | boolean>>) => s.setParams(patch as Record<string, string | number | boolean>);
-  /** Change the travel direction. Entrances go back to automatic if the route now runs the other way. */
-  const changeTravel = (setting: TravelSetting) => {
-    const next = travelOf(setting);
-    set({ travel: setting });
-    if (next && map.openings.length && !map.openings.some((o) => o.edge === next.from || o.edge === next.to)) s.setOpenings([]);
-  };
-  const travel = travelOf(p.travel);
-  const walkEdges = new Set(map.openings.map((o) => o.edge));
-  const travelHint = !travel
-    ? null
-    : map.openings.length && (!walkEdges.has(travel.from) || !walkEdges.has(travel.to))
-      ? `There's no entrance on the ${!walkEdges.has(travel.from) ? travel.from : travel.to} edge, so the direction is ignored. Add one under Entrances, or remove all entrances to have them placed automatically.`
-      : travel.from === "north"
-        ? "Gen 3 has no ledges you can jump north, so going north to south the ledges jump forward instead: fewer ledge rows, and the ledge pocket is a reward on the way forward."
-        : !map.openings.length && travelVertical(travel) !== map.height >= map.width
-          ? `The route will run ${travelVertical(travel) ? "north–south, across the map's short side" : "west–east, across the map's short side"}.`
-          : null;
+  const travel = travelFromOpenings(map.openings);
+  const oldTravel = !map.openings.length ? travelOf(p.travel) : null;
+  const problem = travelProblem(map.openings);
+  const travelHint = problem
+    ? { bad: true, text: problem }
+    : travel && backDir(travel) === "n"
+      ? { bad: false, text: "The Start is to the north. Gen 3 has no ledges you can jump north, so the ledges jump forward toward the Finish instead: fewer ledge rows, and the ledge pocket is a reward on the way forward." }
+      : travel
+        ? { bad: false, text: `Travelled from the ${travel.from} edge to the ${travel.to}. Ledges jump back toward the Start, trainers face the player coming from it, the hills rise toward the Finish, and the sign stands at the Start.` }
+        : oldTravel
+          ? { bad: false, text: `Generate will mark the Start (${oldTravel.from} edge) and Finish (${oldTravel.to} edge) on the entrances it picks.` }
+          : { bad: false, text: "No direction yet. Mark one entrance Start and one Finish: ledges then jump back toward the Start, trainers face the player coming from it, the hills rise toward the Finish, and the sign stands at the Start." };
   const supported = canGenerate(map);
   const town = map.mapType === "town";
   const forest = map.mapType === "forest";
@@ -297,6 +283,15 @@ export function GeneratePanel() {
 
   const setOpening = (k: number, patch: Partial<Opening>) => s.setOpenings(map.openings.map((o, i) => (i === k ? { ...o, ...patch } : o)));
   const edgeLength = (edge: Edge) => (edge === "north" || edge === "south" ? map.width : map.height);
+  /** Mark an entrance Start or Finish (only one of each: marking another moves it). */
+  const setRole = (k: number, role: OpeningRole | "") =>
+    s.setOpenings(
+      map.openings.map((o, i) => {
+        const { role: old, ...rest } = o;
+        if (i === k) return role ? { ...rest, role } : rest;
+        return role && old === role ? rest : o;
+      }),
+    );
 
   return (
     <div className="generate-panel">
@@ -407,20 +402,6 @@ export function GeneratePanel() {
               </select>
             </label>
             {layout === "water" && <p className="hint">Open-water routes are crossed by surfing, so the checks assume the player has Surf.</p>}
-            <label
-              className="field"
-              title="Which way the player first walks this route. Ledges then jump back toward the start (the winding path is the way forward), trainers face the player coming from the start, the hills rise toward the end, the sign stands at the start, and a ledge pocket holds an item you reach on the way back."
-            >
-              <span>Travel direction</span>
-              <select value={p.travel} onChange={(e) => changeTravel(e.target.value as TravelSetting)}>
-                {TRAVEL_SETTINGS.map((t) => (
-                  <option key={t} value={t}>
-                    {TRAVEL_LABELS[t]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {travelHint && <p className="hint">{travelHint}</p>}
             {num("elevation", "Elevation", "How hilly the route is. Hillsides rise along the sides of the route, with cliffs, stairs up and ledges down: higher values give more of them and more levels (up to 3, or 4 on alpine routes). Also adds ledge rows. 0 = flat.")}
             {num("snow", "Snow", "How much of the route is under snow, highest ground first. 0 = none, 100 = snowed in. Grass becomes snowy grass, ponds freeze into slippery ice, some trees become snowdrifts.")}
             {num("winding", "Path winding", "0 = straight, 100 = wanders a lot.")}
@@ -434,6 +415,7 @@ export function GeneratePanel() {
         <details>
           <summary title="Where the player enters and leaves the map">Entrances ({map.openings.length || "auto"})</summary>
           {map.openings.length === 0 && <p className="hint">Picked automatically on the first Generate (at each short end, plus surf entrances on the water for coastal and river layouts). You can then move them here.</p>}
+          {!town && <p className={travelHint.bad ? "hint warn" : "hint"}>{travelHint.text}</p>}
           {map.openings.some((o) => o.kind === "surf") && !p.availableHms.includes("surf") && layout !== "water" && (
             <p className="hint">Surf entrances aren't checked until Surf is ticked under Gameplay → Player has.</p>
           )}
@@ -458,6 +440,13 @@ export function GeneratePanel() {
                 wide
                 <NumberField min={1} max={Math.min(8, edgeLength(o.edge) - o.start)} value={o.width} onChange={(v) => setOpening(k, { width: v })} />
               </label>
+              {!town && (
+                <select value={o.role ?? ""} title="Start = where the player first arrives. Finish = where they leave on the first trip." aria-label="Start or Finish" onChange={(e) => setRole(k, e.target.value as OpeningRole | "")}>
+                  <option value="">–</option>
+                  <option value="start">Start</option>
+                  <option value="finish">Finish</option>
+                </select>
+              )}
               <button className="icon-button" title="Remove this entrance" aria-label="Remove entrance" onClick={() => s.setOpenings(map.openings.filter((_, i) => i !== k))}>
                 ✕
               </button>

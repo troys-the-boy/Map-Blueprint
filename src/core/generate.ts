@@ -36,6 +36,7 @@ import { addForestLedges, addGuaranteedHidden, buildForest } from "./generators/
 import { readForestParams } from "./generators/forestParams";
 import { buildCave } from "./generators/cave";
 import { readCaveParams } from "./generators/caveParams";
+import { markTravel } from "./generators/travel";
 
 /** Version of the generators. Bumped when the same seed starts giving different maps. */
 export const GENERATOR_VERSION = 6;
@@ -265,7 +266,8 @@ export function generateRoute(map: MapBlueprint, validate: Omit<ValidateOptions,
     ? map.openings
     : map.openings.length
     ? map.openings
-    : shiftOpeningsOutOfZones(map, layoutOpenings(geometry, params, layout, new Rng(deriveSeed(map.seed, "openings"))));
+    : // A map from before file format 10 may still have the old travel direction: mark its Start and Finish.
+      markTravel(shiftOpeningsOutOfZones(map, layoutOpenings(geometry, params, layout, new Rng(deriveSeed(map.seed, "openings")))), params.travel);
   const input: GenInput = {
     width: map.width,
     height: map.height,
@@ -308,7 +310,9 @@ export function applyResult(map: MapBlueprint, result: GenerateResult): void {
   map.warps = result.warps;
   map.openings = result.openings;
   map.layers.zones = result.zones;
-  map.params = { ...map.params, generatorVersion: GENERATOR_VERSION };
+  // The old travel direction setting is now on the entrances (Start and Finish).
+  const { travel: _old, ...rest } = map.params;
+  map.params = { ...rest, generatorVersion: GENERATOR_VERSION };
   // The border block shows beyond the map edges: water for sea routes, the wall style otherwise.
   const p = readRouteParams(map.params);
   const layout = map.mapType === "town" ? (readTownParams(map.params).townLayout === "waterfront" ? "coastal" : "land") : resolveLayout(p, map.biome);

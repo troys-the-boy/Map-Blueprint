@@ -14,7 +14,7 @@ import type { TownBuilding } from "./town";
 import { BIOMES } from "../model";
 import type { Layout, RouteParams } from "./params";
 import type { Travel } from "./travel";
-import { travelOf, travelVertical } from "./travel";
+import { travelFromOpenings } from "./travel";
 import { IS_WALKABLE, IS_WALL, T } from "../grid";
 import { TERRAIN_TYPES } from "../terrain";
 import { ELEVATION_LEVELS } from "../terrain";
@@ -185,10 +185,8 @@ export class GenContext {
     const ns = o.filter((x) => x.edge === "north" || x.edge === "south").length;
     const ew = o.length - ns;
     this.vertical = ns === ew ? this.height >= this.width : ns > ew;
-    const travel = travelOf(input.params.travel);
-    // A direction only counts if it runs the same way as the route, with an entrance at each end.
-    const ends = travel && o.some((x) => x.edge === travel.from) && o.some((x) => x.edge === travel.to);
-    this.travel = travel && ends && travelVertical(travel) === this.vertical ? travel : null;
+    // From the entrances marked Start and Finish. Towns and caves have no travel direction.
+    this.travel = input.mapType === "town" || input.mapType === "cave" ? null : travelFromOpenings(o);
   }
 
   /** The biome of a cell. */

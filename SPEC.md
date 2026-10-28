@@ -325,7 +325,7 @@ Validation runs after every generate and edit. Results show as clickable markers
 | 60 | 122 |
 | Square | 86 × 86 |
 
-Routes longer than a **target segment length** (user setting, default 80 metatiles) or over the limit are split automatically into connected segments. Splits go at natural seams such as narrow points, bridges or clearings, never through a building, trainer sight line or HM pocket.
+Routes longer than a **target segment length** (user setting, default 90 metatiles; changed from 80 at the user's request in Milestone 6) or over the limit are split automatically into connected segments. Splits go at natural seams such as narrow points, bridges or clearings, never through a building, trainer sight line or HM pocket.
 
 **Warnings**
 
@@ -465,7 +465,7 @@ Build in this order. Stop after each milestone, show the user how to run it, and
 
 **Assumptions to confirm with the user**
 
-- Map size presets (all pass the size rule): route segment S/M/L = 20×40, 30×60, 40×80 (vertical; swap for horizontal), with longer routes built as chained segments; town about 30×30; cave floor about 40×40. Target segment length defaults to 80.
+- Map size presets (all pass the size rule): route segment S/M/L = 20×40, 30×60, 40×80 (vertical; swap for horizontal), with longer routes built as chained segments; town about 30×30; cave floor about 40×40. Target segment length defaults to 90.
 - Default minimum path width is 2 cells; default tree border is 2–3 cells thick.
 - No Gen 4+ mechanics (no Rock Climb, no Defog); vanilla Emerald HMs only.
 - The encounter species pool is entered by the user. The tool ships no Pokémon data beyond example placeholders.

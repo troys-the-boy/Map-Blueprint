@@ -4,7 +4,7 @@ This document defines the tool's file formats. The terrain vocabulary and the ti
 
 | File | Identifier (`format`) | Version field | Current |
 | --- | --- | --- | --- |
-| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 9 |
+| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 10 |
 | Terrain vocabulary (`profiles/terrain.json`) | `gen3-terrain-vocabulary` | `formatVersion` | 1 |
 | Terrain palette (`profiles/palettes/*.json`) | `gen3-terrain-palette` | `formatVersion` | 1 |
 | Tileset profile (`profiles/tilesets/*.json`) | `gen3-tileset-profile` | `formatVersion` | 1 (draft) |
@@ -13,7 +13,7 @@ Coordinates are in **metatiles** (16×16 px). The origin (0, 0) is the top-left 
 
 ---
 
-## Project file, schemaVersion 9
+## Project file, schemaVersion 10
 
 A project is a single JSON file holding one region and all of its maps. The app treats it as untrusted data when opening it:
 
@@ -50,7 +50,7 @@ When the format changes, `schemaVersion` goes up and a migration in `src/core/pr
     "settings": {
       "defaultBiome": "temperate_rainforest",
       "levelCurve": { "start": 3, "end": 60 },
-      "targetSegmentLength": 80,
+      "targetSegmentLength": 90,
       "engineLimits": {               // vanilla Emerald values; raise them if your hack does
         "maxMapDataSize": 10240,      // include/fieldmap.h MAX_MAP_DATA_SIZE
         "mapOffsetW": 15,             // include/fieldmap.h MAP_OFFSET_W
@@ -98,7 +98,7 @@ The region's connection graph isn't stored separately. It's derived from each ma
                   "fields": { "script": "Route1_EventScript_Sign" } } ],
   "warps": [ { "id": "w0", "kind": "cave_mouth", "x": 10, "y": 2, "elevation": "ground",
                "destMap": "map_5", "destWarpId": 0 } ],
-  "openings": [ { "id": "o1", "edge": "north", "start": 8, "width": 3, "kind": "walk" } ],   // edge entrances
+  "openings": [ { "id": "o1", "edge": "north", "start": 8, "width": 3, "kind": "walk", "role": "start" } ],   // edge entrances; "role" (from version 10) is optional: "start" or "finish"
   "connections": [ { "direction": "up", "map": "map_2", "offset": 0 } ],
   "header": { /* map.json header, below */ },
   "layout": { "borderBlock": ["tree", "tree", "tree", "tree"], "primaryTileset": "", "secondaryTileset": "" },
@@ -183,7 +183,7 @@ Every value is optional. Missing or out-of-range values fall back to the default
 | Key | Default | Range / values |
 | --- | --- | --- |
 | `layout` | `auto` | `auto` (coastal for the coastal biome, else land), `land`, `coastal`, `river`, `water` |
-| `travel` | `auto` | `auto` (no direction), `south_north`, `north_south`, `west_east`, `east_west`: the start and end edges, as `<from>_<to>` (bends may be added later in the same form) |
+| `travel` | `auto` | Before version 10 only: `auto`, `south_north`, `north_south`, `west_east`, `east_west`. Opening a version 9 file moves it onto the entrances as `role` (`start` / `finish`); a map whose entrances are still automatic keeps it until its next Generate, which marks the entrances and removes it |
 | `elevation` | 0.35 | 0–1 (how much hillside, and how many levels: up to 3, or 4 on alpine routes; alpine routes use 0.3 + 0.7 × the value, so they are always hilly) |
 | `snow` | 0 | 0–1 (share of the route under snow, highest ground first) |
 | `grassShortcut` | true | true / false (the "two ways through" grass route) |

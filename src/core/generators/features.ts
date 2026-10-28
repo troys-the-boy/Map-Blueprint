@@ -15,7 +15,7 @@ import type { GenContext } from "./context";
 import { LEVEL, Role } from "./context";
 import { effectiveElevation } from "./params";
 import type { PocketHm } from "./params";
-import { backDir } from "./travel";
+import { backDir, ledgeDir } from "./travel";
 
 /**
  * Ledge rows, like Hoenn's Routes 101–104: a long ledge across the route with a
@@ -33,16 +33,18 @@ import { backDir } from "./travel";
  * setting), as many as fit along the route.
  *
  * With a travel direction (see travel.ts) the ledges jump back toward the start,
- * so the way forward is the winding path. A route travelled north to south
- * can't do that (no north-facing ledges): it gets half as many rows, jumping
- * forward.
+ * so the way forward is the winding path, and the rows run across that direction
+ * (on a bend, across the leg nearer the start). A route whose start is to the
+ * north can't do that (no north-facing ledges): it gets half as many rows,
+ * jumping forward toward the finish.
  */
 export function addLedgeRows(ctx: GenContext): void {
   if (ctx.layout === "water") return;
   const amount = effectiveElevation(ctx.params, ctx.input.biome);
   let wanted = ctx.params.ledges + Math.round(amount * 2);
-  if (ctx.travel?.from === "north") wanted = Math.ceil(wanted / 2);
-  const alongLength = ctx.vertical ? ctx.height : ctx.width;
+  if (ctx.travel && backDir(ctx.travel) === "n") wanted = Math.ceil(wanted / 2);
+  const rowsVertical = ledgeRowsVertical(ctx);
+  const alongLength = rowsVertical ? ctx.height : ctx.width;
   // Keep clear of the entrances at the ends, and space the rows out.
   const lines: number[] = [];
   for (let a = 9; a < alongLength - 9; a++) lines.push(a);
@@ -54,18 +56,24 @@ export function addLedgeRows(ctx: GenContext): void {
   }
 }
 
+/** True when ledge rows run across a north–south route (they jump south). */
+function ledgeRowsVertical(ctx: GenContext): boolean {
+  return ctx.travel ? ledgeDir(ctx.travel) === "s" : ctx.vertical;
+}
+
 /** Roles a ledge row may not cross: they must fall in the gap instead. */
 const KEEP_OPEN = new Set<number>([Role.Opening, Role.Stairs, Role.Bridge, Role.Pocket, Role.Branch, Role.Corridor]);
 /** Roles a detour may not pass through. */
 const NO_DETOUR = new Set<number>([Role.Pocket, Role.Sea, Role.Cliff, Role.Stairs, Role.Corridor, Role.Opening, Role.Border]);
 
 function tryLedgeRow(ctx: GenContext, along: number): boolean {
-  const crossLength = ctx.vertical ? ctx.width : ctx.height;
+  const vertical = ledgeRowsVertical(ctx);
+  const crossLength = vertical ? ctx.width : ctx.height;
   const bt = ctx.params.borderThickness;
   const back = ctx.travel ? backDir(ctx.travel) : null;
-  const dir: "s" | "e" | "w" = ctx.vertical ? "s" : back === "e" || back === "w" ? back : ctx.rng.chance(0.5) ? "e" : "w";
+  const dir: "s" | "e" | "w" = ctx.travel ? ledgeDir(ctx.travel) : vertical ? "s" : ctx.rng.chance(0.5) ? "e" : "w";
   const jump = DIRS.find((d) => d.dir === dir)!;
-  const at = (c: number) => (ctx.vertical ? ctx.idx(c, along) : ctx.idx(along, c));
+  const at = (c: number) => (vertical ? ctx.idx(c, along) : ctx.idx(along, c));
   // Sort the cells across the route: blocked (trees, rock, water, raised ground) stay
   // as they are; open ground becomes ledge; a few kinds of cell must stay open.
   const cells: number[] = [];
@@ -169,15 +177,14 @@ function tryLedgeRow(ctx: GenContext, along: number): boolean {
  *
  * The ledges jump back toward the start, so walking forward the player sees the
  * item over the ledge but can't climb in; on the way back they drop in and out.
- * On a north-to-south route the ledges face south (forward), so it's a reward on
- * the way forward instead. Ledges are one-way in Gen 3: a jump moves the player
+ * When the start is to the north the ledges face forward (toward the finish), so
+ * it's a reward on the way forward instead. Ledges are one-way in Gen 3: a jump moves the player
  * two cells, from A over the ledge to the room (see GetLedgeJumpDirection and
  * the jump in src/field_player_avatar.c).
  */
 export function addLedgePockets(ctx: GenContext): void {
   if (!ctx.travel || ctx.layout === "water") return;
-  const back = backDir(ctx.travel);
-  const dir = back === "n" ? "s" : ctx.vertical ? "s" : back;
+  const dir = ledgeDir(ctx.travel);
   const d = DIRS.find((x) => x.dir === dir)!;
   const c = { dx: d.dy, dy: d.dx };
   const ledge = dir === "s" ? T.ledgeS : dir === "e" ? T.ledgeE : T.ledgeW;

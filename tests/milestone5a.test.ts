@@ -123,7 +123,7 @@ describe("towns", () => {
     const file = JSON.parse(serializeProject(region, "test"));
     file.schemaVersion = 8;
     delete file.region.maps[0].warps[0].locked;
-    expect(CURRENT_SCHEMA_VERSION).toBe(9);
+    expect(CURRENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(9);
     expect(parseProject(JSON.stringify(file)).maps[0].warps[0].locked).toBe(true);
   });
 });

@@ -34,11 +34,13 @@ import {
   EDGES,
   ENTITY_KINDS,
   OPENING_KINDS,
+  OPENING_ROLES,
   MAP_TYPES,
   WARP_KINDS,
   makeGrid,
 } from "./model";
 import { MAX_SEED } from "./rng";
+import { markTravel } from "./generators/travel";
 import type { Check } from "./schema";
 import {
   FileFormatError,
@@ -57,7 +59,7 @@ import {
 import { ELEVATION_LEVELS, TERRAIN_TYPES, terrainIndex } from "./terrain";
 
 export const FILE_FORMAT_ID = "gen3-map-blueprint-project";
-export const CURRENT_SCHEMA_VERSION = 9;
+export const CURRENT_SCHEMA_VERSION = 10;
 
 /** Safety limits for opened files. Anything bigger is rejected. */
 export const FILE_LIMITS = {
@@ -256,7 +258,8 @@ const openingCheck: Check<Opening> = object({
   start: num(0, FILE_LIMITS.maxMapSide - 1),
   width: num(1, FILE_LIMITS.maxMapSide),
   kind: oneOf(OPENING_KINDS),
-});
+  role: oneOf(OPENING_ROLES),
+}, ["role"]);
 
 const connectionCheck: Check<Connection> = object({
   direction: oneOf(CONNECTION_DIRECTIONS),
@@ -535,6 +538,28 @@ export const MIGRATIONS: Record<number, Migration> = {
       return { ...(m as object), warps: Array.isArray(warps) ? warps.map((w) => (w && typeof w === "object" && !Array.isArray(w) ? { ...(w as object), locked: true } : w)) : warps };
     };
     return { ...file, schemaVersion: 9, region: region && maps ? { ...region, maps: maps.map(lockWarps) } : region };
+  },
+  // v9 → v10 (Milestone 6, part A): the travel direction becomes a Start and a Finish
+  // entrance ("role" on an opening). A map with entrances and a direction gets them marked,
+  // and loses the old "travel" setting. A map with automatic entrances keeps "travel" until
+  // its next Generate, which marks the entrances it places. The target segment length
+  // default moves from 80 to 90.
+  9: (file) => {
+    const region = file.region as Record<string, unknown> | null;
+    const maps = region && Array.isArray(region.maps) ? (region.maps as unknown[]) : null;
+    const upgradeMap = (m: unknown) => {
+      if (!m || typeof m !== "object" || Array.isArray(m)) return m;
+      const rec = m as { openings?: unknown; params?: unknown };
+      const params = rec.params && typeof rec.params === "object" && !Array.isArray(rec.params) ? (rec.params as Record<string, unknown>) : null;
+      if (!params || typeof params.travel !== "string" || !Array.isArray(rec.openings) || !rec.openings.length) return m;
+      const openings = markTravel(rec.openings as Opening[], params.travel);
+      const { travel: _old, ...rest } = params;
+      return { ...(m as object), openings, params: rest };
+    };
+    let settings = region?.settings;
+    if (settings && typeof settings === "object" && !Array.isArray(settings) && (settings as Record<string, unknown>).targetSegmentLength === 80)
+      settings = { ...(settings as object), targetSegmentLength: 90 };
+    return { ...file, schemaVersion: 10, region: region && maps ? { ...region, settings, maps: maps.map(upgradeMap) } : region };
   },
 };
 

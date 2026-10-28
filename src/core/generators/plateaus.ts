@@ -390,8 +390,9 @@ export function buildPlateau(ctx: GenContext, cells: number[], level: number, av
   }
 
   // Ledges: runs of the south face (sometimes east or west) become one-way drops.
-  // On a route travelled east or west, no drop faces the way forward (they're for coming back).
-  const back = ctx.travel && !ctx.vertical ? backDir(ctx.travel) : null;
+  // When the start is to the east or west, no side drop faces the way forward (they're for coming back).
+  const startSide = ctx.travel ? backDir(ctx.travel) : null;
+  const back = startSide === "e" || startSide === "w" ? startSide : null;
   const ledgeFor: Record<string, number> = { s: T.ledgeS, e: T.ledgeE, w: T.ledgeW };
   for (const dir of ["s", "e", "w"] as const) {
     if (dir !== "s" && !ctx.rng.chance(0.7)) continue;

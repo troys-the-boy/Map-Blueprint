@@ -106,6 +106,10 @@ export type Edge = (typeof EDGES)[number];
 export const OPENING_KINDS = ["walk", "surf"] as const;
 export type OpeningKind = (typeof OPENING_KINDS)[number];
 
+/** Which entrance the player first arrives at ("start") and which they leave by ("finish"). */
+export const OPENING_ROLES = ["start", "finish"] as const;
+export type OpeningRole = (typeof OPENING_ROLES)[number];
+
 /**
  * A gap in the map's edge where the player moves onto a neighbouring map.
  * `start` is the first cell along the edge (x for north/south, y for east/west).
@@ -116,6 +120,8 @@ export interface Opening {
   start: number;
   width: number;
   kind: OpeningKind;
+  /** Optional: this is the route's Start or Finish (see generators/travel.ts). */
+  role?: OpeningRole;
 }
 
 /** Connection directions, named as in pokeemerald map.json ("up", "down", …). */
@@ -350,7 +356,7 @@ export function newRegion(name: string, seed: Seed): Region {
     settings: {
       defaultBiome: "temperate_rainforest",
       levelCurve: { start: 3, end: 60 },
-      targetSegmentLength: 80,
+      targetSegmentLength: 90,
       engineLimits: { ...DEFAULT_ENGINE_LIMITS },
     },
     nextId: 1,
