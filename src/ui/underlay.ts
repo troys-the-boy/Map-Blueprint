@@ -18,9 +18,6 @@ let picture: UnderlayPicture | null = null;
 let failed: string | null = null;
 let loading: Promise<void> | null = null;
 
-/** Draws a PDF page; set by the PDF reader module once it's loaded (see pdfUnderlay.ts). */
-export const pdfRenderer: { render: ((data: string, page: number) => Promise<{ canvas: HTMLCanvasElement; width: number; height: number; scale: number; pages: number }>) | null } = { render: null };
-
 /** How many pages the current PDF has (0 until it's read). */
 export let pdfPageCount = 0;
 
@@ -65,8 +62,9 @@ async function load(u: SketchUnderlay): Promise<UnderlayPicture> {
     await img.decode();
     return { source: img, width: img.naturalWidth, height: img.naturalHeight, pixelsPerUnit: 1 };
   }
-  if (!pdfRenderer.render) throw new Error("the PDF reader isn't available");
-  const page = await pdfRenderer.render(u.data, u.page);
+  // The PDF reader is large, so it's only loaded when a PDF is shown.
+  const { renderPdfPage } = await import("./pdfUnderlay");
+  const page = await renderPdfPage(u.data, u.page);
   pdfPageCount = page.pages;
   return { source: page.canvas, width: page.width, height: page.height, pixelsPerUnit: page.scale };
 }

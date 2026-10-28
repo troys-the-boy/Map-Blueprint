@@ -210,6 +210,8 @@ Under **Drawing to trace**, load a PDF or an image of your own map. It sits unde
 3. **Move**, **↺ 90° / ↻ 90°** and **Turn** line it up. **Opacity** fades it. **Lock in place** stops it moving by accident.
 4. Trace over it with the Town, Route and other tools.
 
+For a PDF, pick the **Page** to show. The PDF is only drawn as a picture: links, forms and anything else in it are ignored. Browser autosave keeps a big drawing in the browser's larger storage area (IndexedDB), so it doesn't crowd out the project. **Save** still writes it into the project file.
+
 ## Generate a town (Milestone 5)
 
 Make a map of type **Town** (sizes S 20×20, M 30×30, L 40×40), then press **Generate**. The **Town** group in the Generate tab sets:
@@ -539,6 +541,8 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 - **Water currents.** They count as plain Surf water: the forced movement is ignored for now.
 - **Plain export text.** Labels in exported images use a small built-in pixel font, in capitals only.
 - **Not tested on real Apple devices.** Testing used Chromium on Windows, including an iPad-sized viewport. Please try Generate and Export on the real iPad and in desktop Safari.
+- **Some PDF pictures may not show.** Images stored in the JPEG 2000 format inside a PDF need a decoder the tool leaves out to stay small (most scans and drawings use ordinary JPEG or vector lines, which work).
+- **Bigger app file.** The PDF reader makes the single-file version about 2.4 MB (it was about 0.7 MB).
 - **The sketch doesn't build maps yet.** Building every map from the sketch (with connections) comes later in Milestone 6.
 - **Approximate screen frame.** The frame assumes the player stands 7 cells from the left and 4 from the top of the screen. This only affects the overlay.
 - **Unconfirmed presets.** The forest, cave-floor and interior size presets are placeholders.

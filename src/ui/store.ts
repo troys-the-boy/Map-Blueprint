@@ -46,6 +46,11 @@ import { validateMap } from "../core/validate";
 import { runGenerate } from "./generation";
 import { addNewMap, newRegion } from "../core/model";
 import { newSketch } from "../core/sketch";
+import { idbGet, idbPut } from "./idb";
+
+/** A drawing bigger than this (characters) is autosaved to IndexedDB instead of localStorage. */
+const UNDERLAY_INLINE_MAX = 200_000;
+const UNDERLAY_KEY = "sketch-underlay";
 import type { CellDiff } from "../core/paint";
 import { applyDiff, brushCells, emptyDiff, lineCells, paintCell, paintElevation, paintLock } from "../core/paint";
 import { parseProject, serializeProject } from "../core/project";
@@ -172,6 +177,8 @@ export interface AutosaveInfo {
 class EditorStore {
   region: Region = newRegion("Untitled region", 1);
   currentMapId: string | null = null;
+  /** The drawing last written to IndexedDB by autosave, so it isn't written again unchanged. */
+  private underlaySaved: string | null = null;
   /** Which screen is showing: one map, or the region sketch. */
   view: "map" | "region" = "map";
   tool: Tool = "pencil";
@@ -1670,13 +1677,36 @@ class EditorStore {
   autosaveNow() {
     this.autosaveTimer = null;
     try {
+      // The sketch's drawing can be megabytes: it goes to IndexedDB, and the project in
+      // localStorage holds an empty one in its place.
+      const u = this.region.sketch?.underlay;
+      let project: string;
+      let underlayInDb = false;
+      if (u && u.data.length > UNDERLAY_INLINE_MAX) {
+        if (u.data !== this.underlaySaved) {
+          const data = u.data;
+          void idbPut(UNDERLAY_KEY, data).then(
+            () => (this.underlaySaved = data),
+            () => undefined,
+          );
+        }
+        const data = u.data;
+        u.data = data.slice(0, data.indexOf(",") + 1);
+        try {
+          project = this.serialize();
+        } finally {
+          u.data = data;
+        }
+        underlayInDb = true;
+      } else project = this.serialize();
       const payload = JSON.stringify({
         savedAt: new Date().toISOString(),
         dirty: this.dirty,
         fileName: this.fileName,
         currentMapId: this.currentMapId,
         view: this.view,
-        project: this.serialize(),
+        underlayInDb,
+        project,
       });
       localStorage.setItem(AUTOSAVE_KEY, payload);
     } catch {
@@ -1689,11 +1719,21 @@ class EditorStore {
     try {
       const raw = localStorage.getItem(AUTOSAVE_KEY);
       if (!raw) return null;
-      const saved = JSON.parse(raw) as { savedAt: string; dirty: boolean; fileName: string | null; currentMapId: string | null; view?: string; project: string };
+      const saved = JSON.parse(raw) as { savedAt: string; dirty: boolean; fileName: string | null; currentMapId: string | null; view?: string; underlayInDb?: boolean; project: string };
       const region = parseProject(saved.project);
       this.loadRegion(region, typeof saved.fileName === "string" ? saved.fileName : null, null, saved.dirty === true);
       if (saved.currentMapId && region.maps.some((m) => m.id === saved.currentMapId)) this.openMap(saved.currentMapId);
       if (saved.view === "region") this.openRegion();
+      // Put the drawing back from IndexedDB (see autosaveNow).
+      if (saved.underlayInDb)
+        void idbGet(UNDERLAY_KEY).then((data) => {
+          const u = this.region === region ? region.sketch?.underlay : null;
+          if (data && u && u.data.endsWith(",") && data.startsWith(u.data)) {
+            u.data = data;
+            this.underlaySaved = data;
+            this.changed();
+          }
+        });
       return { savedAt: String(saved.savedAt), dirty: saved.dirty === true };
     } catch {
       return null;
