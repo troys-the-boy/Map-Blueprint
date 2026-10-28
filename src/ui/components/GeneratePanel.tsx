@@ -13,6 +13,7 @@ import { BUILDING_TYPES, TOWN_LAYOUTS, TOWN_LAYOUT_LABELS, TOWN_RANGES, building
 import type { TownLayout } from "../../core/generators/townParams";
 import { FOREST_RANGES, readForestParams } from "../../core/generators/forestParams";
 import { CAVE_RANGES, readCaveParams } from "../../core/generators/caveParams";
+import { cavePlan, floorName, floorOf } from "../../core/caves";
 import type { TravelSetting } from "../../core/generators/travel";
 import { BIOMES, EDGES } from "../../core/model";
 import type { Biome, Edge, Opening, OpeningKind } from "../../core/model";
@@ -40,7 +41,9 @@ function CaveSettings() {
   const map = s.currentMap!;
   const c = readCaveParams(map.params);
   const set = (patch: Record<string, string | number | boolean>) => s.setParams(patch);
-  const count = (key: "exits" | "platforms" | "rockSmash", label: string, tip: string) => (
+  const floor = floorOf(map);
+  const first = cavePlan(s.region.maps, map).first;
+  const count = (key: "exits" | "platforms" | "rockSmash" | "boulders" | "floors" | "ladders", label: string, tip: string) => (
     <label className="field inline" title={tip}>
       <span>{label}</span>
       <NumberField min={CAVE_RANGES[key][0]} max={CAVE_RANGES[key][1]} value={c[key]} onChange={(v) => set({ [key]: v })} />
@@ -62,11 +65,22 @@ function CaveSettings() {
       {count("platforms", "Raised platforms", "Raised rock platforms with stairs up, off the main way.")}
       {slider("waterLevel", "Underground water", "Pools that need Surf, in the far parts of the cave (never on the main way).")}
       {count("rockSmash", "Rock Smash rocks", "Each closes a side passage, with an item behind it.")}
+      {count("boulders", "Strength boulders", "Each blocks a side passage: push it in (Strength) to reach the item behind. The Check tab makes sure no push can block the way through.")}
+      {floor === 0 ? (
+        <>
+          {count("floors", "Floors", "How many floors the cave has. Generate makes the others (B1F, B2F…) as maps in your project, joined by ladders.")}
+          {c.floors > 1 && count("ladders", "Ladders between floors", "Ladders joining each floor to the next. Each is a warp paired with its partner on the other floor.")}
+        </>
+      ) : (
+        <p className="hint">
+          This is {floorName(floor)} of {first.name}. Floors and ladders are set on the first floor; Generate here makes this floor again and pairs its ladders.
+        </p>
+      )}
       <label className="check" title="The cave is dark until the player uses Flash (the header's requires_flash).">
         <input type="checkbox" checked={map.header.requires_flash} onChange={(e) => s.editMap("header.requires_flash", (m) => (m.header = { ...m.header, requires_flash: e.target.checked }))} />
         Dark (needs Flash)
       </label>
-      <p className="hint">Wild Pokémon here use the cave rate (land 10). More floors and ladders come next.</p>
+      <p className="hint">Wild Pokémon here use the cave rate (land 10).</p>
     </details>
   );
 }

@@ -10,14 +10,18 @@
 //      and used; Generate only adds the rest.
 //   4. Every chamber and exit is joined by winding tunnels. The way between the
 //      exits is the main way (trainers watch it).
-//   5. Raised rock platforms with stairs (reusing the route's plateau builder),
-//      underground water away from the main way (it needs Surf), and Rock Smash
-//      rocks closing side passages, each with an item behind it.
+//   5. Ladders (multi-floor caves): warps on the floor, up to the floor above
+//      and down to the floor below, spread out and joined into the main way.
+//      Generate pairs them with the other floors' ladders (see core/caves.ts).
+//   6. Raised rock platforms with stairs (reusing the route's plateau builder),
+//      underground water away from the main way (it needs Surf), Rock Smash
+//      rocks closing side passages, and Strength boulders blocking side
+//      passages, each with an item behind it.
 //
 // Things are placed by the shared placement stage: trainers, items at dead
 // ends, hidden items. Wild encounters use the cave rate (land 10).
 
-import { IS_WALKABLE, T, cheapestPath, components, distanceField } from "../grid";
+import { DIRS, IS_WALKABLE, T, cheapestPath, components, distanceField } from "../grid";
 import type { Warp } from "../model";
 import { MOVEMENT_HMS, MoveGraph } from "../reach";
 import type { GenContext } from "./context";
@@ -144,7 +148,38 @@ export function buildCave(ctx: GenContext): void {
     }
   }
 
-  // The main way: from the first exit to each other one (or, with one exit, to the far end of the cave).
+  // 5. Ladders: on open floor (floor all round), as far as possible from the exits and each other.
+  // Ladders up come first, then ladders down: Generate pairs them in that order.
+  const ladderCount = cp.laddersUp + cp.laddersDown;
+  if (ladderCount) {
+    const roomy = (i: number) => {
+      if (!isFloor(i) || ctx.locks[i] || ctx.role[i] === Role.Opening || ctx.keepClear.has(i) || ctx.edgeDist(i) < bt + 2) return false;
+      const [x, y] = ctx.xy(i);
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (!isFloor(ctx.idx(x + dx, y + dy))) return false;
+      return true;
+    };
+    const candidates: number[] = [];
+    for (let i = 0; i < ctx.n; i++) if (roomy(i)) candidates.push(i);
+    for (let k = 0; k < ladderCount && candidates.length; k++) {
+      let best = -1;
+      let bestScore = -Infinity;
+      for (const c of candidates) {
+        if (ctx.keepClear.has(c)) continue;
+        const [x, y] = ctx.xy(c);
+        const d = fronts.length ? Math.min(...fronts.map((f) => Math.abs((f % ctx.width) - x) + Math.abs(Math.floor(f / ctx.width) - y))) : 20;
+        const score = d + ctx.rng.next() * 6;
+        if (score > bestScore) (bestScore = score, (best = c));
+      }
+      if (best < 0) break;
+      const [x, y] = ctx.xy(best);
+      ctx.role[best] = Role.Opening;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) ctx.keepClear.add(ctx.idx(x + dx, y + dy));
+      fronts.push(best);
+      ctx.warps.push({ id: `w${ctx.warps.length + 1}`, kind: "ladder", x, y, elevation: "ground", destMap: "", destWarpId: 0 });
+    }
+  }
+
+  // The main way: from the first exit (or ladder) to each other one (or, with just one, to the far end of the cave).
   const floorCells: number[] = [];
   for (let i = 0; i < ctx.n; i++) if (walkable(i)) floorCells.push(i);
   if (fronts.length) {
@@ -176,7 +211,7 @@ export function buildCave(ctx: GenContext): void {
   ctx.deadEnds = picked.slice(0, p.items + 2);
   ctx.quietEnds = picked.slice(p.items + 2);
 
-  // 5a. Raised platforms: in chambers off the main way, with stairs up and a trail to them.
+  // 6a. Raised platforms: in chambers off the main way, with stairs up and a trail to them.
   for (let k = 0; k < cp.platforms; k++) {
     const eligible = (i: number) => ctx.role[i] === Role.Branch && isFloor(i) && ctx.elevation[i] === LEVEL.ground && fromMain[i] >= 3 && ctx.edgeDist(i) >= bt + 2 && !ctx.keepClear.has(i);
     const seeds = ctx.rng.shuffle(floorCells.filter(eligible));
@@ -187,7 +222,7 @@ export function buildCave(ctx: GenContext): void {
   }
   if (ctx.stairs.length) connectStairs(ctx);
 
-  // 5b. Underground water: pools in the far parts of the cave (never on the main way).
+  // 6b. Underground water: pools in the far parts of the cave (never on the main way).
   if (cp.waterLevel > 0) {
     const threshold = 0.28 + 0.3 * cp.waterLevel;
     for (const c of floorCells) {
@@ -197,8 +232,9 @@ export function buildCave(ctx: GenContext): void {
     }
   }
 
-  // 5c. Rock Smash rocks: each closes a one-cell side passage; an item waits beyond it.
-  if (cp.rockSmash > 0) addSmashRocks(ctx, cp.rockSmash);
+  // 6c. Rock Smash rocks and Strength boulders: each closes a one-cell side passage; an item waits beyond it.
+  if (cp.rockSmash > 0) addBlockers(ctx, cp.rockSmash, "smash_rock");
+  if (cp.boulders > 0) addBlockers(ctx, cp.boulders, "strength_boulder");
 
   // Items only where the player can get to (a platform whose stairs couldn't be joined up isn't).
   const reach = new MoveGraph({ width: ctx.width, height: ctx.height, terrain: ctx.terrain, entities: ctx.entities, elevation: ctx.elevation }, new Set(MOVEMENT_HMS)).forward(ctx.openingEnds);
@@ -206,8 +242,15 @@ export function buildCave(ctx: GenContext): void {
   ctx.quietEnds = ctx.quietEnds.filter((c) => reach[c]);
 }
 
-/** Rock Smash rocks in side passages that, closed off, leave an area with no exit in it. */
-function addSmashRocks(ctx: GenContext, count: number): void {
+/**
+ * Rock Smash rocks or Strength boulders in side passages that, closed off, leave
+ * an area with no exit in it. A boulder is pushed in from the near side, so the
+ * cell past it must be open floor in a room (not more corridor), where it can't
+ * block the way to the item once pushed: Gen 3 boulders move one cell per push,
+ * away from the player, into a cell with no collision (TryPushBoulder in
+ * src/field_player_avatar.c).
+ */
+function addBlockers(ctx: GenContext, count: number, kind: "smash_rock" | "strength_boulder"): void {
   const walk = (i: number) => IS_WALKABLE[ctx.terrain[i]];
   const view = () => ({ width: ctx.width, height: ctx.height, terrain: ctx.terrain, entities: ctx.entities, elevation: ctx.elevation });
   const before = new MoveGraph(view(), new Set()).forward(ctx.openingEnds);
@@ -224,8 +267,8 @@ function addSmashRocks(ctx: GenContext, count: number): void {
     if (placed >= count) break;
     const [x, y] = ctx.xy(c);
     if (ctx.entities.some((e) => Math.abs(e.x - x) + Math.abs(e.y - y) < 6)) continue;
-    // With the rock in place (no Rock Smash yet), what can the player still reach?
-    const rock = { id: "tmp", kind: "smash_rock" as const, x, y, elevation: "ground" as const, fields: {} };
+    // With the rock in place (no Rock Smash or Strength yet), what can the player still reach?
+    const rock = { id: "tmp", kind, x, y, elevation: "ground" as const, fields: {} };
     ctx.entities.push(rock);
     const after = new MoveGraph(view(), new Set()).forward(ctx.openingEnds);
     ctx.entities.pop();
@@ -234,18 +277,40 @@ function addSmashRocks(ctx: GenContext, count: number): void {
     const behind = new Set(cutOff);
     // Worth closing: a real area behind it, and every exit still reachable.
     if (cutOff.length < 6 || ctx.openingEnds.some((f) => !after[f])) continue;
-    placed++;
-    ctx.entities.push({
-      id: `R${placed}`,
-      kind: "smash_rock",
-      x,
-      y,
-      elevation: "ground",
-      fields: { graphics_id: "OBJ_EVENT_GFX_BREAKABLE_ROCK", movement_type: "MOVEMENT_TYPE_LOOK_AROUND", script: "EventScript_RockSmash", flag: "0" },
-    });
     // The item: the cell furthest from the rock in the area behind it.
     const d = distanceField(ctx.width, ctx.height, [c], (i) => i === c || behind.has(i));
     const far = cutOff.reduce((a, b) => (d[b] !== Infinity && d[b] > d[a] ? b : a), cutOff[0]);
-    ctx.pockets.push({ center: far, hm: "rock_smash", zoneId: "" });
+    if (kind === "strength_boulder") {
+      // Pushed straight in from the side the player stands on, up to four times: after some
+      // push the player must be able to walk past it to the item.
+      const near = DIRS.find(({ dx, dy }) => ctx.inside(x + dx, y + dy) && after[ctx.idx(x + dx, y + dy)]);
+      if (!near) continue;
+      let ok = false;
+      for (let k = 1; k <= 4 && !ok; k++) {
+        const tx = x - near.dx * k;
+        const ty = y - near.dy * k;
+        if (!ctx.inside(tx, ty)) break;
+        const into = ctx.idx(tx, ty);
+        if (!behind.has(into) || into === far || ctx.keepClear.has(into)) break;
+        ctx.entities.push({ ...rock, x: tx, y: ty });
+        const pushed = new MoveGraph(view(), new Set()).forward(ctx.openingEnds);
+        ctx.entities.pop();
+        ok = pushed[far] === 1;
+      }
+      if (!ok) continue;
+    }
+    placed++;
+    ctx.entities.push({
+      id: `${kind === "smash_rock" ? "R" : "B"}${placed}`,
+      kind,
+      x,
+      y,
+      elevation: "ground",
+      fields:
+        kind === "smash_rock"
+          ? { graphics_id: "OBJ_EVENT_GFX_BREAKABLE_ROCK", movement_type: "MOVEMENT_TYPE_LOOK_AROUND", script: "EventScript_RockSmash", flag: "0" }
+          : { graphics_id: "OBJ_EVENT_GFX_PUSHABLE_BOULDER", movement_type: "MOVEMENT_TYPE_LOOK_AROUND", script: "EventScript_StrengthBoulder", flag: "0" },
+    });
+    ctx.pockets.push({ center: far, hm: kind === "smash_rock" ? "rock_smash" : "strength", zoneId: "" });
   }
 }

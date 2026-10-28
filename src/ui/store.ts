@@ -29,6 +29,7 @@ import {
 } from "../core/selection";
 import type { Direction } from "../core/terrain";
 import type { Anchor } from "../core/resize";
+import { caveFloors, cavePlan, floorName, floorOf, ladderCounts, pairLadders } from "../core/caves";
 import type { EncounterPlan, SpeciesEntry } from "../core/encounters";
 import { draftEncounters } from "../core/encounters";
 import { resizeMap } from "../core/resize";
@@ -306,10 +307,12 @@ class EditorStore {
     const map = this.currentMap;
     if (!map || this.generating || this.isStroking) return;
     if (!canGenerate(map)) {
-      this.setNotice({ kind: "info", text: "Only routes can be generated so far. Towns, forests and caves arrive in Milestone 5." });
+      this.setNotice({ kind: "info", text: "This kind of map can't be generated yet." });
       return;
     }
     this.dropFloating();
+    // A cave floor needs to know its ladders up and down before it's made.
+    if (map.mapType === "cave") this.setLadderCounts(map);
     const whole = !area && this.generateMode === "whole";
     const input = area ? areaInput(map, area, randomSeed()) : this.fullInput(map);
     // Joining the undo step before only makes sense if nothing else happened meanwhile.
@@ -349,6 +352,56 @@ class EditorStore {
     this.markDirty();
     this.changed();
     this.cellsChanged(target.id, null);
+    if (target.mapType === "cave") await this.syncCaveFloors(target);
+  }
+
+  // ----- multi-floor caves (see core/caves.ts) ---------------------------------
+
+  /** Write a cave floor's ladder counts (from the first floor's Floors and Ladders) into its settings. */
+  private setLadderCounts(map: MapBlueprint) {
+    const { up, down } = ladderCounts(this.region.maps, map);
+    if (map.params.laddersUp !== up || map.params.laddersDown !== down) map.params = { ...map.params, laddersUp: up, laddersDown: down };
+  }
+
+  /**
+   * After a cave floor is generated: make any floors the cave is missing (B1F, B2F…),
+   * make again any floor whose ladders no longer match, and pair every ladder with
+   * its partner on the next floor. Other floors aren't part of this Undo step.
+   */
+  private async syncCaveFloors(map: MapBlueprint) {
+    const { floors, first } = cavePlan(this.region.maps, map);
+    const made: string[] = [];
+    if (floorOf(map) === 0 && floors > 1) {
+      const base = first.name.replace(/\s*1F$/, "");
+      for (let k = 1; k < floors; k++) {
+        let floor = caveFloors(this.region.maps, first).find((m) => floorOf(m) === k);
+        if (!floor) {
+          floor = addNewMap(this.region, { name: `${base} ${floorName(k)}`, mapType: "cave", width: first.width, height: first.height, seed: randomSeed(), biome: first.biome });
+          // The same look as the first floor; reached by ladders only (no exits of its own).
+          const look = Object.fromEntries(Object.entries(first.params).filter(([k]) => !["floors", "ladders", "generatorVersion", "seedPinned", "caveGroup", "floor"].includes(k)));
+          floor.params = { ...look, caveGroup: first.id, floor: k, exits: 0 };
+          floor.header = { ...floor.header, requires_flash: first.header.requires_flash };
+          made.push(floor.name);
+        }
+        const { up, down } = ladderCounts(this.region.maps, floor);
+        const generated = floor.warps.filter((w) => w.kind === "ladder" && !w.locked).length;
+        if (made.includes(floor.name) || generated !== up + down) {
+          this.setLadderCounts(floor);
+          try {
+            const result = await runGenerate(this.fullInput(floor), this.region.settings.engineLimits);
+            applyResult(floor, result);
+            this.redraftAfterGenerate(floor);
+          } catch (err) {
+            this.setNotice({ kind: "error", text: `Making ${floor.name} failed: ` + (err instanceof Error ? err.message : String(err)) });
+          }
+        }
+      }
+    }
+    pairLadders(caveFloors(this.region.maps, map));
+    if (made.length) this.setNotice({ kind: "info", text: `Made ${made.join(", ")}: the cave's other floors, joined by ladders. Find them in the Maps list.` });
+    this.markDirty();
+    this.changed();
+    this.scheduleValidate();
   }
 
   /** What a whole-map Generate works from: the map, or with every lock cleared in "whole" mode. */

@@ -211,9 +211,11 @@ Make a map of type **Cave floor** (sizes S 30×30, M 40×40, L 50×50), then pre
 - **Raised platforms:** rock platforms with stairs up, off the main way.
 - **Underground water:** pools that need Surf, in the far parts of the cave (never on the main way).
 - **Rock Smash rocks:** each closes a side passage with an item behind it.
+- **Strength boulders:** each blocks a side passage; push it in with Strength to reach the item behind.
 - **Dark (needs Flash):** sets the header's requires_flash.
+- **Floors** and **Ladders between floors** (first floor only): a cave with 3 floors gets maps named like *Moss Cave B1F* and *Moss Cave B2F* in your project when you Generate the first floor. Ladders join each floor to the next (vanilla's ladder warps); each ladder points at its partner on the other floor and back, and Generate pairs them again whenever a floor is made again. Only the first floor has exits to the outside. Generating a deeper floor remakes just that floor and re-pairs its ladders.
 
-Trainers watch the main way between the exits, the far corners get items and hidden items, and wild Pokémon use the cave rate (land 10). The checks treat the exits as the cave's entrances: every exit must lead to every other one. More floors, with ladders between them, come next.
+Trainers watch the main way between the exits, the far corners get items and hidden items, and wild Pokémon use the cave rate (land 10). The checks treat the exits and ladders as the cave's entrances: every one must lead to every other one. **Check** also reports a Strength boulder (yours or Generate's) that can be pushed somewhere it blocks the way through for good.
 
 ## Generate a route (Milestone 2)
 
@@ -478,7 +480,8 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 
 ## Known limitations
 
-- **One cave floor at a time.** Floors linked by ladders, and a Strength boulder puzzle, come in the last part of Milestone 5.
+- **Cave floors and Undo.** Undo after generating a cave's first floor undoes that floor only; floors it made or re-paired stay (delete them in the Maps list if you don't want them).
+- **Boulders need narrow side passages,** so a cave may get fewer than you asked for.
 - **Bridges over painted water.** Water you paint is locked, but Generate may lay a bridge across it where its path has to cross (routes, towns and forests). It's the one change Generate makes to a locked cell; the next Generate can move the bridge.
 - **Waterfront towns** sometimes get wide patches of road where lanes run side by side.
 - **Mountains follow the map's own biome.** A biome zone changes the ground, trees, grass and detail in its area, but elevation (alpine terraces) still follows the map's main biome.

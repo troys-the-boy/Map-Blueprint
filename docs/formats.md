@@ -234,6 +234,11 @@ Caves (Milestone 5) read these keys, and share `borderThickness`, `trainers`, `i
 | `platforms` | 1 | 0–4 |
 | `waterLevel` | 0.2 | 0–1 |
 | `rockSmash` | 1 | 0–4 |
+| `boulders` | 0 | 0–3 (Strength boulders guarding side areas) |
+| `floors` | 1 | 1–4 (first floor only; Generate makes the other floor maps) |
+| `ladders` | 1 | 1–3 (first floor only; ladders between each floor and the next) |
+| `caveGroup`, `floor` | (none), 0 | on floors B1F…: the first floor's map id, and the floor number (1 = B1F) |
+| `laddersUp`, `laddersDown` | 0, 0 | set by Generate on each floor: its generated ladders list the ladders up first, then down |
 | `retries` | 8 | 0–20 |
 | `generatorVersion` | (set by the app) | which generator produced the map |
 | `seedPinned` | absent | `true` when the seed is pinned in the app (New seed and Variations leave it alone); not used by the generator |

@@ -182,6 +182,61 @@ export function validateMap(map: MapBlueprint, opts: ValidateOptions = {}): Issu
     else if (below < 0 || !IS_WALKABLE[below] || below === T.building)
       err("door-placement", `Door W${k} at (${w.x}, ${w.y}) has no walkable ground in front of it (south): doors are on a building's bottom edge.`, [i]);
   });
+  // --- Strength boulders ----------------------------------------------------------
+  // No push may leave a boulder stuck where it blocks the way between the entrances.
+  // A boulder moves one cell per push, away from the player, into a cell with no
+  // collision (TryPushBoulder in pokeemerald's src/field_player_avatar.c); the
+  // others stay put. Blocking for a while is fine if a further push clears it; a
+  // position is a problem when it blocks and no push from there ever clears it.
+  const boulders = map.entities.filter((e) => e.kind === "strength_boulder");
+  if (boulders.length && usable.length >= 2) {
+    const withoutStrength = new Set(hms.filter((h) => h !== "strength"));
+    for (const b of boulders) {
+      const startPos = b.y * width + b.x;
+      const next = new Map<number, number[]>();
+      const blocks = new Map<number, boolean>();
+      const queue = [startPos];
+      next.set(startPos, []);
+      while (queue.length && next.size < 300) {
+        const pos = queue.shift()!;
+        const x = pos % width;
+        const y = (pos - x) / width;
+        const entities = map.entities.map((e) => (e === b ? { ...e, x, y } : e));
+        const g = new MoveGraph({ ...view, entities }, withoutStrength);
+        const from0 = g.forward(usable[0].cells);
+        blocks.set(pos, !usable.slice(1).every((u) => u.cells.some((c) => from0[c])));
+        const reach = g.forward(usable.flatMap((u) => u.cells));
+        for (const d of DIRS) {
+          const fx = x - d.dx;
+          const fy = y - d.dy;
+          const tx = x + d.dx;
+          const ty = y + d.dy;
+          if (fx < 0 || fy < 0 || fx >= width || fy >= height || tx < 0 || ty < 0 || tx >= width || ty >= height) continue;
+          const to = ty * width + tx;
+          if (!reach[fy * width + fx] || !IS_WALKABLE[terrain[to]] || entities.some((e) => e.x === tx && e.y === ty)) continue;
+          next.get(pos)!.push(to);
+          if (!next.has(to)) {
+            next.set(to, []);
+            queue.push(to);
+          }
+        }
+      }
+      // Positions from which some push sequence reaches a position that doesn't block.
+      const clears = new Set([...blocks].filter(([, bl]) => !bl).map(([p]) => p));
+      for (let changed = true; changed; ) {
+        changed = false;
+        for (const [p, list] of next) if (!clears.has(p) && list.some((q) => clears.has(q))) (clears.add(p), (changed = true));
+      }
+      const stuck = [...blocks].find(([p, bl]) => bl && !clears.has(p) && p !== startPos);
+      if (stuck)
+        err(
+          "boulder-can-block",
+          `Strength boulder ${b.id} at (${b.x}, ${b.y}) can be pushed to (${stuck[0] % width}, ${Math.floor(stuck[0] / width)}), where it blocks the way through for good.`,
+          [startPos, stuck[0]],
+        );
+    }
+  }
+
   const others = opts.otherMaps ?? [];
   const isThis = (dest: string) => dest === map.id || dest === map.header.id;
   map.warps.forEach((w, k) => {

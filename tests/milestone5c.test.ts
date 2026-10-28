@@ -99,7 +99,7 @@ describe("caves", () => {
   });
 
   it("settings are read with defaults and clamped", () => {
-    expect(readCaveParams({})).toEqual({ exits: 2, openness: 0.5, platforms: 1, waterLevel: 0.2, rockSmash: 1 });
+    expect(readCaveParams({})).toEqual({ exits: 2, openness: 0.5, platforms: 1, waterLevel: 0.2, rockSmash: 1, boulders: 0, floors: 1, ladders: 1, laddersUp: 0, laddersDown: 0 });
     expect(readCaveParams({ exits: 9, openness: -1 })).toMatchObject({ exits: 4, openness: 0 });
   });
 
