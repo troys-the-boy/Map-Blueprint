@@ -8,7 +8,7 @@ import { Icon } from "./icons";
 import { sketchViewRef } from "./SketchCanvas";
 
 export const SKETCH_TOOLS: Array<{ tool: SketchTool; icon: string; label: string; tip: string }> = [
-  { tool: "select", icon: "select", label: "Pick and move", tip: "Pick and move: tap a place to pick it (its details show in the panel). Drag it to move it, or drag a corner to resize a stretch." },
+  { tool: "select", icon: "select", label: "Pick and move", tip: "Pick and move: tap a place or river to pick it (its details show in the panel). Drag a place to move it, or a corner to resize a stretch. On a picked river, drag its points, or tap a + to add one." },
   { tool: "town", icon: "town", label: "Town", tip: "Town: drag a rectangle. Its size in metatiles shows as you draw." },
   { tool: "route", icon: "route", label: "Route", tip: "Route: drag a rectangle for each straight stretch. With a route picked, a rectangle touching its end carries the route on, so it can bend. Stretches longer than the segment length are split into segments." },
   { tool: "forest", icon: "forest", label: "Forest", tip: "Forest: tap a route or town where the forest's entrance is. Its inside is its own map, so it takes no room on the sketch." },

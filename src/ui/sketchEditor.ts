@@ -6,7 +6,7 @@
 // Positions come in from the canvas in metatiles (fractions allowed); shapes
 // snap to the sketch grid.
 
-import type { Sketch, SketchArea, SketchPlace, SketchRect } from "../core/sketch";
+import type { Sketch, SketchArea, SketchPlace, SketchRect, SketchRiver } from "../core/sketch";
 import {
   SKETCH_AREAS,
   SKETCH_CELL,
@@ -14,11 +14,16 @@ import {
   addOutdoor,
   cloneSketch,
   inRect,
+  insertRiverPoint,
   isOutdoor,
   mergeStraightRects,
   outdoorPlaceAt,
   paintAreas,
   rectBetween,
+  removeRiverPoint,
+  riverAt,
+  riverMidpoints,
+  riverPointAt,
   snap,
   touching,
 } from "../core/sketch";
@@ -43,6 +48,8 @@ type Drag =
   | { kind: "move"; placeId: string; startX: number; startY: number; rects: SketchRect[]; pins: Array<{ x: number; y: number }>; moved: boolean }
   | { kind: "resize"; placeId: string; rect: number; corner: 0 | 1 | 2 | 3; moved: boolean }
   | { kind: "pin"; placeId: string; pin: number; moved: boolean }
+  | { kind: "riverPoint"; riverId: string; point: number; moved: boolean }
+  | { kind: "riverMove"; riverId: string; startX: number; startY: number; points: number[]; moved: boolean }
   | { kind: "paint"; value: number; changed: boolean; x: number; y: number }
   | { kind: "draw"; ax: number; ay: number; bx: number; by: number }
   | { kind: "underlay"; startX: number; startY: number; ox: number; oy: number; moved: boolean }
@@ -51,6 +58,10 @@ type Drag =
 export class SketchEditor {
   tool: SketchTool = "select";
   selectedId: string | null = null;
+  /** The picked river (picking a river unpicks any place, and the other way round). */
+  selectedRiverId: string | null = null;
+  /** The picked point of the picked river (0 = first), or -1. */
+  selectedPoint = -1;
   area: SketchArea = "lake";
   /** Paint brush, in sketch cells across. */
   brush = 3;
@@ -76,6 +87,7 @@ export class SketchEditor {
       this.undoStack = [];
       this.redoStack = [];
       this.selectedId = null;
+      this.selectedRiverId = null;
       this.drag = null;
       this.riverPoints = null;
       this.calibration = [];
@@ -86,6 +98,10 @@ export class SketchEditor {
 
   get selected(): SketchPlace | null {
     return this.sketch?.places.find((p) => p.id === this.selectedId) ?? null;
+  }
+
+  get selectedRiver(): SketchRiver | null {
+    return this.sketch?.rivers.find((r) => r.id === this.selectedRiverId) ?? null;
   }
 
   /** Drawing shapes and the river in progress (for the canvas). */
@@ -152,6 +168,8 @@ export class SketchEditor {
     this.drag = null;
     this.riverPoints = null;
     if (!this.selected) this.selectedId = null;
+    if (!this.selectedRiver) this.selectedRiverId = null;
+    if (2 * this.selectedPoint >= (this.selectedRiver?.points.length ?? 0)) this.selectedPoint = -1;
     this.notify(true);
   }
 
@@ -160,6 +178,7 @@ export class SketchEditor {
     this.undoStack = [];
     this.redoStack = [];
     this.selectedId = null;
+    this.selectedRiverId = null;
     this.drag = null;
     this.riverPoints = null;
     this.calibration = [];
@@ -176,6 +195,17 @@ export class SketchEditor {
 
   select(id: string | null) {
     this.selectedId = id;
+    this.selectedRiverId = null;
+    this.selectedPoint = -1;
+    this.notify(false);
+  }
+
+  /** Pick a river (to change its points or width). */
+  selectRiver(id: string | null) {
+    this.selectedRiverId = id;
+    this.selectedPoint = -1;
+    if (id) this.selectedId = null;
+    if (id && this.tool !== "select") this.setTool("select");
     this.notify(false);
   }
 
@@ -305,6 +335,23 @@ export class SketchEditor {
       if (!place) return;
       place.pins[d.pin] = { x: Math.floor(x), y: Math.floor(y) };
       d.moved = true;
+    } else if (d.kind === "riverPoint") {
+      const river = s.rivers.find((r) => r.id === d.riverId);
+      if (!river) return;
+      const px = Math.max(0, Math.min(s.width, Math.round(x)));
+      const py = Math.max(0, Math.min(s.height, Math.round(y)));
+      if (river.points[2 * d.point] !== px || river.points[2 * d.point + 1] !== py) {
+        river.points[2 * d.point] = px;
+        river.points[2 * d.point + 1] = py;
+        d.moved = true;
+      }
+    } else if (d.kind === "riverMove") {
+      const river = s.rivers.find((r) => r.id === d.riverId);
+      if (!river) return;
+      const dx = Math.round(x - d.startX);
+      const dy = Math.round(y - d.startY);
+      river.points = d.points.map((v, k) => v + (k % 2 ? dy : dx));
+      if (dx || dy) d.moved = true;
     }
     this.notify(false);
   }
@@ -343,7 +390,7 @@ export class SketchEditor {
       if (place) mergeStraightRects(place);
     }
     // Drags that changed the sketch become one undo step.
-    const changed = d && (d.kind === "paint" ? d.changed : d.kind === "move" || d.kind === "resize" || d.kind === "pin" || d.kind === "underlay" || d.kind === "section" ? d.moved : false);
+    const changed = d && (d.kind === "paint" ? d.changed : d.kind === "move" || d.kind === "resize" || d.kind === "pin" || d.kind === "underlay" || d.kind === "section" || d.kind === "riverPoint" || d.kind === "riverMove" ? d.moved : false);
     // A section only tapped (not moved) stays as it was worked out.
     if (d?.kind === "section" && !d.moved && this.before) store.region.sketch = this.before;
     if (changed && this.before) {
@@ -475,17 +522,47 @@ export class SketchEditor {
         }
       }
     }
+    // The picked river: drag a point to move it, or the + in the middle of a stretch to add one there.
+    const river = this.selectedRiver;
+    if (river) {
+      const k = riverPointAt(river, x, y, tol);
+      if (k >= 0) {
+        this.selectedPoint = k;
+        this.drag = { kind: "riverPoint", riverId: river.id, point: k, moved: false };
+        return this.notify(false);
+      }
+      const mids = riverMidpoints(river);
+      const m = mids.findIndex(([mx, my]) => Math.hypot(mx - x, my - y) <= tol);
+      if (m >= 0) {
+        this.selectedPoint = insertRiverPoint(river, m, mids[m][0], mids[m][1]);
+        // Adding the point is a change even if it isn't dragged.
+        this.drag = { kind: "riverPoint", riverId: river.id, point: this.selectedPoint, moved: true };
+        return this.notify(false);
+      }
+    }
     for (let k = s.places.length - 1; k >= 0; k--) {
       const p = s.places[k];
       const pin = p.pins.findIndex((q) => Math.hypot(q.x + 0.5 - x, q.y + 0.5 - y) <= tol * 1.2);
       if (pin >= 0) {
         this.selectedId = p.id;
+        this.selectedRiverId = null;
         this.drag = { kind: "pin", placeId: p.id, pin, moved: false };
         return this.notify(false);
       }
     }
+    // A river (drawn over the places): pick it, and drag to move all of it.
+    const hit = riverAt(s, x, y, tol * 0.5);
+    if (hit) {
+      this.selectedId = null;
+      this.selectedRiverId = hit.id;
+      this.selectedPoint = -1;
+      this.drag = { kind: "riverMove", riverId: hit.id, startX: x, startY: y, points: [...hit.points], moved: false };
+      return this.notify(false);
+    }
     const place = outdoorPlaceAt(s, x, y);
     this.selectedId = place?.id ?? null;
+    this.selectedRiverId = null;
+    this.selectedPoint = -1;
     if (place) {
       this.pinRefs = [];
       const pins: Array<{ x: number; y: number }> = [];
@@ -731,6 +808,25 @@ export class SketchEditor {
     this.edit((s) => {
       s.rivers = s.rivers.filter((r) => r.id !== id);
     });
+    if (this.selectedRiverId === id) this.selectRiver(null);
+  }
+
+  /** Change the picked river's width. */
+  setSelectedRiverWidth(n: number) {
+    const river = this.selectedRiver;
+    if (!river) return;
+    const width = Math.max(1, Math.min(12, Math.round(n)));
+    if (width !== river.width) this.edit(() => (river.width = width));
+  }
+
+  /** Take the picked point off the picked river (a river keeps at least two points). */
+  removeSelectedPoint() {
+    const river = this.selectedRiver;
+    if (!river || this.selectedPoint < 0 || river.points.length <= 4) return;
+    const k = this.selectedPoint;
+    this.edit(() => removeRiverPoint(river, k));
+    this.selectedPoint = -1;
+    this.notify(false);
   }
 
   updateSelected(patch: Partial<Pick<SketchPlace, "name" | "ownSection" | "size">>) {

@@ -367,6 +367,7 @@ button.danger { background: var(--bad); color: #1b1012; border: none; font-weigh
 .sketch-section > summary { font-weight: 600; cursor: pointer; min-height: var(--hit); display: flex; align-items: center; }
 details.sketch-section[open] > summary { margin-bottom: 4px; }
 .stretch-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 13px; }
+.stretch-row.active .link-button { color: var(--text); font-weight: 600; }
 .tool-help { margin: 8px 0; }
 .file-button { cursor: pointer; display: inline-flex; align-items: center; min-height: var(--hit); }
 .secondary.danger { background: var(--panel-2); color: var(--bad); border: 1px solid var(--line); font-weight: 400; }

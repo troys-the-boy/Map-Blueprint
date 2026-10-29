@@ -252,6 +252,7 @@ function useKeyboardShortcuts(openNewMap: () => void) {
         else if (mod) return;
         else if (key === "enter" && ed.riverPoints) ed.finishRiver();
         else if (key === "escape") ed.riverPoints ? ed.cancelRiver() : ed.tool === "calibrate" || ed.tool === "pin" ? ed.setTool("select") : ed.select(null);
+        else if ((key === "delete" || key === "backspace") && ed.selectedRiver) ed.selectedPoint >= 0 && ed.selectedRiver.points.length > 4 ? ed.removeSelectedPoint() : ed.deleteRiver(ed.selectedRiver.id);
         else if ((key === "delete" || key === "backspace") && ed.selected) ed.deleteSelected();
         else if (key === "0") sketchViewRef.fit?.();
         else if (key === "+" || key === "=") sketchViewRef.zoom?.(1.25);

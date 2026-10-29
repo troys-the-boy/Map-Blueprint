@@ -190,6 +190,7 @@ The sketch is a grid of 5×5-metatile squares; the stronger lines are every 50 m
   - Tick **Own region map section** for a landmark with its own name (see Region map below). Otherwise it counts as part of its route or town.
 - **Paint areas / Erase areas:** biomes, **lakes** and **sea**, with a brush. The edge of the sea is the coastline.
 - **River:** tap points along it, then tap the last point again (or **Finish river**).
+  - **To change a river,** pick it with **Pick and move** (tap the river, or its name under **Rivers** in the panel). Drag a point to move it, drag the river to move all of it, or tap the **+** in the middle of a stretch to add a point there. Pick a point and use **Remove point** (or Delete) to take it off. The panel also sets its width and deletes it.
 - **Pick and move:** tap a place to see its details. Drag it to move it (forest and cave pins on it come along). Drag a picked place's corner to resize that stretch, and drag a pin to move it.
 - **Move view:** drag to pan. Two fingers pan and pinch to zoom anywhere; the mouse wheel zooms.
 

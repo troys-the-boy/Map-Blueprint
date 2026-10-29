@@ -41,6 +41,8 @@ export function SketchPanel({ onClose }: { onClose?: () => void }) {
   const limits = s.region.settings.engineLimits;
   const issues = sketchProblems(s.region);
   const sel = e.selected;
+  const river = e.selectedRiver;
+  const riverNo = river ? sketch.rivers.indexOf(river) + 1 : 0;
 
   return (
     <aside className="side-panel" aria-label="Sketch panel">
@@ -56,6 +58,32 @@ export function SketchPanel({ onClose }: { onClose?: () => void }) {
       <ToolHelp />
 
       <BuildPanel errors={issues.filter((i) => i.severity === "error").length} />
+
+      {river && (
+        <section className="sketch-section">
+          <h3>River {riverNo}</h3>
+          <label className="field inline" title="How wide the river is, in metatiles.">
+            <span>Width</span>
+            <NumberField min={1} max={12} value={river.width} onChange={(v) => e.setSelectedRiverWidth(v)} />
+          </label>
+          <p className="hint">
+            Drag a point to move it, or drag the river to move all of it. Tap a + to add a point there. Pick a point, then Remove point (or press Delete) to take it off.
+          </p>
+          <div className="field-row wrap">
+            <button
+              className="secondary"
+              disabled={e.selectedPoint < 0 || river.points.length <= 4}
+              title={river.points.length <= 4 ? "A river needs at least two points." : e.selectedPoint < 0 ? "Pick a point first." : "Take the picked point off the river."}
+              onClick={() => e.removeSelectedPoint()}
+            >
+              Remove point
+            </button>
+            <button className="secondary" title="Delete this river" onClick={() => e.deleteRiver(river.id)}>
+              <Icon name="trash" size={18} /> Delete river
+            </button>
+          </div>
+        </section>
+      )}
 
       {sel && (
         <section className="sketch-section">
@@ -153,10 +181,10 @@ export function SketchPanel({ onClose }: { onClose?: () => void }) {
         <details className="sketch-section">
           <summary>Rivers ({sketch.rivers.length})</summary>
           {sketch.rivers.map((r, k) => (
-            <div key={r.id} className="stretch-row">
-              <span>
+            <div key={r.id} className={`stretch-row ${r.id === e.selectedRiverId ? "active" : ""}`}>
+              <button className="link-button" title="Pick this river to change it" onClick={() => e.selectRiver(r.id)}>
                 River {k + 1}, {r.width} wide
-              </span>
+              </button>
               <button className="icon-button" title="Delete this river" aria-label={`Delete river ${k + 1}`} onClick={() => e.deleteRiver(r.id)}>
                 <Icon name="trash" size={18} />
               </button>

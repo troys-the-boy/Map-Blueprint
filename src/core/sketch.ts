@@ -430,3 +430,56 @@ export function cloneSketch(s: Sketch): Sketch {
     regionMap: { ...s.regionMap, overrides: Object.fromEntries(Object.entries(s.regionMap.overrides).map(([k, r]) => [k, { ...r, ...(r.cells ? { cells: [...r.cells] } : {}) }])) },
   };
 }
+
+// ----- editing rivers -----
+
+/** How far a point is from the line segment a–b. */
+function distToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2)) : 0;
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+/** The river under a point (within `tol` of its edge), the last drawn first, or null. */
+export function riverAt(sketch: Sketch, x: number, y: number, tol: number): SketchRiver | null {
+  for (let k = sketch.rivers.length - 1; k >= 0; k--) {
+    const r = sketch.rivers[k];
+    const reach = r.width / 2 + tol;
+    for (let i = 0; i + 3 < r.points.length; i += 2)
+      if (distToSegment(x, y, r.points[i], r.points[i + 1], r.points[i + 2], r.points[i + 3]) <= reach) return r;
+  }
+  return null;
+}
+
+/** The point of a river within `tol` of (x, y), by point number (0 = first), or -1. */
+export function riverPointAt(river: SketchRiver, x: number, y: number, tol: number): number {
+  let best = -1;
+  let bestD = tol;
+  for (let k = 0; k < river.points.length / 2; k++) {
+    const d = Math.hypot(river.points[2 * k] - x, river.points[2 * k + 1] - y);
+    if (d <= bestD) (best = k), (bestD = d);
+  }
+  return best;
+}
+
+/** The middle of each stretch of a river (where a new point can be added): [x, y] per stretch. */
+export function riverMidpoints(river: SketchRiver): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (let i = 0; i + 3 < river.points.length; i += 2) out.push([(river.points[i] + river.points[i + 2]) / 2, (river.points[i + 1] + river.points[i + 3]) / 2]);
+  return out;
+}
+
+/** Add a point to a river in its stretch number `after` (between points after and after + 1). Returns its point number. */
+export function insertRiverPoint(river: SketchRiver, after: number, x: number, y: number): number {
+  river.points.splice(2 * (after + 1), 0, Math.round(x), Math.round(y));
+  return after + 1;
+}
+
+/** Take a point off a river. A river keeps at least two points: returns false if it can't. */
+export function removeRiverPoint(river: SketchRiver, k: number): boolean {
+  if (river.points.length <= 4 || k < 0 || 2 * k >= river.points.length) return false;
+  river.points.splice(2 * k, 2);
+  return true;
+}

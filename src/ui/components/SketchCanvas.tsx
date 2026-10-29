@@ -7,7 +7,7 @@
 
 import { useEffect, useRef } from "react";
 import type { Sketch } from "../../core/sketch";
-import { SKETCH_AREAS, SKETCH_CELL, isOutdoor, placePieces, sketchCols, sketchIssues, sketchRows } from "../../core/sketch";
+import { SKETCH_AREAS, SKETCH_CELL, isOutdoor, placePieces, riverMidpoints, sketchCols, sketchIssues, sketchRows } from "../../core/sketch";
 import { checkMapSize } from "../../core/sizeRule";
 import { sketchEditor } from "../sketchEditor";
 import { store } from "../store";
@@ -531,5 +531,41 @@ function drawSketch(ctx: CanvasRenderingContext2D, s: Sketch, view: SketchView, 
       ctx.stroke();
       label(k === 0 ? "A" : "B", X(x) + 14, Y(y) - 14, "#e6b450");
     });
+  }
+
+  // The picked river: drawn again on top, with its points to drag and a + in the middle of each stretch to add one.
+  const river = sketchEditor.selectedRiver;
+  if (river) {
+    ctx.strokeStyle = "#f2f5f6";
+    ctx.lineWidth = Math.max(2, river.width * scale) + 4;
+    polyline(river.points);
+    ctx.stroke();
+    ctx.strokeStyle = "#3fa6e0";
+    ctx.lineWidth = Math.max(2, river.width * scale);
+    polyline(river.points);
+    ctx.stroke();
+    for (const [mx, my] of riverMidpoints(river)) {
+      ctx.fillStyle = "rgba(15,20,23,0.75)";
+      ctx.beginPath();
+      ctx.arc(X(mx), Y(my), 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#f2f5f6";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(X(mx) - 4, Y(my));
+      ctx.lineTo(X(mx) + 4, Y(my));
+      ctx.moveTo(X(mx), Y(my) - 4);
+      ctx.lineTo(X(mx), Y(my) + 4);
+      ctx.stroke();
+    }
+    for (let k = 0; k < river.points.length / 2; k++) {
+      ctx.fillStyle = k === sketchEditor.selectedPoint ? "#e6b450" : "#f2f5f6";
+      ctx.strokeStyle = "#1d6f9c";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(X(river.points[2 * k]), Y(river.points[2 * k + 1]), 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
   }
 }
