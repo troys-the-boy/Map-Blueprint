@@ -29,6 +29,7 @@ import {
 } from "../core/sketch";
 import { store } from "./store";
 import type { Hm } from "../core/constants";
+import { calibrateImage, rotateImage } from "../core/referenceImage";
 import type { ProgressionStep } from "../core/model";
 import type { SectionOverride } from "../core/regionMap";
 import { draftRegionMap, sectionAt, sectionCells } from "../core/regionMap";
@@ -709,17 +710,8 @@ export class SketchEditor {
    */
   applyCalibration(distance: number) {
     const [a, b] = this.calibration;
-    const u = this.sketch?.underlay;
-    if (!a || !b || !u || !(distance > 0)) return;
-    const now = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    if (now <= 0) return;
-    const k = distance / now;
-    this.edit((s) => {
-      const v = s.underlay!;
-      v.scale *= k;
-      v.x = a[0] + (v.x - a[0]) * k;
-      v.y = a[1] + (v.y - a[1]) * k;
-    });
+    if (!a || !b || !this.sketch?.underlay) return;
+    this.edit((s) => calibrateImage(s.underlay!, a, b, distance));
     this.calibration = [];
     this.tool = "select";
     this.notify(false);
@@ -730,23 +722,8 @@ export class SketchEditor {
    * its own units (image pixels or PDF points).
    */
   rotateUnderlay(degrees: number, w: number, h: number) {
-    const u = this.sketch?.underlay;
-    if (!u) return;
-    const turn = (deg: number, x: number, y: number): [number, number] => {
-      const a = (deg * Math.PI) / 180;
-      return [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)];
-    };
-    const half: [number, number] = [(w * u.scale) / 2, (h * u.scale) / 2];
-    const [cx0, cy0] = turn(u.rotation, ...half);
-    const centre = [u.x + cx0, u.y + cy0];
-    const next = ((((degrees + 180) % 360) + 360) % 360) - 180;
-    const [cx1, cy1] = turn(next, ...half);
-    this.edit((s) => {
-      const v = s.underlay!;
-      v.rotation = next;
-      v.x = centre[0] - cx1;
-      v.y = centre[1] - cy1;
-    });
+    if (!this.sketch?.underlay) return;
+    this.edit((s) => rotateImage(s.underlay!, degrees, w, h));
   }
 
   /** Stretch the underlay across the sketch's width, at its top-left corner, unturned. */

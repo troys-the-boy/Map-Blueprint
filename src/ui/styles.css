@@ -396,3 +396,7 @@ details.sketch-section[open] > summary { margin-bottom: 4px; }
 .nb-links.right { right: 8px; top: 50%; transform: translateY(-50%); flex-direction: column; }
 .nb-link { pointer-events: auto; background: rgba(30,36,40,0.9); border: 1px solid var(--line); border-radius: 16px; padding: 0 12px; min-height: 36px; font-size: 13px; }
 .nb-link:hover { background: var(--panel-2); }
+
+/* ---- reference image: setting its scale ---- */
+.calibrate-box { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; margin: 6px 0; }
+.save-images-list { list-style: none; padding: 0; margin: 6px 0; display: grid; gap: 4px; max-height: 40vh; overflow: auto; }

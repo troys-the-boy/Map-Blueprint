@@ -15,6 +15,7 @@ export const MAP_TYPES = ["route", "town", "forest", "cave", "interior_stub"] as
 export type MapType = (typeof MAP_TYPES)[number];
 
 import type { Sketch } from "./sketch";
+import type { ReferenceImage } from "./referenceImage";
 
 export const BIOMES = ["temperate_rainforest", "coastal", "wetland", "alpine", "meadow", "urban_edge"] as const;
 export type Biome = (typeof BIOMES)[number];
@@ -277,6 +278,8 @@ export interface MapBlueprint {
   routeId: string | null;
   /** The progression step this map belongs to, if any. */
   progressionStep: string | null;
+  /** A picture or PDF page laid over the map to trace (see referenceImage.ts). */
+  underlay: ReferenceImage | null;
 }
 
 /** One logical route made of several connected map segments. */
@@ -447,6 +450,7 @@ export function addNewMap(region: Region, opts: NewMapOptions): MapBlueprint {
     edits: [],
     routeId: null,
     progressionStep: null,
+    underlay: null,
   };
   region.maps.push(map);
   return map;

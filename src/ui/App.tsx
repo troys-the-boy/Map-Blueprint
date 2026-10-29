@@ -21,6 +21,7 @@ import { Toolbar } from "./components/Toolbar";
 import { EditBar } from "./components/EditBar";
 import { NeighbourLinks } from "./components/NeighbourLinks";
 import { VariationsDialog } from "./components/VariationsDialog";
+import { SaveImagesDialog } from "./components/SaveImagesDialog";
 import { Icon } from "./components/icons";
 import { openProject, saveProject } from "./files";
 import { screenLabel } from "./renderer";
@@ -230,6 +231,7 @@ export function App() {
       {dialog === "resize" && <ResizeDialog onClose={() => setDialog(null)} />}
       {dialog === "export" && <ExportDialog onClose={() => setDialog(null)} />}
       <VariationsDialog />
+      <SaveImagesDialog />
     </div>
   );
 }

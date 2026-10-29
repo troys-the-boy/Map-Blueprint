@@ -142,7 +142,7 @@ describe("saving the sketch", () => {
     forest.ownSection = true;
     paintAreas(s, 150, 100, 4, 1 + SKETCH_AREAS.indexOf("sea"));
     s.rivers.push({ id: "r1", points: [0, 0, 50, 60, 120, 60], width: 3 });
-    s.underlay = { kind: "image", name: "plan.png", data: "data:image/png;base64,iVBORw0KGgo=", page: 1, x: -10, y: 5, scale: 0.5, rotation: 90, opacity: 0.4, visible: true, locked: false };
+    s.underlay = { kind: "image", name: "plan.png", data: "data:image/png;base64,iVBORw0KGgo=", page: 1, x: -10, y: 5, scale: 0.5, rotation: 90, opacity: 0.4, visible: true, locked: false, save: true };
     region.sketch = s;
     expect(CURRENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(11);
     const loaded = parseProject(serializeProject(region, "test")).sketch!;
@@ -159,7 +159,7 @@ describe("saving the sketch", () => {
   it("rejects an underlay that isn't a PDF or image", () => {
     const region = newRegion("r", 1);
     region.sketch = newSketch(100, 100);
-    region.sketch.underlay = { kind: "image", name: "x", data: "data:text/html;base64,PHA+", page: 1, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false };
+    region.sketch.underlay = { kind: "image", name: "x", data: "data:text/html;base64,PHA+", page: 1, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, visible: true, locked: false, save: true };
     expect(() => parseProject(serializeProject(region, "test"))).toThrow(/underlay\.data/);
   });
 });

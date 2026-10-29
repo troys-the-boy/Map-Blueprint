@@ -55,8 +55,17 @@ export function MapCanvas({ onHover }: { onHover: (cell: [number, number] | null
     let lassoLength = 0;
     let smartLength = 0;
     let focusSeq = store.focus?.seq ?? 0;
+    let imageKey = "";
     const sync = () => {
       let redraw = false;
+      // The reference image (moved, scaled, turned, shown or hidden) and the scale points being tapped.
+      const u = store.currentMap?.underlay;
+      const nextImageKey = JSON.stringify([u && [u.x, u.y, u.scale, u.rotation, u.opacity, u.visible, u.page, u.data.length], store.refCalibration]);
+      if (nextImageKey !== imageKey) {
+        imageKey = nextImageKey;
+        renderer.calibration = store.refCalibration;
+        redraw = true;
+      }
       const o = store.prefs.overlays;
       if (JSON.stringify(o) !== JSON.stringify(renderer.overlays)) {
         // Lock marks are drawn into the terrain bitmaps, so those need a full redraw.

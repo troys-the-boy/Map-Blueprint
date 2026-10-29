@@ -19,6 +19,7 @@ import type { Issue } from "../core/validate";
 import type { Overlays } from "./prefs";
 import { zoneColor } from "./zoneColors";
 import { DEFAULT_PREFS } from "./prefs";
+import { drawUnderlay, underlayPicture } from "./underlay";
 
 /** Heatmap colours: index = heatmap value + 1 (see hmHeatmap in core/reach.ts). */
 export const HEAT_COLORS: Record<number, string> = {
@@ -98,6 +99,8 @@ export class MapRenderer {
   activeZoneId: string | null = null;
   /** Connected maps, drawn faded beyond the edges (cell offsets from this map's top-left). */
   neighbours: Array<{ name: string; dx: number; dy: number; w: number; h: number; bitmap: HTMLCanvasElement }> = [];
+  /** Setting the reference image's scale: the points tapped so far (metatiles). */
+  calibration: Array<[number, number]> = [];
 
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -217,6 +220,11 @@ export class MapRenderer {
     return [Math.floor((sx - this.view.offsetX) / this.view.scale), Math.floor((sy - this.view.offsetY) / this.view.scale)];
   }
 
+  /** The point under a screen position, in metatiles, not rounded to a cell. */
+  pointAt(sx: number, sy: number): [number, number] {
+    return [(sx - this.view.offsetX) / this.view.scale, (sy - this.view.offsetY) / this.view.scale];
+  }
+
   /** Zoom by a factor, keeping the point (sx, sy) fixed on screen. */
   zoomAt(factor: number, sx: number, sy: number) {
     const v = this.view;
@@ -316,6 +324,13 @@ export class MapRenderer {
       if (x > this.cssWidth || y > this.cssHeight || x + w < 0 || y + h < 0) return;
       ctx.drawImage(chunk.canvas, x, y, w, h);
     });
+
+    // The reference image, faded, on top of the terrain.
+    const u = map.underlay;
+    if (u?.visible) {
+      const pic = underlayPicture(u, () => this.requestFrame(), "map");
+      if (pic) drawUnderlay(ctx, u, pic, (x) => offsetX + x * scale, (y) => offsetY + y * scale, scale);
+    }
 
     // Visible cell range, for overlays and grid lines.
     const x0 = Math.max(0, Math.floor(-offsetX / scale));
@@ -592,6 +607,33 @@ export class MapRenderer {
         for (const c of this.flash.cells) ctx.fillRect(...cellRect(c));
         this.requestFrame();
       }
+    }
+
+    // Setting the reference image's scale: the points tapped (A, B) and the line between.
+    if (this.calibration.length) {
+      const P = (p: [number, number]) => [offsetX + p[0] * scale, offsetY + p[1] * scale] as const;
+      ctx.strokeStyle = "#e6b450";
+      ctx.lineWidth = 2;
+      if (this.calibration.length === 2) {
+        ctx.beginPath();
+        ctx.moveTo(...P(this.calibration[0]));
+        ctx.lineTo(...P(this.calibration[1]));
+        ctx.stroke();
+      }
+      ctx.font = "600 12px system-ui, sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      this.calibration.forEach((p, k) => {
+        const [x, y] = P(p);
+        ctx.beginPath();
+        ctx.moveTo(x - 10, y);
+        ctx.lineTo(x + 10, y);
+        ctx.moveTo(x, y - 10);
+        ctx.lineTo(x, y + 10);
+        ctx.stroke();
+        ctx.fillStyle = "#e6b450";
+        ctx.fillText(k === 0 ? "A" : "B", x + 8, y - 12);
+      });
     }
 
     // Hovered cell, and the 15×10 GBA screen around it.

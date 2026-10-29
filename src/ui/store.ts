@@ -49,10 +49,14 @@ import { newSketch } from "../core/sketch";
 import type { BuildReport } from "../core/buildRegion";
 import { buildRegion, pairRegionWarps } from "../core/buildRegion";
 import { idbGet, idbPut } from "./idb";
+import type { ReferenceImage } from "../core/referenceImage";
+import { calibrateImage, isMissingFile, regionImages, rotateImage } from "../core/referenceImage";
 
-/** A drawing bigger than this (characters) is autosaved to IndexedDB instead of localStorage. */
+/** A reference image bigger than this (characters) is autosaved to IndexedDB instead of localStorage. */
 const UNDERLAY_INLINE_MAX = 200_000;
-const UNDERLAY_KEY = "sketch-underlay";
+/** Where autosave kept the sketch's drawing before maps had reference images too. */
+const OLD_UNDERLAY_KEY = "sketch-underlay";
+
 import type { CellDiff } from "../core/paint";
 import { applyDiff, brushCells, emptyDiff, lineCells, paintCell, paintElevation, paintLock } from "../core/paint";
 import { parseProject, serializeProject } from "../core/project";
@@ -179,8 +183,15 @@ export interface AutosaveInfo {
 class EditorStore {
   region: Region = newRegion("Untitled region", 1);
   currentMapId: string | null = null;
-  /** The drawing last written to IndexedDB by autosave, so it isn't written again unchanged. */
-  private underlaySaved: string | null = null;
+  /** The reference images last written to IndexedDB by autosave (by key), so they aren't written again unchanged. */
+  private imagesSaved = new Map<string, string>();
+  /** The map's reference image: being moved by dragging, or its scale being set by tapping two points. */
+  refMode: "move" | "calibrate" | null = null;
+  /** Setting the scale: the points tapped so far (metatiles). */
+  refCalibration: Array<[number, number]> = [];
+  /** Saving, with reference images to be saved: waiting for the answer (see SaveImagesDialog). */
+  savePrompt: { resolve: (ok: boolean) => void } | null = null;
+  private refDrag: { startX: number; startY: number; ox: number; oy: number } | null = null;
   /** The last Build maps: what it did, and the project before it (for Undo build). */
   lastBuild: { report: BuildReport; before: Pick<Region, "maps" | "routes" | "sketch" | "nextId"> | null } | null = null;
   /** Generating several maps: how far along. */
@@ -779,6 +790,9 @@ class EditorStore {
 
   /** Forget the selection, any paste in progress and the picked thing (they belong to one map). */
   private resetPicks() {
+    this.refMode = null;
+    this.refCalibration = [];
+    this.refDrag = null;
     this.selection = null;
     this.floating = null;
     this.grab = null;
@@ -1740,6 +1754,115 @@ class EditorStore {
     this.scheduleAutosave();
   }
 
+  // ----- the map's reference image (see core/referenceImage.ts) -----------------
+  // Changes to it aren't undo steps: it's a guide to trace over, not part of the map.
+
+  /** Put a reference image on the current map, replace it, or (null) remove it. */
+  setMapImage(image: ReferenceImage | null) {
+    const map = this.currentMap;
+    if (!map) return;
+    map.underlay = image;
+    if (!image) this.refMode = null;
+    this.mapImageChanged();
+  }
+
+  /** Change some of the current map's reference image's settings. */
+  updateMapImage(patch: Partial<ReferenceImage>) {
+    const u = this.currentMap?.underlay;
+    if (!u) return;
+    Object.assign(u, patch);
+    if (patch.locked) this.refMode = null;
+    this.mapImageChanged();
+  }
+
+  /** Ask whether to go on saving with the reference images (true = save). */
+  askToSaveImages(): Promise<boolean> {
+    this.savePrompt?.resolve(false);
+    return new Promise((resolve) => {
+      this.savePrompt = { resolve };
+      this.changed();
+    });
+  }
+
+  /** The answer to askToSaveImages. `quietUpTo`: don't ask again until the images add more bytes than this. */
+  answerSavePrompt(ok: boolean, quietUpTo: number | null) {
+    const p = this.savePrompt;
+    this.savePrompt = null;
+    if (ok && quietUpTo !== null) this.updatePrefs({ imagesOkUpTo: quietUpTo });
+    this.changed();
+    p?.resolve(ok);
+  }
+
+  /** A reference image's picture finished loading: show its controls. */
+  imageLoaded() {
+    this.changed();
+  }
+
+  private mapImageChanged() {
+    this.markDirty();
+    this.changed();
+  }
+
+  /** Drag to move the image, or tap two points to set its scale. Off with null. */
+  setRefMode(mode: "move" | "calibrate" | null) {
+    this.refMode = this.refMode === mode ? null : mode;
+    this.refCalibration = [];
+    this.changed();
+  }
+
+  /** A press on the map while moving the image or setting its scale (x, y in metatiles). */
+  refDown(x: number, y: number) {
+    const u = this.currentMap?.underlay;
+    if (!u) return;
+    if (this.refMode === "move" && !u.locked) this.refDrag = { startX: x, startY: y, ox: u.x, oy: u.y };
+    else if (this.refMode === "calibrate") {
+      if (this.refCalibration.length >= 2) this.refCalibration = [];
+      this.refCalibration = [...this.refCalibration, [x, y]];
+      this.changed();
+    }
+  }
+
+  refMove(x: number, y: number) {
+    const u = this.currentMap?.underlay;
+    const d = this.refDrag;
+    if (!u || !d) return;
+    u.x = d.ox + (x - d.startX);
+    u.y = d.oy + (y - d.startY);
+    this.changed();
+  }
+
+  refUp() {
+    if (this.refDrag) this.mapImageChanged();
+    this.refDrag = null;
+  }
+
+  /** Scale the image so the two tapped points are `distance` metatiles apart. */
+  applyRefCalibration(distance: number) {
+    const u = this.currentMap?.underlay;
+    const [a, b] = this.refCalibration;
+    if (!u || !a || !b || !calibrateImage(u, a, b, distance)) return;
+    this.refCalibration = [];
+    this.refMode = null;
+    this.mapImageChanged();
+  }
+
+  /** Turn the image to `degrees` about its centre (w, h: its size in its own units). */
+  rotateMapImage(degrees: number, w: number, h: number) {
+    const u = this.currentMap?.underlay;
+    if (!u || u.locked) return;
+    rotateImage(u, degrees, w, h);
+    this.mapImageChanged();
+  }
+
+  /** Switch saving a reference image's file with the project on or off ("sketch" or a map id). */
+  setImageSaved(owner: string, save: boolean) {
+    const u = owner === "sketch" ? this.region.sketch?.underlay : this.region.maps.find((m) => m.id === owner)?.underlay;
+    if (!u) return;
+    u.save = save;
+    this.markDirty();
+    this.changed();
+  }
+
   // ----- autosave ----------------------------------------------------------
 
   private scheduleAutosave() {
@@ -1751,35 +1874,37 @@ class EditorStore {
   autosaveNow() {
     this.autosaveTimer = null;
     try {
-      // The sketch's drawing can be megabytes: it goes to IndexedDB, and the project in
-      // localStorage holds an empty one in its place.
-      const u = this.region.sketch?.underlay;
-      let project: string;
-      let underlayInDb = false;
-      if (u && u.data.length > UNDERLAY_INLINE_MAX) {
-        if (u.data !== this.underlaySaved) {
-          const data = u.data;
-          void idbPut(UNDERLAY_KEY, data).then(
-            () => (this.underlaySaved = data),
+      // Reference images can be megabytes: big ones go to IndexedDB (one key each), and the
+      // project in localStorage holds an empty one in its place. Images not saved with the
+      // project go there too, so they come back after a reload on this device.
+      const swapped: Array<[ReferenceImage, string]> = [];
+      const imagesInDb: string[] = [];
+      for (const { owner, image } of regionImages(this.region)) {
+        if (image.save && image.data.length <= UNDERLAY_INLINE_MAX) continue;
+        const key = `image:${owner}`;
+        const data = image.data;
+        if (this.imagesSaved.get(key) !== data)
+          void idbPut(key, data).then(
+            () => this.imagesSaved.set(key, data),
             () => undefined,
           );
-        }
-        const data = u.data;
-        u.data = data.slice(0, data.indexOf(",") + 1);
-        try {
-          project = this.serialize();
-        } finally {
-          u.data = data;
-        }
-        underlayInDb = true;
-      } else project = this.serialize();
+        imagesInDb.push(owner);
+        swapped.push([image, data]);
+        image.data = data.slice(0, data.indexOf(",") + 1);
+      }
+      let project: string;
+      try {
+        project = this.serialize();
+      } finally {
+        for (const [image, data] of swapped) image.data = data;
+      }
       const payload = JSON.stringify({
         savedAt: new Date().toISOString(),
         dirty: this.dirty,
         fileName: this.fileName,
         currentMapId: this.currentMapId,
         view: this.view,
-        underlayInDb,
+        imagesInDb,
         project,
       });
       localStorage.setItem(AUTOSAVE_KEY, payload);
@@ -1793,19 +1918,24 @@ class EditorStore {
     try {
       const raw = localStorage.getItem(AUTOSAVE_KEY);
       if (!raw) return null;
-      const saved = JSON.parse(raw) as { savedAt: string; dirty: boolean; fileName: string | null; currentMapId: string | null; view?: string; underlayInDb?: boolean; project: string };
+      const saved = JSON.parse(raw) as { savedAt: string; dirty: boolean; fileName: string | null; currentMapId: string | null; view?: string; underlayInDb?: boolean; imagesInDb?: unknown; project: string };
       const region = parseProject(saved.project);
       this.loadRegion(region, typeof saved.fileName === "string" ? saved.fileName : null, null, saved.dirty === true);
       if (saved.currentMapId && region.maps.some((m) => m.id === saved.currentMapId)) this.openMap(saved.currentMapId);
       if (saved.view === "region") this.openRegion();
-      // Put the drawing back from IndexedDB (see autosaveNow).
-      if (saved.underlayInDb)
-        void idbGet(UNDERLAY_KEY).then((data) => {
-          const u = this.region === region ? region.sketch?.underlay : null;
-          if (data && u && u.data.endsWith(",") && data.startsWith(u.data)) {
+      // Put the reference images back from IndexedDB (see autosaveNow).
+      const owners = Array.isArray(saved.imagesInDb) ? saved.imagesInDb.filter((o): o is string => typeof o === "string") : [];
+      const wanted: Array<[string, string]> = owners.map((o) => [o, `image:${o}`]);
+      if (saved.underlayInDb) wanted.push(["sketch", OLD_UNDERLAY_KEY]);
+      for (const [owner, key] of wanted)
+        void idbGet(key).then((data) => {
+          if (this.region !== region || !data) return;
+          const u = owner === "sketch" ? region.sketch?.underlay : region.maps.find((m) => m.id === owner)?.underlay;
+          if (u && isMissingFile(u) && data.startsWith(u.data)) {
             u.data = data;
-            this.underlaySaved = data;
+            this.imagesSaved.set(key, data);
             this.changed();
+            if (owner === this.currentMapId) this.cellsChanged(owner, null);
           }
         });
       return { savedAt: String(saved.savedAt), dirty: saved.dirty === true };

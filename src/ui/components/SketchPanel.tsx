@@ -9,7 +9,7 @@ import { MAX_SKETCH_SIDE, SKETCH_AREAS, SKETCH_CELL, isOutdoor, parentOf, placeP
 import { checkMapSize } from "../../core/sizeRule";
 import { sketchEditor } from "../sketchEditor";
 import { store, useStore } from "../store";
-import { underlayError, underlayPicture } from "../underlay";
+import { ReferenceImageSection, fitWhenReady } from "./ReferenceImageSection";
 import { SKETCH_AREA_COLORS } from "../zoneColors";
 import { NumberField } from "./NumberField";
 import { Icon } from "./icons";
@@ -29,8 +29,6 @@ const BIOME_LABELS: Record<Biome, string> = {
 const AREA_LABELS: Record<SketchArea, string> = { ...BIOME_LABELS, lake: "Lake", sea: "Sea" };
 const KIND_LABELS = { town: "Town", route: "Route", forest: "Forest", cave: "Cave" } as const;
 
-/** Largest file kept inside the project (it's saved with it). */
-const UNDERLAY_MAX_BYTES = 15 * 1024 * 1024;
 
 export function SketchPanel({ onClose }: { onClose?: () => void }) {
   const s = useStore();
@@ -305,112 +303,33 @@ function UnderlaySection() {
   const s = useStore();
   const e = sketchEditor;
   const u = s.region.sketch?.underlay ?? null;
-  const pic = underlayPicture(u, () => store.sketchChanged(false));
-  const error = underlayError();
-
-  const load = (file: File) => {
-    if (file.size > UNDERLAY_MAX_BYTES) {
-      store.setNotice({ kind: "error", text: `That file is ${(file.size / 1024 / 1024).toFixed(1)} MB. The drawing is saved inside the project, so it can be at most ${UNDERLAY_MAX_BYTES / 1024 / 1024} MB. Try a smaller image or a one-page PDF.` });
-      return;
-    }
-    const kind = file.type === "application/pdf" ? "pdf" : /^image\/(png|jpeg|webp|gif)$/.test(file.type) ? "image" : null;
-    if (!kind) {
-      store.setNotice({ kind: "error", text: "Pick a PDF or an image (PNG, JPG, WebP or GIF)." });
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const data = String(reader.result);
-      e.edit((sk) => {
-        sk.underlay = { kind, name: file.name.slice(0, 200), data, page: 1, x: 0, y: 0, scale: 1, rotation: 0, opacity: 0.5, visible: true, locked: false };
-      });
-      fitWhenReady();
-    };
-    reader.readAsDataURL(file);
-  };
-
   return (
-    <details className="sketch-section" open={!!u}>
-      <summary title="A PDF or image of your own map to trace over">Drawing to trace{u ? `: ${u.name}` : ""}</summary>
-      {!u ? (
-        <>
-          <p className="hint">Put your own sketch (a PDF or a picture) under the grid, scale it, and trace the towns and routes over it. It's saved inside the project.</p>
-          <label className="secondary file-button">
-            Load a PDF or image…
-            <input type="file" accept="application/pdf,image/png,image/jpeg,image/webp,image/gif" onChange={(ev) => ev.target.files?.[0] && load(ev.target.files[0])} hidden />
-          </label>
-        </>
-      ) : (
-        <>
-          {error && <p className="hint bad">Couldn't show it: {error}</p>}
-          <label className="check">
-            <input type="checkbox" checked={u.visible} onChange={(ev) => e.setUnderlay({ visible: ev.target.checked })} />
-            Show
-          </label>
-          <label className="slider">
-            <span>
-              Opacity <b>{Math.round(u.opacity * 100)}</b>
-            </span>
-            <input type="range" min={0.1} max={1} step={0.05} value={u.opacity} onChange={(ev) => e.setUnderlay({ opacity: Number(ev.target.value) })} />
-          </label>
-          {u.kind === "pdf" && (
-            <label className="field inline" title="Which page of the PDF to show.">
-              <span>Page</span>
-              <NumberField min={1} max={9999} value={u.page} onChange={(v) => e.setUnderlay({ page: v })} />
-            </label>
-          )}
-          <div className="field-row wrap">
-            <button className="secondary" disabled={!pic} title="Tap two points on the drawing and say how many metatiles apart they are." onClick={() => e.startCalibration()}>
-              Set scale…
-            </button>
-            <button className="secondary" disabled={!pic} title="Stretch the drawing across the sketch's width." onClick={() => pic && e.fitUnderlay(pic.width)}>
-              Fit to sketch
-            </button>
-          </div>
-          <div className="field-row wrap">
-            <button className="secondary" disabled={!pic || u.locked} title="Turn a quarter to the left" onClick={() => pic && e.rotateUnderlay(u.rotation - 90, pic.width, pic.height)}>
-              ↺ 90°
-            </button>
-            <button className="secondary" disabled={!pic || u.locked} title="Turn a quarter to the right" onClick={() => pic && e.rotateUnderlay(u.rotation + 90, pic.width, pic.height)}>
-              ↻ 90°
-            </button>
-            <button className={`secondary ${e.tool === "underlay" ? "active" : ""}`} disabled={u.locked} title="Drag the drawing to move it" onClick={() => e.setTool(e.tool === "underlay" ? "select" : "underlay")}>
-              Move
-            </button>
-          </div>
-          <label className="slider" title="Turn it a little to line it up (degrees, clockwise).">
-            <span>
-              Turn <b>{Math.round(u.rotation)}°</b>
-            </span>
-            <input type="range" min={-180} max={180} step={1} value={u.rotation} disabled={!pic || u.locked} onChange={(ev) => pic && e.rotateUnderlay(Number(ev.target.value), pic.width, pic.height)} />
-          </label>
-          <label className="check" title="Locked: it can't be moved, scaled or turned by accident.">
-            <input type="checkbox" checked={u.locked} onChange={(ev) => e.setUnderlay({ locked: ev.target.checked })} />
-            Lock in place
-          </label>
-          <p className="hint">Scale: 1 metatile = {(1 / u.scale).toFixed(2)} {u.kind === "pdf" ? "points (1/72 inch)" : "pixels"} of the drawing.</p>
-          <button className="secondary danger" onClick={() => e.setUnderlay(null)}>
-            <Icon name="trash" size={18} /> Remove the drawing
-          </button>
-        </>
-      )}
-    </details>
+    <ReferenceImageSection
+      image={u}
+      slot="sketch"
+      where="the sketch"
+      summary="Drawing to trace"
+      intro="Put your own sketch (a PDF or a picture) under the grid, scale it, and trace the towns and routes over it."
+      onReady={() => store.sketchChanged(false)}
+      onLoad={(image, isNew) => {
+        e.edit((sk) => {
+          sk.underlay = image;
+        });
+        // Fitting a new drawing across the sketch is part of loading it, not an undo step of its own.
+        if (isNew)
+          fitWhenReady("sketch", () => store.region.sketch?.underlay, (pic) => {
+            const sk = store.region.sketch!;
+            Object.assign(sk.underlay!, { scale: sk.width / pic.width });
+            store.sketchChanged(true);
+          });
+      }}
+      onPatch={(patch) => e.setUnderlay(patch)}
+      onRemove={() => e.setUnderlay(null)}
+      onRotate={(deg, pic) => e.rotateUnderlay(deg, pic.width, pic.height)}
+      onFit={(pic) => e.fitUnderlay(pic.width)}
+      moving={e.tool === "underlay"}
+      onToggleMove={() => e.setTool(e.tool === "underlay" ? "select" : "underlay")}
+      onStartCalibration={() => e.startCalibration()}
+    />
   );
-}
-
-/** Once a new drawing has loaded, stretch it across the sketch. */
-function fitWhenReady() {
-  let tries = 0;
-  const check = () => {
-    const u = store.region.sketch?.underlay;
-    if (!u) return;
-    const pic = underlayPicture(u, () => undefined);
-    if (pic) {
-      // Fitting is part of loading it, not an undo step of its own.
-      const s = store.region.sketch!;
-      Object.assign(u, { scale: s.width / pic.width });
-      store.sketchChanged(true);
-    } else if (underlayError() === null && tries++ < 100) setTimeout(check, 100);
-  };
-  check();
 }

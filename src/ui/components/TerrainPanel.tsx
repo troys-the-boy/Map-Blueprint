@@ -12,6 +12,7 @@ import type { PlaceKind } from "../../core/things";
 import { SMART_KINDS, SMART_LABELS, SMART_TERRAIN } from "../../core/strokes";
 import type { SmartKind } from "../../core/strokes";
 import { Icon } from "./icons";
+import { MapImageSection } from "./MapImageSection";
 
 const CATEGORY_LABELS: Record<string, string> = {
   ground: "Ground",
@@ -325,6 +326,8 @@ export function TerrainPanel({ onPicked }: { onPicked?: () => void }) {
           </ul>
         )}
       </section>
+
+      <MapImageSection />
     </div>
   );
 }

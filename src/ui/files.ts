@@ -6,6 +6,7 @@
 //   3. Everywhere: a normal download.
 // Opening always uses a file picker. The app never touches any other file.
 
+import { IMAGE_SIZE_WARN, savedImageBytes } from "../core/referenceImage";
 import { FILE_LIMITS, explainOpenError, parseProject } from "../core/project";
 import type { EditorStore } from "./store";
 
@@ -39,7 +40,18 @@ function isTouchDevice() {
 
 /** Save the project. Returns true if it was saved (false if cancelled or failed). */
 export async function saveProject(store: EditorStore, opts: { forceDownload?: boolean } = {}): Promise<boolean> {
+  // Reference images saved with the project: say how much room they take (always when it's a
+  // lot or too much; otherwise until told not to ask at this size).
+  const bytes = savedImageBytes(store.region);
+  if (bytes > 0) {
+    const tooBig = store.serialize().length > FILE_LIMITS.maxFileBytes;
+    if ((tooBig || bytes > IMAGE_SIZE_WARN || bytes > store.prefs.imagesOkUpTo) && !(await store.askToSaveImages())) return false;
+  }
   const text = store.serialize();
+  if (text.length > FILE_LIMITS.maxFileBytes) {
+    store.setNotice({ kind: "error", text: "The project is too big to save (over 30 MB). Untick Save with the project for some reference images, then save." });
+    return false;
+  }
   const name = suggestedFileName(store);
   const blob = new Blob([text], { type: "application/json" });
   const w = window as PickerWindow;

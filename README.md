@@ -286,14 +286,41 @@ In a map built from the sketch, the maps connected to it show faded beyond its e
 
 ### Trace your own drawing
 
-Under **Drawing to trace**, load a PDF or an image of your own map. It sits under the grid, saved inside the project (up to 15 MB).
+Under **Drawing to trace**, load a PDF or an image of your own map. It sits under the grid, saved inside the project (up to 15 MB) unless you switch that off.
 
 1. **Fit to sketch** stretches it across the sketch's width (this happens when you load it).
 2. **Set scale…**: tap two points on the drawing whose distance you know (say, the two ends of a route you want 90 metatiles long), then type that distance. The drawing is scaled about the first point, as when you scale a scanned plan.
 3. **Move**, **↺ 90° / ↻ 90°** and **Turn** line it up. **Opacity** fades it. **Lock in place** stops it moving by accident.
 4. Trace over it with the Town, Route and other tools.
 
-For a PDF, pick the **Page** to show. The PDF is only drawn as a picture: links, forms and anything else in it are ignored. Browser autosave keeps a big drawing in the browser's larger storage area (IndexedDB), so it doesn't crowd out the project. **Save** still writes it into the project file.
+For a PDF, pick the **Page** to show. The PDF is only drawn as a picture: links, forms and anything else in it are ignored. Browser autosave keeps a big drawing in the browser's larger storage area (IndexedDB), so it doesn't crowd out the project. **Save** writes it into the project file, unless you untick **Save with the project** (see Reference images and saving, below).
+
+### A reference image on a map
+
+Each map can have its own reference image: a screenshot of a real map, a scan, or a PDF page, laid over the map, faded, to trace. It's under **Reference image** at the bottom of the Paint tab.
+
+1. **Load a PDF or image…** It's stretched across the map's width to start with.
+2. Line it up:
+   - **1 metatile = 16 px**, for a screenshot of the game or Porymap (a metatile is 16 pixels), so it lines up cell for cell.
+   - **Set scale…**: tap two points on the image, then type how many metatiles apart they are.
+   - **Move** (then drag on the map), **↺ 90° / ↻ 90°**, **Turn** and **Fit to map**.
+3. **Opacity** fades it, **Show** hides it, and **Lock in place** stops it moving by accident.
+4. Paint over it. While **Move** or **Set scale** is on, the pencil doesn't paint; turn Move off to paint again.
+
+Moving or changing the image isn't an undo step: it's a guide, not part of the map. Each map keeps its own image; **Replace…** picks another, **Remove** takes it off.
+
+### Reference images and saving
+
+Every reference image (a map's, or the sketch's drawing) has a **Save with the project** switch, on at first, with its size beside it.
+
+- **On:** the file is saved inside the project, so it's there wherever you open the project.
+- **Off:** the project keeps the image's name and where it sits, but not the file, so the project stays small. On this device the browser's autosave keeps it. After opening the project file (on another device, say), the panel says it's missing: **Pick the file again…** puts it back exactly in line.
+
+When you save a project with images switched on, a box shows how much they add to the file, lists them with a tick box each, and says how to leave them out:
+- **Up to 10 MB:** fine. Tick **Don't ask again unless the images get bigger** to skip the box until they grow.
+- **Over 10 MB:** it suggests leaving out images you've finished tracing; big files are slower to save, open and share, especially on the iPad.
+- **Over 25 MB:** a strong warning, every time: a project file can be at most 30 MB.
+- **Over 30 MB in all:** it won't save until you untick some, as the file couldn't be opened again.
 
 ## Generate a town (Milestone 5)
 

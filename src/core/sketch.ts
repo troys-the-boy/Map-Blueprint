@@ -21,6 +21,7 @@ import { BIOMES, DEFAULT_ENGINE_LIMITS } from "./model";
 import { checkMapSize } from "./sizeRule";
 import type { RegionMapPlan } from "./regionMap";
 import type { Journey } from "./journey";
+import type { ReferenceImage } from "./referenceImage";
 
 /** Metatiles per sketch cell. */
 export const SKETCH_CELL = 5;
@@ -73,26 +74,8 @@ export interface SketchRiver {
   width: number;
 }
 
-export interface SketchUnderlay {
-  kind: "pdf" | "image";
-  /** The file's name, for showing. */
-  name: string;
-  /** The file itself, as a data: URL, so it is saved with the project. */
-  data: string;
-  /** Which page of a PDF (1 = first). */
-  page: number;
-  /** Where the drawing's top-left corner sits, in metatiles. */
-  x: number;
-  y: number;
-  /** Metatiles per unit of the drawing (an image pixel, or a PDF point of 1/72 inch). */
-  scale: number;
-  /** Turned clockwise, in degrees, about its top-left corner. */
-  rotation: number;
-  opacity: number;
-  visible: boolean;
-  /** Locked: can't be moved by accident. */
-  locked: boolean;
-}
+/** The drawing to trace under the sketch (see referenceImage.ts). */
+export type SketchUnderlay = ReferenceImage;
 
 export interface Sketch {
   /** The sketch's size in metatiles (a multiple of SKETCH_CELL). */

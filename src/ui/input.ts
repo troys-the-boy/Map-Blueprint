@@ -22,7 +22,7 @@ interface PointerInfo {
   type: string;
 }
 
-type Mode = "none" | "paint" | "pan" | "gesture";
+type Mode = "none" | "paint" | "pan" | "gesture" | "image";
 
 export class CanvasInput {
   private pointers = new Map<number, PointerInfo>();
@@ -117,6 +117,7 @@ export class CanvasInput {
     // A second finger: switch to pan/zoom, and throw away any stroke the first finger started.
     if (e.pointerType === "touch" && this.touchCount() === 2) {
       if (this.mode === "paint") this.endPress(true);
+      if (this.mode === "image") this.store.refUp();
       // Only fingers that land together count as a two-finger tap (undo).
       this.startGesture(performance.now() - this.firstTouchAt < TAP_TOGETHER_MS);
       return;
@@ -125,6 +126,11 @@ export class CanvasInput {
 
     if (this.paints(e)) {
       const cell = this.renderer.cellAt(x, y);
+      if (this.store.refMode) {
+        this.store.refDown(...this.renderer.pointAt(x, y));
+        this.mode = "image";
+        return;
+      }
       if (this.store.tool === "pick") {
         this.store.pickAt(cell[0], cell[1]);
         this.mode = "none";
@@ -160,6 +166,10 @@ export class CanvasInput {
     }
     if (this.mode === "gesture") {
       this.updateGesture();
+      return;
+    }
+    if (this.mode === "image") {
+      this.store.refMove(...this.renderer.pointAt(x, y));
       return;
     }
     const cell = this.renderer.cellAt(x, y);
@@ -203,6 +213,7 @@ export class CanvasInput {
       return;
     }
     if (this.mode === "paint") this.endPress(cancelled);
+    if (this.mode === "image") this.store.refUp();
     if (this.pointers.size === 0) {
       this.mode = "none";
       this.panLast = null;

@@ -36,6 +36,8 @@ export interface Prefs {
   lockWhenPainting: boolean;
   /** What fills the gap left by a move, cut or delete: plain ground, or terrain made by the generator. */
   gapFill: "ground" | "regenerate";
+  /** Saving with reference images: don't ask again until they add more than this many bytes (0 = always ask). */
+  imagesOkUpTo: number;
 }
 
 const KEY = "g3mb.prefs.v1";
@@ -48,6 +50,7 @@ export const DEFAULT_PREFS: Prefs = {
   lockWhenPainting: true,
   elevationOpacity: 0.6,
   gapFill: "regenerate",
+  imagesOkUpTo: 0,
 };
 
 export function loadPrefs(): Prefs {
@@ -73,6 +76,7 @@ export function loadPrefs(): Prefs {
       },
       lockWhenPainting: p.lockWhenPainting !== false,
       gapFill: p.gapFill === "ground" ? "ground" : "regenerate",
+      imagesOkUpTo: typeof p.imagesOkUpTo === "number" && p.imagesOkUpTo >= 0 ? p.imagesOkUpTo : 0,
       elevationOpacity:
         typeof p.elevationOpacity === "number" && p.elevationOpacity >= 0.15 && p.elevationOpacity <= 1 ? p.elevationOpacity : DEFAULT_PREFS.elevationOpacity,
     };
