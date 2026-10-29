@@ -7,7 +7,7 @@
 import { OBJECT_EVENTS_COUNT, SCREEN_HEIGHT_METATILES, SCREEN_WIDTH_METATILES } from "./constants";
 import type { Hm } from "./constants";
 import { PORYMAP_GROUP, trainerSight } from "./entities";
-import { DIRS, IS_GRASS, IS_WALKABLE, IS_WALL, IS_WATER, T, components, distanceField } from "./grid";
+import { DIRS, IS_GRASS, IS_WALKABLE, IS_WALL, IS_WATER, T, components, distanceField, ledgeWater } from "./grid";
 import type { EngineLimits, MapBlueprint, Opening } from "./model";
 import { DEFAULT_ENGINE_LIMITS } from "./model";
 import { MOVEMENT_HMS, MoveGraph, openingCells, openingNeeds } from "./reach";
@@ -341,6 +341,12 @@ export function validateMap(map: MapBlueprint, opts: ValidateOptions = {}): Issu
     }
   if (islands.length)
     warn("terrain-island", `${islands.length} single-cell patch${islands.length === 1 ? "" : "es"} of terrain (first at ${xy(islands[0])}). These are hard to draw with a tileset.`, islands);
+
+  // Ledges need dry ground at both ends of the jump: vanilla maps never put water there.
+  const wetLedges: number[] = [];
+  for (let i = 0; i < width * height; i++) if (ledgeWater(terrain, width, height, i) >= 0) wetLedges.push(i);
+  if (wetLedges.length)
+    err("ledge-water", `${wetLedges.length} ledge${wetLedges.length === 1 ? "" : "s"} with water where the player jumps off or lands (first at ${xy(wetLedges[0])}). Put dry ground both sides of a ledge, or make it cliff.`, wetLedges);
 
   const diagonal: number[] = [];
   for (let y = 0; y + 1 < height; y++)

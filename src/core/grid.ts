@@ -60,6 +60,32 @@ export const IS_ICE: readonly boolean[] = TERRAIN_TYPES.map((t) => t.slide === t
 /** True for water types. */
 export const IS_WATER: readonly boolean[] = TERRAIN_TYPES.map((t) => t.category === "water");
 
+/** The way each ledge jumps (there is no north-facing ledge; see GetLedgeJumpDirection in src/field_player_avatar.c). */
+export const LEDGE_STEP = new Map<number, { dx: number; dy: number }>([
+  [T.ledgeS, { dx: 0, dy: 1 }],
+  [T.ledgeE, { dx: 1, dy: 0 }],
+  [T.ledgeW, { dx: -1, dy: 0 }],
+]);
+
+/**
+ * For a ledge cell: the water at either end of the jump, or -1. A ledge must have dry
+ * ground where the player jumps off and where they land.
+ */
+export function ledgeWater(terrain: ArrayLike<number>, width: number, height: number, i: number): number {
+  const step = LEDGE_STEP.get(terrain[i]);
+  if (!step) return -1;
+  const x = i % width;
+  const y = Math.floor(i / width);
+  for (const s of [1, -1]) {
+    const xx = x + step.dx * s;
+    const yy = y + step.dy * s;
+    if (xx < 0 || yy < 0 || xx >= width || yy >= height) continue;
+    const j = yy * width + xx;
+    if (IS_WATER[terrain[j]]) return j;
+  }
+  return -1;
+}
+
 /**
  * Distance (in 4-neighbour steps) from every cell to the nearest source cell.
  * Cells for which `passable` is false are never entered. Unreached cells get Infinity.

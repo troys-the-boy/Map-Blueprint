@@ -174,6 +174,37 @@ export function touching(a: SketchRect, b: SketchRect): boolean {
   return sideBySide || aboveBelow;
 }
 
+/** True when b carries straight on from a: same width, lined up, end to end. */
+function straightOn(a: SketchRect, b: SketchRect): boolean {
+  const stacked = a.x === b.x && a.w === b.w && (a.y + a.h === b.y || b.y + b.h === a.y);
+  const sideBySide = a.y === b.y && a.h === b.h && (a.x + a.w === b.x || b.x + b.w === a.x);
+  return stacked || sideBySide;
+}
+
+/**
+ * Join a route's rectangles that carry straight on from the one before into one
+ * stretch, so a long straight route drawn in several goes splits like one drawn in a
+ * single go (100 + 60 makes two maps of 80, not 50 + 50 + 60). Bends stay separate.
+ * Returns true if anything was joined.
+ */
+export function mergeStraightRects(place: SketchPlace): boolean {
+  if (place.kind !== "route") return false;
+  let changed = false;
+  for (let k = 0; k + 1 < place.rects.length; ) {
+    const a = place.rects[k];
+    const b = place.rects[k + 1];
+    if (!straightOn(a, b)) {
+      k++;
+      continue;
+    }
+    const x = Math.min(a.x, b.x);
+    const y = Math.min(a.y, b.y);
+    place.rects.splice(k, 2, { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y });
+    changed = true;
+  }
+  return changed;
+}
+
 /** A piece of an outdoor place that becomes one map. */
 export interface SketchPiece {
   placeId: string;
@@ -336,6 +367,7 @@ export function newPlaceId(sketch: Sketch): string {
 export function addOutdoor(sketch: Sketch, kind: "town" | "route", rect: SketchRect, extend: SketchPlace | null = null): SketchPlace {
   if (kind === "route" && extend && extend.kind === "route") {
     extend.rects.push(rect);
+    mergeStraightRects(extend);
     return extend;
   }
   const place: SketchPlace = { id: newPlaceId(sketch), kind, name: nextPlaceName(sketch, kind), rects: [rect], pins: [], size: null, ownSection: false, mapIds: [] };

@@ -15,6 +15,7 @@ import {
   cloneSketch,
   inRect,
   isOutdoor,
+  mergeStraightRects,
   outdoorPlaceAt,
   paintAreas,
   rectBetween,
@@ -335,6 +336,11 @@ export class SketchEditor {
       case "journey":
         if (tap) this.journeyTap(s, x, y, this.pressTol);
         return;
+    }
+    // A stretch resized so it carries straight on from its neighbour joins it.
+    if (d?.kind === "resize" && d.moved) {
+      const place = s.places.find((p) => p.id === d.placeId);
+      if (place) mergeStraightRects(place);
     }
     // Drags that changed the sketch become one undo step.
     const changed = d && (d.kind === "paint" ? d.changed : d.kind === "move" || d.kind === "resize" || d.kind === "pin" || d.kind === "underlay" || d.kind === "section" ? d.moved : false);

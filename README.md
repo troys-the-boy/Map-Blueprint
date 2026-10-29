@@ -183,6 +183,7 @@ The sketch is a grid of 5×5-metatile squares; the stronger lines are every 50 m
 - **Route:** drag a rectangle for each straight stretch.
   - **To carry a route on or bend it,** keep it picked and draw the next rectangle touching its last stretch.
   - **Long stretches are split.** A stretch longer than the **Segment length** (Sketch settings, 90 at first) becomes several maps, shown with dashed seams and each segment's size.
+  - **Straight on joins up.** A rectangle that carries straight on from the last one (same width, lined up) joins it into one stretch, so a long route drawn in several goes splits into as few maps as one drawn in a single go. Older projects are joined up when opened, so a route built from pieces may make fewer, longer maps on the next update; the old extra maps are listed as no longer in the sketch.
 - **Forest** and **Cave:** tap a route or town where the entrance is. A forest or cave is its own map, reached by a warp, so its inside takes no room on the sketch.
   - Set its map size in the panel.
   - **Add an entrance** for a second way in (say, a forest that splits a route in two).
@@ -433,6 +434,7 @@ Checks run after every change. **Errors** (red) block exporting. **Warnings** (a
 
 - An entrance you can't reach from another, using only the HMs the player has.
 - Ledge traps: places you can jump into but never get out of.
+- A ledge with water where you jump off or land. Generate never makes one; this catches ones painted by hand.
 - A blocked entrance.
 - A map too big for the game.
 - Too many objects on the map.

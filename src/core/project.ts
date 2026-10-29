@@ -42,7 +42,7 @@ import {
 import { MAX_SEED } from "./rng";
 import { markTravel } from "./generators/travel";
 import type { Sketch } from "./sketch";
-import { MAX_SKETCH_SIDE, PLACE_KINDS, SKETCH_AREAS, SKETCH_CELL } from "./sketch";
+import { MAX_SKETCH_SIDE, PLACE_KINDS, SKETCH_AREAS, SKETCH_CELL, mergeStraightRects } from "./sketch";
 import type { Check } from "./schema";
 import {
   FileFormatError,
@@ -521,6 +521,8 @@ function loadSketch(saved: ReturnType<typeof sketchCheck>, path: string): Sketch
   });
   for (const [step, at] of Object.entries(saved.journey.stepStarts))
     if (at >= saved.journey.stops.length) throw new FileFormatError(`${path}.journey.stepStarts.${step}`, `there's no stop ${at + 1} on the journey`);
+  // Older files may have a straight route in several rectangles: join them (see mergeStraightRects).
+  for (const p of saved.places) mergeStraightRects(p);
   return { ...saved, areas: areas.data };
 }
 

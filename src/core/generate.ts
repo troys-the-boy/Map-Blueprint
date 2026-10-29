@@ -25,7 +25,7 @@ import { addPlateaus, connectStairs } from "./generators/plateaus";
 import { addGrassShortcut, addPathGrass } from "./generators/shortcut";
 import { fillTerrain } from "./generators/terrainFill";
 import { addHmPockets, addLedgePockets, addLedgeRows } from "./generators/features";
-import { cleanup, closeLedgeTraps } from "./generators/cleanup";
+import { cleanup, closeLedgeTraps, removeWaterLedges } from "./generators/cleanup";
 import { placeEntities } from "./generators/placement";
 import { addSnow } from "./generators/snow";
 import { applyMarsh, applyZones, prepareZones, shiftOpeningsOutOfZones } from "./generators/zones";
@@ -112,6 +112,7 @@ function forestStages(ctx: GenContext) {
   applyZones(ctx); // the user's water, edges and keep-clear ground
   buildForest(ctx);
   addForestLedges(ctx); // with a travel direction: jump back toward the start
+  removeWaterLedges(ctx); // no ledge jumps off water or into it
   placeEntities(ctx); // trainers on the main path, items at dead ends, hidden items, the sign
   addGuaranteedHidden(ctx);
 }

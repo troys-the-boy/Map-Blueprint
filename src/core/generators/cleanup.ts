@@ -7,7 +7,7 @@
 //   • fill open ground that can't be reached at all (even with every HM).
 // Paths, entrances, ledges, bridges, pockets and locked cells are never touched.
 
-import { DIRS, IS_GRASS, IS_WALKABLE, IS_WALL, IS_WATER, T, components } from "../grid";
+import { DIRS, IS_GRASS, IS_WALKABLE, IS_WALL, IS_WATER, LEDGE_STEP, T, components, ledgeWater } from "../grid";
 import { MOVEMENT_HMS, MoveGraph } from "../reach";
 import { openingCells } from "../reach";
 import type { GenContext } from "./context";
@@ -138,6 +138,7 @@ function widenPinches(ctx: GenContext) {
  * becomes plain cliff; a ledge in a row on flat ground becomes a tree.
  */
 export function closeLedgeTraps(ctx: GenContext): void {
+  removeWaterLedges(ctx);
   // A cave has no edge entrances: start from the floor in front of its exits.
   const edge = ctx.input.openings.filter((o) => o.kind === "walk").flatMap((o) => openingCells(o, ctx.width, ctx.height));
   const starts = edge.length ? edge : ctx.openingEnds;
@@ -148,7 +149,7 @@ export function closeLedgeTraps(ctx: GenContext): void {
     const back = graph.backward(starts);
     let changed = false;
     for (let i = 0; i < ctx.n; i++) {
-      const jump = LEDGE_DIR.get(ctx.terrain[i]);
+      const jump = LEDGE_STEP.get(ctx.terrain[i]);
       if (!jump) continue;
       const [x, y] = ctx.xy(i);
       if (!ctx.inside(x + jump.dx, y + jump.dy)) continue;
@@ -162,8 +163,12 @@ export function closeLedgeTraps(ctx: GenContext): void {
   }
 }
 
-const LEDGE_DIR = new Map<number, { dx: number; dy: number }>([
-  [T.ledgeS, { dx: 0, dy: 1 }],
-  [T.ledgeE, { dx: 1, dy: 0 }],
-  [T.ledgeW, { dx: -1, dy: 0 }],
-]);
+/**
+ * No ledge jumps off water or into it. A hill's cliff edge along a river or lake, or a
+ * pond added after the ledges, can leave one there: it becomes plain cliff (or the
+ * wall fill, for a ledge on flat ground), like a ledge that drops into a trap.
+ */
+export function removeWaterLedges(ctx: GenContext): void {
+  for (let i = 0; i < ctx.n; i++)
+    if (!ctx.locks[i] && ledgeWater(ctx.terrain, ctx.width, ctx.height, i) >= 0) ctx.set(i, ctx.role[i] === Role.Cliff ? T.rockWall : ctx.wallFill);
+}
