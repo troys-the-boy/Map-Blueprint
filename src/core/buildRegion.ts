@@ -111,6 +111,13 @@ export function landUnder(sketch: Sketch, r: SketchRect): { low: number; high: n
   return { low: present[0], high: present[present.length - 1], main: counts.indexOf(Math.max(...counts)) };
 }
 
+/** The height band at a point of the sketch (metatiles): -1 for sea or off the sketch. */
+function bandAt(sketch: Sketch, x: number, y: number): number {
+  const cx = Math.floor(x / SKETCH_CELL);
+  const cy = Math.floor(y / SKETCH_CELL);
+  return cx < 0 || cy < 0 || cx >= sketchCols(sketch) || cy >= sketchRows(sketch) ? -1 : levelAt(sketch, cy * sketchCols(sketch) + cx);
+}
+
 /** How hilly a new map starts, by the band most of it lies on (lowland keeps the usual default). */
 const STARTING_ELEVATION: Record<"route" | "town", Array<number | null>> = { route: [null, 0.5, 0.7, 0.9], town: [null, 0.4, 0.6, 0.8] };
 
@@ -231,7 +238,16 @@ export function buildRegion(region: Region): BuildReport {
       const margin = Math.max(0, Math.min(MARGIN, Math.floor((hi - lo - width) / 2)));
       const start = Math.max(lo + margin, Math.min(hi - margin - width, Math.floor((lo + hi) / 2) - Math.floor(width / 2)));
       const id = `o${openings.length + 1}`;
-      openings.push({ id, edge: side, start: start - (alongX ? a.rect!.x : a.rect!.y), width, kind: "walk" });
+      // Its level: the land where the two maps meet (the lower of the two squares either side
+      // of the line, so both maps agree), counted from each map's own lowest land. Where the
+      // two maps count it differently, the edge cells are transition tiles.
+      const mid = start + Math.floor(width / 2);
+      const [ax, ay] = side === "north" ? [mid, a.rect!.y] : side === "south" ? [mid, a.rect!.y + a.rect!.h - 1] : side === "west" ? [a.rect!.x, mid] : [a.rect!.x + a.rect!.w - 1, mid];
+      const [bx, by] = side === "north" ? [ax, ay - 1] : side === "south" ? [ax, ay + 1] : side === "west" ? [ax - 1, ay] : [ax + 1, ay];
+      const band = Math.max(0, Math.min(bandAt(sketch, ax, ay), bandAt(sketch, bx, by)));
+      const own = Math.max(0, Math.min(3, band - (landUnder(sketch, a.rect!)?.low ?? band)));
+      const theirs = Math.max(0, Math.min(3, band - (landUnder(sketch, b.rect!)?.low ?? band)));
+      openings.push({ id, edge: side, start: start - (alongX ? a.rect!.x : a.rect!.y), width, kind: "walk", ...(own > 0 ? { level: own } : {}), ...(own !== theirs ? { crossLevel: true } : {}) });
       partners.set(id, b.map!.id);
     }
     m.connections = connections;

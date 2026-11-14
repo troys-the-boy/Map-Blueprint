@@ -21,7 +21,13 @@ export type Passability =
 export type Direction = "n" | "s" | "e" | "w";
 
 /** Abstract elevation levels, mapped to real Gen 3 values by a tileset profile. */
-export const ELEVATION_LEVELS = ["water", "ground", "raised1", "raised2", "raised3", "raised4", "bridge"] as const;
+// "transition" (Gen 3 elevation 0) can be stepped onto from any level and off onto any level:
+// stairs use it, and so does a map's edge where the next map numbers that ground differently.
+// From pret/pokeemerald: IsElevationMismatchAt (src/event_object_movement.c) never reports a
+// mismatch when the player's elevation or the tile's is ELEVATION_TRANSITION, and
+// ELEVATION_TRANSITION = 0, ELEVATION_SURF = 1, ELEVATION_DEFAULT = 3, ELEVATION_MULTI_LEVEL = 15
+// (include/global.fieldmap.h). It is last in the list so older files keep their numbers.
+export const ELEVATION_LEVELS = ["water", "ground", "raised1", "raised2", "raised3", "raised4", "bridge", "transition"] as const;
 export type ElevationLevel = (typeof ELEVATION_LEVELS)[number];
 
 export interface TerrainType {

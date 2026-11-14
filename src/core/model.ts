@@ -155,6 +155,22 @@ export interface Opening {
   kind: OpeningKind;
   /** Optional: this is the route's Start or Finish (see generators/travel.ts). */
   role?: OpeningRole;
+  /**
+   * Optional: how many levels above the map's low ground the entrance is (0 or missing =
+   * on low ground). A route over a pass comes in low at one end and leaves high at the other.
+   */
+  level?: number;
+  /**
+   * Optional: the map on the other side numbers this ground differently (its own low ground
+   * is higher or lower), so the cells on the map's edge are transition tiles, which the
+   * player can cross from any level. Set by Build.
+   */
+  crossLevel?: boolean;
+}
+
+/** How many levels above low ground an entrance is. */
+export function openingLevel(o: Opening): number {
+  return o.kind === "walk" && typeof o.level === "number" ? Math.max(0, Math.min(4, Math.round(o.level))) : 0;
 }
 
 /** Connection directions, named as in pokeemerald map.json ("up", "down", …). */

@@ -209,12 +209,18 @@ describe("building maps from the sketch's heights", () => {
     const a = heightZones(north)[0].mask.data;
     const b = heightZones(south)[0].mask.data;
     for (let x = 0; x < 60; x++) expect(a[39 * 60 + x], `x ${x}`).toBe(b[x]);
-    // And their shared entrance is on low ground on both, so the player can cross.
+    // Their shared entrance is at the same height on both (both count from lowland here), so
+    // the player can cross: no crossing tiles are needed.
+    const inner: string[] = [];
     for (const m of [north, south]) {
       const res = generateRoute(m);
       expect(res.ok).toBe(true);
-      for (const o of res.openings) for (const c of openingCells(o, m.width, m.height)) expect(ELEVATION_LEVELS[res.elevation[c]]).toBe("ground");
+      const o = res.openings[0];
+      expect(o.crossLevel).toBeUndefined();
+      const x = o.start + 1;
+      inner.push(ELEVATION_LEVELS[res.elevation[(o.edge === "south" ? m.height - 4 : 3) * m.width + x]]);
     }
+    expect(inner[0]).toBe(inner[1]);
   });
 
   it("a new map starts with a look that suits its land; Build never changes it afterwards", () => {

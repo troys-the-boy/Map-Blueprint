@@ -50,6 +50,7 @@ export const LEVEL = {
   raised3: ELEVATION_LEVELS.indexOf("raised3"),
   raised4: ELEVATION_LEVELS.indexOf("raised4"),
   bridge: ELEVATION_LEVELS.indexOf("bridge"),
+  transition: ELEVATION_LEVELS.indexOf("transition"),
 };
 
 /** Water deep enough to surf (deep water and currents): what a bridge can cross. */

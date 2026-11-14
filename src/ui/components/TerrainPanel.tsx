@@ -42,6 +42,7 @@ export const LEVEL_LABELS: Record<string, string> = {
   raised3: "Raised ×3",
   raised4: "Raised ×4",
   bridge: "Bridge",
+  transition: "Crossing (any level)",
 };
 
 /** Tooltips for the things the Things tool can place. */

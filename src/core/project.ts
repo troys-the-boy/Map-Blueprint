@@ -63,7 +63,7 @@ import {
 import { ELEVATION_LEVELS, TERRAIN_TYPES, terrainIndex } from "./terrain";
 
 export const FILE_FORMAT_ID = "gen3-map-blueprint-project";
-export const CURRENT_SCHEMA_VERSION = 17;
+export const CURRENT_SCHEMA_VERSION = 18;
 
 /** Safety limits for opened files. Anything bigger is rejected. */
 export const FILE_LIMITS = {
@@ -285,7 +285,9 @@ const openingCheck: Check<Opening> = object({
   width: num(1, FILE_LIMITS.maxMapSide),
   kind: oneOf(OPENING_KINDS),
   role: oneOf(OPENING_ROLES),
-}, ["role"]);
+  level: num(0, 4),
+  crossLevel: bool,
+}, ["role", "level", "crossLevel"]);
 
 const connectionCheck: Check<Connection> = object({
   direction: oneOf(CONNECTION_DIRECTIONS),
@@ -659,6 +661,10 @@ export const MIGRATIONS: Record<number, Migration> = {
       settings = { ...(settings as object), targetSegmentLength: 90 };
     return { ...file, schemaVersion: 10, region: region && maps ? { ...region, settings, maps: maps.map(upgradeMap) } : region };
   },
+  // v17 → v18 (land and settlements, part D): entrances may have "level" (levels above the
+  // map's low ground) and "crossLevel"; elevation gains the "transition" level. Nothing in a
+  // version-17 file needs changing: its entrances are all on low ground.
+  17: (file) => ({ ...file, schemaVersion: 18 }),
   // v16 → v17 (land and settlements, part C): the sketch gains "heights" (a height band per
   // sketch cell, saved like the painted areas). Older sketches are all lowland.
   16: (file) => {

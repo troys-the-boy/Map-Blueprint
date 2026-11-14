@@ -12,7 +12,7 @@ import type { Area } from "./selection";
 import { inArea } from "./selection";
 import { cloneThing } from "./things";
 import { Rng, deriveSeed } from "./rng";
-import { IS_WATER, T } from "./grid";
+import { IS_WALKABLE, IS_WATER, T } from "./grid";
 import type { Issue, ValidateOptions } from "./validate";
 import { validateMap } from "./validate";
 import { GenContext, LEVEL } from "./generators/context";
@@ -33,7 +33,8 @@ import { ELEVATION_LEVELS } from "./terrain";
 import { addSettlement, buildTown, connectBuildings } from "./generators/town";
 import { buildingList, readTownParams } from "./generators/townParams";
 import type { CaveParams } from "./generators/caveParams";
-import { styleOf } from "./model";
+import { openingLevel, styleOf } from "./model";
+import { openingCells } from "./reach";
 import { addForestLedges, addGuaranteedHidden, buildForest } from "./generators/forest";
 import { readForestParams } from "./generators/forestParams";
 import { buildCave } from "./generators/cave";
@@ -73,6 +74,13 @@ function finishElevation(ctx: GenContext): Uint8Array {
     if (ctx.terrain[i] === T.bridge) out[i] = LEVEL.bridge;
     else if (low && IS_WATER[ctx.terrain[i]]) out[i] = LEVEL.water;
     else if (out[i] === LEVEL.water) out[i] = LEVEL.ground;
+  }
+  // An entrance above low ground, or one whose neighbour numbers the ground differently: the
+  // cells on the map's edge are transition tiles, so the player can cross whatever level each
+  // map gives that ground (see ELEVATION_LEVELS in terrain.ts).
+  for (const o of ctx.input.openings) {
+    if (o.kind !== "walk" || !(openingLevel(o) > 0 || o.crossLevel)) continue;
+    for (const c of openingCells(o, ctx.width, ctx.height)) if (!ctx.locks[c] && IS_WALKABLE[ctx.terrain[c]] && !IS_WATER[ctx.terrain[c]]) out[c] = LEVEL.transition;
   }
   return out;
 }

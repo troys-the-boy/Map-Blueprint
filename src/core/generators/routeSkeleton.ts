@@ -36,6 +36,15 @@ export function carveOpening(ctx: GenContext, o: Opening): number {
       if (k === Math.floor(o.width / 2) && d === depth) inner = i;
     }
   }
+  // The gap through the border is on the level of the ground it leads to (an entrance can be
+  // up on a hillside): the border's own cells have no level until now.
+  if (!surf)
+    for (let k = 0; k < o.width; k++)
+      for (let d = 0; d < ctx.params.borderThickness; d++) {
+        const along = o.start + k;
+        const [x, y] = o.edge === "north" ? [along, d] : o.edge === "south" ? [along, ctx.height - 1 - d] : o.edge === "west" ? [d, along] : [ctx.width - 1 - d, along];
+        if (ctx.inside(x, y) && !ctx.locks[ctx.idx(x, y)]) ctx.elevation[ctx.idx(x, y)] = ctx.elevation[inner];
+      }
   return inner;
 }
 

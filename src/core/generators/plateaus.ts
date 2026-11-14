@@ -31,6 +31,7 @@ import type { GenContext } from "./context";
 import { LEVEL, RAISED, Role } from "./context";
 import { effectiveElevation } from "./params";
 import { heightLevel } from "../zones";
+import { openingLevel } from "../model";
 import { backDir, progress } from "./travel";
 
 /**
@@ -51,13 +52,17 @@ export function zonedHeights(ctx: GenContext): Uint8Array | null {
 export function addPlateaus(ctx: GenContext): void {
   const zoned = zonedHeights(ctx);
   const amount = effectiveElevation(ctx.params, ctx.input.biome);
-  if ((amount <= 0 && !zoned) || ctx.layout === "water") return;
+  // An entrance above low ground needs high ground to arrive on, even on a flat map.
+  const highEntrance = ctx.input.openings.some((o) => openingLevel(o) > 0);
+  if ((amount <= 0 && !zoned && !highEntrance) || ctx.layout === "water") return;
   const alpine = ctx.input.biome === "alpine";
   const crossLength = ctx.vertical ? ctx.width : ctx.height;
   // Cells too close to entrances stay flat, so every entrance starts on the ground.
   // Entrances in a long side get a flat way all the way to the middle of the route.
   const nearEntrance = new Uint8Array(ctx.n);
   for (const o of ctx.input.openings) {
+    // An entrance above low ground isn't flattened: its ground is evened out at its level instead (see addTerraces).
+    if (openingLevel(o) > 0) continue;
     const side = ctx.vertical ? o.edge === "east" || o.edge === "west" : o.edge === "north" || o.edge === "south";
     const depth = side ? Math.ceil(crossLength / 2) + 2 : 9;
     for (let k = -4; k < o.width + 4; k++)
@@ -79,9 +84,11 @@ export function addPlateaus(ctx: GenContext): void {
     !nearEntrance[i] && ctx.role[i] === Role.None && !ctx.locks[i] && ctx.elevation[i] === LEVEL.ground && ctx.edgeDist(i) >= edge;
   const bt = ctx.params.borderThickness;
   // Raised-ground zones say where the hills are: nothing else is added.
-  if (zoned) {
-    addTerraces(ctx, amount, eligibleFrom(bt), alpine, 0, zoned);
+  if (zoned || highEntrance) {
+    addTerraces(ctx, amount, eligibleFrom(bt), alpine, 0, zoned ?? (amount > 0 ? null : new Uint8Array(ctx.n)));
     joinLevels(ctx);
+    if (zoned || amount <= 0) return;
+    if (!alpine && crossLength >= 34) addSeparatePlateaus(ctx, amount, eligibleFrom(bt + 1));
     return;
   }
   // If no stretch of hillside came out (small maps, low settings), widen the hilly stretches and try again.
@@ -296,7 +303,9 @@ function addTerraces(ctx: GenContext, amount: number, eligible: (i: number) => b
   const valley = town ? Math.max(floor + 2, halfOpen * (0.5 - 0.2 * amount)) : Math.max(floor, halfOpen * (alpine ? 0.6 - 0.35 * amount : 0.7 - 0.35 * amount));
   // With raised-ground zones: as many levels as they ask for (3 at most; 4 on alpine maps).
   const zonedTop = zoned ? Math.min(alpine ? 4 : 3, zoned.reduce((a, b) => Math.max(a, b), 0)) : 0;
-  const maxLevel = zoned ? zonedTop : town ? Math.max(1, Math.min(wantLevels, Math.floor((halfOpen - valley) / TERRACE))) : wantLevels;
+  // …and always enough for the highest entrance.
+  const entranceTop = Math.min(alpine ? 4 : 3, Math.max(0, ...ctx.input.openings.map(openingLevel)));
+  const maxLevel = Math.max(entranceTop, zoned ? zonedTop : town ? Math.max(1, Math.min(wantLevels, Math.floor((halfOpen - valley) / TERRACE))) : wantLevels);
   const step = Math.max(town ? TERRACE : 3, (halfOpen - valley) / maxLevel);
   const centre = (crossLength - 1) / 2;
   // Only some stretches of each side are hills: more of them at higher settings.
@@ -325,6 +334,20 @@ function addTerraces(ctx: GenContext, amount: number, eligible: (i: number) => b
     const climb = ctx.travel ? (progress(ctx.travel, x, y, ctx.width, ctx.height) - 0.5) * 2 : 0;
     // The valley floor itself always stays low.
     height[i] = offset < valley ? 0 : (offset - valley) / step + 1 + bumps + ends + hills + climb;
+  }
+
+  // An entrance above low ground: the ground round it is evened out at its level, so the
+  // player arrives on a flat shelf with no cliff across the gap. (Entrances on low ground are
+  // kept flat by never being eligible for a hill.)
+  for (const o of ctx.input.openings) {
+    const level = Math.min(maxLevel, openingLevel(o));
+    if (level < 1) continue;
+    for (let k = -4; k < o.width + 4; k++)
+      for (let d = 0; d < 9; d++) {
+        const along = o.start + k;
+        const [x, y] = o.edge === "north" ? [along, d] : o.edge === "south" ? [along, ctx.height - 1 - d] : o.edge === "west" ? [d, along] : [ctx.width - 1 - d, along];
+        if (ctx.inside(x, y)) height[ctx.idx(x, y)] = level + 0.5;
+      }
   }
 
   // Buildings painted by hand stand at whatever level the land has where they were drawn. The

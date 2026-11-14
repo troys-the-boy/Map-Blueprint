@@ -10,7 +10,9 @@
 //     count as blocking, since the player picks them up.
 //   • elevation: water, ground and bridges are the low level; raised1 to
 //     raised4 are plateaus, one above the other. You can only change level on
-//     stairs (one level at a time), or by jumping down a ledge.
+//     stairs (one level at a time), or by jumping down a ledge. A "transition"
+//     cell (Gen 3 elevation 0) can be entered from any level and left onto any
+//     level: a map's edge uses it where the next map numbers the ground differently.
 //   • ice: stepping onto ice slides you on in the same direction until the
 //     next cell would stop you (a wall, an object, a ledge, a level change) or
 //     you slide off onto non-ice ground. See pret/pokeemerald
@@ -38,6 +40,7 @@ export interface MapView {
 const TIER: Record<string, number> = { water: 0, ground: 0, bridge: 0, raised1: 1, raised2: 2, raised3: 3, raised4: 4 };
 const LEVEL_TIER = ELEVATION_LEVELS.map((l) => TIER[l]);
 const STAIRS = TERRAIN_TYPES.findIndex((t) => t.id === "stairs");
+const TRANSITION = ELEVATION_LEVELS.indexOf("transition");
 
 /** HMs that matter for reaching places (Flash only lights caves). In the order the heatmap labels them. */
 export const MOVEMENT_HMS: readonly Hm[] = ["cut", "rock_smash", "strength", "surf", "waterfall", "dive"];
@@ -96,7 +99,9 @@ export class MoveGraph {
     const elev = view.elevation;
     const tier = (i: number) => (elev ? LEVEL_TIER[elev[i]] ?? 0 : 0);
     /** Can you step from a to b without a ledge? Same level, or one level apart on stairs. */
+    const wild = (i: number) => !!elev && elev[i] === TRANSITION;
     const levelOk = (a: number, b: number) => {
+      if (wild(a) || wild(b)) return true;
       const d = Math.abs(tier(a) - tier(b));
       return d === 0 || (d === 1 && (terrain[a] === STAIRS || terrain[b] === STAIRS));
     };

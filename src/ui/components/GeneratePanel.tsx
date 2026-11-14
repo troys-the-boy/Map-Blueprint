@@ -14,7 +14,7 @@ import type { TownLayout } from "../../core/generators/townParams";
 import { FOREST_RANGES, readForestParams } from "../../core/generators/forestParams";
 import { CAVE_RANGES, readCaveParams } from "../../core/generators/caveParams";
 import { cavePlan, floorName, floorOf } from "../../core/caves";
-import { BIOMES, EDGES, LAND_STYLES, SETTLEMENTS, styleOf } from "../../core/model";
+import { BIOMES, EDGES, LAND_STYLES, SETTLEMENTS, openingLevel, styleOf } from "../../core/model";
 import type { Biome, Edge, LandStyle, Opening, OpeningKind, OpeningRole, Settlement } from "../../core/model";
 import { MAX_SEED } from "../../core/rng";
 import { useStore } from "../store";
@@ -524,6 +524,23 @@ export function GeneratePanel() {
                 wide
                 <NumberField min={1} max={Math.min(8, edgeLength(o.edge) - o.start)} value={o.width} onChange={(v) => setOpening(k, { width: v })} />
               </label>
+              {o.kind === "walk" && (route || town) && (
+                <select
+                  value={openingLevel(o)}
+                  title="How high the entrance is: on the map's low ground, or up on raised ground (a route over a pass comes in low and leaves high). Build sets this from the region sketch. The ground round a raised entrance is evened out at its level, with stairs down if needed."
+                  aria-label="Entrance level"
+                  onChange={(e) => {
+                    const { level: _old, ...rest } = o;
+                    const level = Number(e.target.value);
+                    s.setOpenings(map.openings.map((x, i) => (i === k ? (level > 0 ? { ...rest, level } : rest) : x)));
+                  }}
+                >
+                  <option value={0}>Low</option>
+                  <option value={1}>1 up</option>
+                  <option value={2}>2 up</option>
+                  <option value={3}>3 up</option>
+                </select>
+              )}
               {!town && (
                 <select value={o.role ?? ""} title="Start = where the player first arrives. Finish = where they leave on the first trip." aria-label="Start or Finish" onChange={(e) => setRole(k, e.target.value as OpeningRole | "")}>
                   <option value="">–</option>

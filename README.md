@@ -313,7 +313,9 @@ If there's nothing to suggest, the panel says why (the land is all one height, s
 
 - **Hills.** The lowest land under a map is that map's ground. Land in a higher band becomes **raised ground**, one level up per band, with cliffs, stairs and ledges where the height changes. A map that lies all on one band is flat as far as the sketch goes (its own **Elevation** setting still gives it hills).
 - **Where exactly.** The hills follow the sketch's squares with a natural, uneven edge, so they don't look like 5×5 blocks.
-- **Entrances stay on low ground**, on both maps of a connection, so the player can always cross. Where a hill runs right across a map or closes round an entrance, stairs are added so every entrance can still be reached.
+- **Entrances sit on the land where the maps meet.** A route from the coast up over a pass comes in on low ground at one end and leaves up on the high ground at the other, and the next map carries on from that height. The ground round a raised entrance is evened out into a flat shelf, so no cliff crosses the gap.
+- **Crossing between maps.** Each map counts levels from its own lowest land, so the two maps of a connection can give the same ground different numbers. Where they do, the cells on the map's edge are **crossing** tiles (Gen 3 elevation 0, the same as stairs), which the player can step across from any level. Build works this out for both maps.
+- **Always joined up.** Where a hill runs right across a map or closes round an entrance, stairs are added so every entrance can still be reached.
 - **Neighbours agree.** Two maps that share an edge read the same squares along it, so a hillside that crosses the edge is on both.
 - **Water and biomes** come from the sketch as before (sea, lakes, rivers and painted biomes).
 - **A new map's starting look.** The first time a map is built, it starts hillier on hills (Elevation 50), highland (70) and peaks (90), and a map mostly on highland or peaks with no biome painted starts **Alpine**. These are starting values only: change them freely, and building again never changes them back.
@@ -401,6 +403,10 @@ Paint a building with the **Building** terrain or the **Building lot** smart str
 Generated buildings keep clear of yours and of the paths to them.
 
 **On hilly maps** a painted building stands at whatever level the land has where you drew it: in the valley it's on the valley floor, on a hillside it's up on that terrace. The building, a small yard round it and the step in front of its door are evened out to one level, so a cliff never runs through the building or across its door, and the path joins the lane or the stairs on that level. Generating again leaves it where it is. If the ground there can't be raised (it's right by an entrance, or beside something else you locked), the building stays on low ground and the hills leave a flat way from it to the valley.
+
+### Entrances above low ground
+
+Under **Entrances** in the Generate tab, each walking entrance on route or town land has a level: **Low** (the map's low ground), or **1 up**, **2 up**, **3 up**. Build sets it from the region sketch; on a map you made by hand you can set it yourself. A raised entrance arrives on a flat shelf at that level, joined to the rest of the map by stairs where needed, and its cells on the map's edge are crossing tiles (elevation 0), so it works whatever number the next map gives that ground. Forest and cave land is flat, so the level is ignored there.
 
 ## Generate a town (Milestone 5)
 
@@ -717,7 +723,8 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 
 ## Known limitations
 
-- **Heights are relative to each map.** A map's lowest land is its ground, so a map that lies wholly on high ground is flat, and a cliff the sketch shows on one map may be level ground on the neighbour that lies all above it. The entrance between them is on low ground on both, so the player can still cross.
+- **Each map counts levels from its own lowest land.** That keeps its shores at ground level, which Gen 3 needs for Surf and fishing. A map that lies wholly on high ground is flat inside. Where two maps count their shared entrance differently, its edge cells are crossing tiles (elevation 0): set those cells to elevation 0 in Porymap on both maps.
+- **A raised entrance on flat land** gets a small shelf to arrive on, with stairs down.
 - **Forests and caves ignore heights.** Only route and town land has hills.
 - **Three levels at most** (four on alpine maps), however many bands the land under a map spans.
 - **A hill over the whole map** (a raised-ground zone you paint across every cell) sometimes can't be joined up; leave some low ground.

@@ -23,6 +23,7 @@
 
 import { DIRS, IS_WALKABLE, IS_WALL, IS_WATER, T, cheapestPath, components, distanceField } from "../grid";
 import type { Warp } from "../model";
+import { openingLevel } from "../model";
 import { MoveGraph, openingCells } from "../reach";
 import type { GenContext } from "./context";
 import { LEVEL, RAISED, Role } from "./context";
@@ -52,7 +53,7 @@ export function buildTown(ctx: GenContext): void {
     else ctx.set(i, T.ground, Role.None);
   }
   // Hills, like a route's hillsides (only when the Elevation setting is above 0).
-  if (ctx.params.elevation > 0 || zonedHeights(ctx)) addPlateaus(ctx);
+  if (ctx.params.elevation > 0 || zonedHeights(ctx) || ctx.input.openings.some((o) => openingLevel(o) > 0)) addPlateaus(ctx);
   // A hilltop is building land like the valley (on routes it's left as open ground).
   for (let i = 0; i < ctx.n; i++) if (!ctx.locks[i] && ctx.role[i] === Role.Clearing) ctx.role[i] = Role.None;
   const ends = ctx.input.openings.map((o) => ({ o, end: carveOpening(ctx, o) }));

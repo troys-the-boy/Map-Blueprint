@@ -4,7 +4,7 @@ This document defines the tool's file formats. The terrain vocabulary and the ti
 
 | File | Identifier (`format`) | Version field | Current |
 | --- | --- | --- | --- |
-| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 17 |
+| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 18 |
 | Terrain vocabulary (`profiles/terrain.json`) | `gen3-terrain-vocabulary` | `formatVersion` | 1 |
 | Terrain palette (`profiles/palettes/*.json`) | `gen3-terrain-palette` | `formatVersion` | 1 |
 | Tileset profile (`profiles/tilesets/*.json`) | `gen3-tileset-profile` | `formatVersion` | 1 (draft) |
@@ -13,7 +13,7 @@ Coordinates are in **metatiles** (16×16 px). The origin (0, 0) is the top-left 
 
 ---
 
-## Project file, schemaVersion 17
+## Project file, schemaVersion 18
 
 A project is a single JSON file holding one region and all of its maps. The app treats it as untrusted data when opening it:
 
@@ -41,6 +41,7 @@ When the format changes, `schemaVersion` goes up and a migration in `src/core/pr
 | 15 | Revisions after 6 | Each map gains `underlay` (a reference image, or null; null in older files). Reference images (the sketch's and the maps') gain `save`: when false the file is left out (`data` is `""`) but the rest is kept. Older sketch drawings get `save: true`. |
 | 16 | Land and settlements, part A | Each map gains `style` (how its land is generated: `route`, `town`, `forest` or `cave`) and `settlement` (its buildings: `none`, `hamlet`, `village` or `town`). Older maps get their `mapType` as `style` (`route` for an interior), and `settlement` is `town` for towns, `none` otherwise, so they generate as before. |
 | 17 | Land and settlements, part C | The sketch gains `heights`: a height band per 5×5 square (`lowland`, `hills`, `highland`, `peaks`), saved like `areas`. Older sketches are all `lowland`. The sea is still the `sea` area. |
+| 18 | Land and settlements, part D | An entrance (`openings[]`) may have `level` (0 to 4: levels above the map's low ground; missing = low ground) and `crossLevel` (true when the next map numbers that ground differently). The elevation layer gains the level `transition` (Gen 3 elevation 0), used on the edge cells of such entrances. Nothing in older files changes. |
 
 Zones gained a kind without a version change (older tools skip kinds they don't know): `height`, raised ground, with `data.level` = 1 to 4 levels above the map's low ground. Build makes these from the sketch's heights with `data.fromSketch` = true.
 | 13 | 6 (part D) | The sketch gains `journey` (the order the player visits places, and where progression steps start). Older sketches get an empty one. |
