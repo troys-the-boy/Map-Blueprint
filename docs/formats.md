@@ -4,7 +4,7 @@ This document defines the tool's file formats. The terrain vocabulary and the ti
 
 | File | Identifier (`format`) | Version field | Current |
 | --- | --- | --- | --- |
-| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 16 |
+| Project file (`*.json`) | `gen3-map-blueprint-project` | `schemaVersion` | 17 |
 | Terrain vocabulary (`profiles/terrain.json`) | `gen3-terrain-vocabulary` | `formatVersion` | 1 |
 | Terrain palette (`profiles/palettes/*.json`) | `gen3-terrain-palette` | `formatVersion` | 1 |
 | Tileset profile (`profiles/tilesets/*.json`) | `gen3-tileset-profile` | `formatVersion` | 1 (draft) |
@@ -13,7 +13,7 @@ Coordinates are in **metatiles** (16×16 px). The origin (0, 0) is the top-left 
 
 ---
 
-## Project file, schemaVersion 16
+## Project file, schemaVersion 17
 
 A project is a single JSON file holding one region and all of its maps. The app treats it as untrusted data when opening it:
 
@@ -40,6 +40,7 @@ When the format changes, `schemaVersion` goes up and a migration in `src/core/pr
 | 14 | 6 (part D revision) | A place may come up on the journey more than once (going back through it), so `journey.stepStarts` gives a stop number instead of a place id. Version-13 steps become their place's stop. |
 | 15 | Revisions after 6 | Each map gains `underlay` (a reference image, or null; null in older files). Reference images (the sketch's and the maps') gain `save`: when false the file is left out (`data` is `""`) but the rest is kept. Older sketch drawings get `save: true`. |
 | 16 | Land and settlements, part A | Each map gains `style` (how its land is generated: `route`, `town`, `forest` or `cave`) and `settlement` (its buildings: `none`, `hamlet`, `village` or `town`). Older maps get their `mapType` as `style` (`route` for an interior), and `settlement` is `town` for towns, `none` otherwise, so they generate as before. |
+| 17 | Land and settlements, part C | The sketch gains `heights`: a height band per 5×5 square (`lowland`, `hills`, `highland`, `peaks`), saved like `areas`. Older sketches are all `lowland`. The sea is still the `sea` area. |
 | 13 | 6 (part D) | The sketch gains `journey` (the order the player visits places, and where progression steps start). Older sketches get an empty one. |
 | 12 | 6 (part C) | The sketch gains `regionMap` (the in-game region map's grid size and sections placed by hand). Version-11 sketches get Emerald's 28 × 15 grid and none placed by hand. |
 
@@ -87,6 +88,7 @@ The sketch is a rough plan of the whole region. Everything is in metatiles; rect
 "sketch": {
   "width": 600, "height": 400,           // metatiles, multiples of 5 (up to 4000)
   "areas": { "legend": ["none", "lake"], "rows": [[0, 0, 1, …], …] },   // one value per 5×5 square, like a map layer
+  "heights": { "legend": ["lowland", "hills"], "rows": [[0, 0, 1, …], …] },   // the lie of the land, one band per square: lowland | hills | highland | peaks (from version 17)
   "places": [
     { "id": "p1", "kind": "route", "name": "Route 1",
       "rects": [ { "x": 100, "y": 0, "w": 30, "h": 150 }, { "x": 130, "y": 120, "w": 90, "h": 30 } ],

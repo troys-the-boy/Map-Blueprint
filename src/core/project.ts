@@ -10,6 +10,7 @@
 // Every file has a schemaVersion. When the format changes, bump
 // CURRENT_SCHEMA_VERSION and add a migration that upgrades the previous version.
 
+import { HEIGHT_BANDS } from "./regionTerrain";
 import { HMS } from "./constants";
 import { SMART_KINDS } from "./strokes";
 import type { EncounterPlan, EncounterTable, SpeciesEntry } from "./encounters";
@@ -62,7 +63,7 @@ import {
 import { ELEVATION_LEVELS, TERRAIN_TYPES, terrainIndex } from "./terrain";
 
 export const FILE_FORMAT_ID = "gen3-map-blueprint-project";
-export const CURRENT_SCHEMA_VERSION = 16;
+export const CURRENT_SCHEMA_VERSION = 17;
 
 /** Safety limits for opened files. Anything bigger is rejected. */
 export const FILE_LIMITS = {
@@ -200,6 +201,7 @@ function saveSketch(s: Sketch) {
     width: s.width,
     height: s.height,
     areas: encodeGrid({ width: cols, height: s.height / SKETCH_CELL, data: s.areas }, SKETCH_AREA_NAMES),
+    heights: encodeGrid({ width: cols, height: s.height / SKETCH_CELL, data: s.heights }, HEIGHT_BANDS),
     places: s.places,
     rivers: s.rivers,
     underlay: savedImage(s.underlay),
@@ -498,6 +500,7 @@ const sketchCheck = object({
   width: num(SKETCH_CELL, MAX_SKETCH_SIDE),
   height: num(SKETCH_CELL, MAX_SKETCH_SIDE),
   areas: savedGridCheck,
+  heights: savedGridCheck,
   places: arrayOf(sketchPlaceCheck, 2000),
   rivers: arrayOf(object({ id: str(64, ID), points: intArray(-MAX_SKETCH_SIDE, 2 * MAX_SKETCH_SIDE, 2000), width: num(1, 50) }), 500),
   underlay: nullable(referenceImageCheck),
@@ -518,6 +521,7 @@ function loadSketch(saved: ReturnType<typeof sketchCheck>, path: string): Sketch
   const cols = saved.width / SKETCH_CELL;
   const rows = saved.height / SKETCH_CELL;
   const areas = decodeGrid(saved.areas, cols, rows, (n) => SKETCH_AREA_NAMES.indexOf(n), `${path}.areas`, "painted area");
+  const heights = decodeGrid(saved.heights, cols, rows, (n) => (HEIGHT_BANDS as readonly string[]).indexOf(n), `${path}.heights`, "height band");
   saved.rivers.forEach((r, i) => {
     if (r.points.length % 2 !== 0 || r.points.length < 4) throw new FileFormatError(`${path}.rivers[${i}].points`, "expected two or more x, y points");
   });
@@ -530,7 +534,7 @@ function loadSketch(saved: ReturnType<typeof sketchCheck>, path: string): Sketch
     if (at >= saved.journey.stops.length) throw new FileFormatError(`${path}.journey.stepStarts.${step}`, `there's no stop ${at + 1} on the journey`);
   // Older files may have a straight route in several rectangles: join them (see mergeStraightRects).
   for (const p of saved.places) mergeStraightRects(p);
-  return { ...saved, areas: areas.data };
+  return { ...saved, areas: areas.data, heights: heights.data };
 }
 
 const regionCheck = object({
@@ -654,6 +658,18 @@ export const MIGRATIONS: Record<number, Migration> = {
     if (settings && typeof settings === "object" && !Array.isArray(settings) && (settings as Record<string, unknown>).targetSegmentLength === 80)
       settings = { ...(settings as object), targetSegmentLength: 90 };
     return { ...file, schemaVersion: 10, region: region && maps ? { ...region, settings, maps: maps.map(upgradeMap) } : region };
+  },
+  // v16 → v17 (land and settlements, part C): the sketch gains "heights" (a height band per
+  // sketch cell, saved like the painted areas). Older sketches are all lowland.
+  16: (file) => {
+    const region = file.region as Record<string, unknown> | null;
+    const sketch = region?.sketch as { width?: unknown; height?: unknown } | null | undefined;
+    if (!region || !sketch || typeof sketch !== "object" || Array.isArray(sketch)) return { ...file, schemaVersion: 17 };
+    const cols = typeof sketch.width === "number" ? Math.max(0, Math.floor(sketch.width / SKETCH_CELL)) : 0;
+    const rows = typeof sketch.height === "number" ? Math.max(0, Math.floor(sketch.height / SKETCH_CELL)) : 0;
+    // (A sketch too big to be real is left for the checks to refuse.)
+    const flat = cols * rows <= (MAX_SKETCH_SIDE / SKETCH_CELL) ** 2 ? Array.from({ length: rows }, () => new Array(cols).fill(0)) : [];
+    return { ...file, schemaVersion: 17, region: { ...region, sketch: { ...sketch, heights: { legend: ["lowland"], rows: flat } } } };
   },
   // v15 → v16 (land and settlements, part A): each map gains "style" (how its land is
   // generated) and "settlement" (its buildings). Older maps were generated as what they are,

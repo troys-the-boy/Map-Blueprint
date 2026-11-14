@@ -30,3 +30,6 @@ export function sectionColor(k: number): string {
 
 /** Colours for the region sketch's painted areas. */
 export const SKETCH_AREA_COLORS: Record<string, string> = { ...BIOME_COLORS, lake: "#3f86e0", sea: "#2f6fd0" };
+
+/** Colours for the region sketch's height bands (lowland, hills, highland, peaks). */
+export const HEIGHT_COLORS = ["#7fae6e", "#b89b62", "#8a6a4f", "#e8e8ee"] as const;

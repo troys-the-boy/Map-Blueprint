@@ -12,7 +12,8 @@ import { checkMapSize } from "../../core/sizeRule";
 import { sketchEditor } from "../sketchEditor";
 import { store } from "../store";
 import { underlayPicture } from "../underlay";
-import { SKETCH_AREA_COLORS, sectionColor } from "../zoneColors";
+import { HEIGHT_COLORS, SKETCH_AREA_COLORS, sectionColor } from "../zoneColors";
+import { levelAt } from "../../core/regionTerrain";
 import { draftRegionMap } from "../../core/regionMap";
 import { planJourney, stopPoints } from "../../core/journey";
 
@@ -248,6 +249,38 @@ function drawSketch(ctx: CanvasRenderingContext2D, s: Sketch, view: SketchView, 
     }
   ctx.globalAlpha = 1;
 
+  // Height bands: higher ground shaded, with a contour line wherever the band changes
+  // (thicker round the peaks). The sea is the painted sea area.
+  if (sketchEditor.showHeights) {
+    const shade = [0, 0.3, 0.45, 0.6];
+    for (let cy = 0; cy < rows; cy++)
+      for (let cx = 0; cx < cols; cx++) {
+        const band = levelAt(s, cy * cols + cx);
+        if (band <= 0) continue;
+        ctx.globalAlpha = shade[band];
+        ctx.fillStyle = HEIGHT_COLORS[band];
+        ctx.fillRect(X(cx * SKETCH_CELL), Y(cy * SKETCH_CELL), cell + 0.5, cell + 0.5);
+      }
+    ctx.globalAlpha = 1;
+    for (const peaks of [false, true]) {
+      ctx.beginPath();
+      for (let cy = 0; cy < rows; cy++)
+        for (let cx = 0; cx < cols; cx++) {
+          const a = levelAt(s, cy * cols + cx);
+          const line = (b: number, x0: number, y0: number, x1: number, y1: number) => {
+            if (a === b || (Math.max(a, b) === 3) !== peaks) return;
+            ctx.moveTo(X(x0 * SKETCH_CELL), Y(y0 * SKETCH_CELL));
+            ctx.lineTo(X(x1 * SKETCH_CELL), Y(y1 * SKETCH_CELL));
+          };
+          if (cx + 1 < cols) line(levelAt(s, cy * cols + cx + 1), cx + 1, cy, cx + 1, cy + 1);
+          if (cy + 1 < rows) line(levelAt(s, (cy + 1) * cols + cx), cx, cy + 1, cx + 1, cy + 1);
+        }
+      ctx.strokeStyle = peaks ? "rgba(40,28,18,0.9)" : "rgba(40,28,18,0.6)";
+      ctx.lineWidth = peaks ? 2 : 1;
+      ctx.stroke();
+    }
+  }
+
   // The grid: every cell when there's room, and stronger lines every 50 metatiles.
   ctx.lineWidth = 1;
   const every = cell >= 6 ? 1 : 10;
@@ -278,6 +311,39 @@ function drawSketch(ctx: CanvasRenderingContext2D, s: Sketch, view: SketchView, 
     ctx.lineWidth = Math.max(2, r.width * scale);
     polyline(r.points);
     ctx.stroke();
+  }
+  // Suggested rivers and lakes (see regionTerrain.ts): dashed, numbered, not part of the sketch yet.
+  const water = sketchEditor.water;
+  if (water) {
+    ctx.fillStyle = "rgba(124,200,240,0.4)";
+    for (const cells of water.lakes) for (const c of cells) ctx.fillRect(X((c % cols) * SKETCH_CELL), Y(Math.floor(c / cols) * SKETCH_CELL), cell + 0.5, cell + 0.5);
+    ctx.setLineDash([8, 6]);
+    ctx.strokeStyle = "#bfe6fb";
+    for (const r of water.rivers) {
+      ctx.lineWidth = Math.max(2, r.width * scale);
+      polyline(r.points);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.font = "700 12px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const tag = (text: string, x: number, y: number) => {
+      ctx.fillStyle = "rgba(15,20,23,0.85)";
+      ctx.beginPath();
+      ctx.arc(x, y, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#bfe6fb";
+      ctx.fillText(text, x, y + 0.5);
+    };
+    water.rivers.forEach((r, k) => {
+      const mid = Math.floor(r.points.length / 4) * 2;
+      tag(String(k + 1), X(r.points[mid]), Y(r.points[mid + 1]));
+    });
+    water.lakes.forEach((cells, k) => {
+      const c = cells[Math.floor(cells.length / 2)];
+      tag("L" + (k + 1), X(((c % cols) + 0.5) * SKETCH_CELL), Y((Math.floor(c / cols) + 0.5) * SKETCH_CELL));
+    });
   }
   const draftRiver = sketchEditor.riverPoints;
   if (draftRiver) {

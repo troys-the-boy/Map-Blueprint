@@ -27,6 +27,8 @@ import {
   snap,
   touching,
 } from "../core/sketch";
+import { acceptLake, acceptRiver, generateTerrain, paintHeights, suggestWater } from "../core/regionTerrain";
+import type { HeightBrush, TerrainShape, WaterSuggestions } from "../core/regionTerrain";
 import { store } from "./store";
 import type { Hm } from "../core/constants";
 import { calibrateImage, rotateImage } from "../core/referenceImage";
@@ -34,7 +36,7 @@ import type { ProgressionStep } from "../core/model";
 import type { SectionOverride } from "../core/regionMap";
 import { draftRegionMap, sectionAt, sectionCells } from "../core/regionMap";
 
-export type SketchTool = "select" | "town" | "route" | "forest" | "cave" | "pin" | "paint" | "erase" | "river" | "pan" | "underlay" | "calibrate" | "sections" | "journey";
+export type SketchTool = "select" | "town" | "route" | "forest" | "cave" | "pin" | "paint" | "erase" | "height" | "river" | "pan" | "underlay" | "calibrate" | "sections" | "journey";
 
 /** One undo step: the sketch, plus the region's progression steps and level curve (the journey uses them). */
 interface Snap {
@@ -51,7 +53,7 @@ type Drag =
   | { kind: "pin"; placeId: string; pin: number; moved: boolean }
   | { kind: "riverPoint"; riverId: string; point: number; moved: boolean }
   | { kind: "riverMove"; riverId: string; startX: number; startY: number; points: number[]; moved: boolean }
-  | { kind: "paint"; value: number; changed: boolean; x: number; y: number }
+  | { kind: "paint"; value: number; changed: boolean; x: number; y: number; /** Painting heights, not areas. */ band?: HeightBrush }
   | { kind: "draw"; ax: number; ay: number; bx: number; by: number }
   | { kind: "underlay"; startX: number; startY: number; ox: number; oy: number; moved: boolean }
   | { kind: "section"; placeId: string; startX: number; startY: number; rect: SectionOverride; corner: -1 | 0 | 1 | 2 | 3; moved: boolean };
@@ -64,6 +66,12 @@ export class SketchEditor {
   /** The picked point of the picked river (0 = first), or -1. */
   selectedPoint = -1;
   area: SketchArea = "lake";
+  /** What the height brush paints: a band of land (0 = lowland … 3 = peaks), or the sea. */
+  band: HeightBrush = 1;
+  /** Show the height bands (shading and contour lines) on the sketch. */
+  showHeights = true;
+  /** Rivers and lakes the terrain suggests, waiting to be added or dismissed (not saved). */
+  water: WaterSuggestions | null = null;
   /** Paint brush, in sketch cells across. */
   brush = 3;
   riverWidth = 3;
@@ -92,6 +100,7 @@ export class SketchEditor {
       this.drag = null;
       this.riverPoints = null;
       this.calibration = [];
+      this.water = null;
     }
     return store.region.sketch;
   }
@@ -216,6 +225,70 @@ export class SketchEditor {
     this.notify(false);
   }
 
+  /** Pick a height band (or the sea) to paint, and switch to the height brush. */
+  setBand(band: HeightBrush) {
+    this.band = band;
+    if (this.tool !== "height") this.tool = "height";
+    this.showHeights = true;
+    this.notify(false);
+  }
+
+  toggleHeights() {
+    this.showHeights = !this.showHeights;
+    this.notify(false);
+  }
+
+  /** Fill the sketch with a landform (one undo step). */
+  generateTerrain(seed: number, shape: TerrainShape) {
+    this.water = null;
+    this.showHeights = true;
+    this.edit((s) => generateTerrain(s, seed, shape));
+  }
+
+  /** Work out where rivers and lakes would be. Nothing changes until they're added. */
+  suggestWater(seed: number) {
+    const s = this.sketch;
+    if (!s) return;
+    this.water = suggestWater(s, seed);
+    this.notify(false);
+  }
+
+  /** Add a suggested river (an ordinary river from then on) or lake. */
+  acceptWater(kind: "river" | "lake", k: number) {
+    const w = this.water;
+    if (!w) return;
+    if (kind === "river" && w.rivers[k]) {
+      const [r] = w.rivers.splice(k, 1);
+      this.edit((s) => acceptRiver(s, r));
+    } else if (kind === "lake" && w.lakes[k]) {
+      const [cells] = w.lakes.splice(k, 1);
+      this.edit((s) => acceptLake(s, cells));
+    }
+    if (!w.rivers.length && !w.lakes.length) this.water = null;
+    this.notify(false);
+  }
+
+  /** Add every suggestion, as one undo step. */
+  acceptAllWater() {
+    const w = this.water;
+    if (!w) return;
+    this.water = null;
+    this.edit((s) => {
+      for (const r of w.rivers) acceptRiver(s, r);
+      for (const cells of w.lakes) acceptLake(s, cells);
+    });
+  }
+
+  /** Drop one suggestion, or all of them (k < 0). */
+  dismissWater(kind: "river" | "lake", k: number) {
+    const w = this.water;
+    if (!w) return;
+    if (k < 0) this.water = null;
+    else (kind === "river" ? w.rivers : w.lakes).splice(k, 1);
+    if (this.water && !w.rivers.length && !w.lakes.length) this.water = null;
+    this.notify(false);
+  }
+
   setBrush(n: number) {
     this.brush = Math.max(1, Math.min(12, Math.round(n)));
     this.notify(false);
@@ -245,6 +318,10 @@ export class SketchEditor {
         this.drag = { kind: "paint", value, changed: paintAreas(s, x, y, this.brush, value), x, y };
         break;
       }
+      case "height":
+        this.before = cloneSketch(s);
+        this.drag = { kind: "paint", value: 0, band: this.band, changed: paintHeights(s, x, y, this.brush, this.band), x, y };
+        break;
       case "sections":
         return this.sectionDown(s, x, y, tol);
       case "journey":
@@ -268,7 +345,11 @@ export class SketchEditor {
     } else if (d.kind === "paint") {
       // Paint every cell along the way from the last position, so a quick stroke has no gaps.
       const steps = Math.max(1, Math.ceil(Math.hypot(x - d.x, y - d.y) / (SKETCH_CELL / 2)));
-      for (let k = 1; k <= steps; k++) if (paintAreas(s, d.x + ((x - d.x) * k) / steps, d.y + ((y - d.y) * k) / steps, this.brush, d.value)) d.changed = true;
+      for (let k = 1; k <= steps; k++) {
+        const px = d.x + ((x - d.x) * k) / steps;
+        const py = d.y + ((y - d.y) * k) / steps;
+        if (d.band !== undefined ? paintHeights(s, px, py, this.brush, d.band) : paintAreas(s, px, py, this.brush, d.value)) d.changed = true;
+      }
       d.x = x;
       d.y = y;
     } else if (d.kind === "underlay" && s.underlay) {

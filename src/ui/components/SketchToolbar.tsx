@@ -15,6 +15,7 @@ export const SKETCH_TOOLS: Array<{ tool: SketchTool; icon: string; label: string
   { tool: "cave", icon: "cave", label: "Cave", tip: "Cave: tap a route or town where the cave's mouth is. Its inside is its own map, so it takes no room on the sketch." },
   { tool: "paint", icon: "pencil", label: "Paint areas", tip: "Paint areas: biomes, lakes and sea (pick one in the panel). The coastline is the edge of the sea." },
   { tool: "erase", icon: "erase", label: "Erase areas", tip: "Erase areas: clear painted biomes, lakes and sea." },
+  { tool: "height", icon: "elevation", label: "Heights", tip: "Heights: paint the lie of the land (sea, lowland, hills, highland, peaks; pick one in the panel). Generate terrain and Suggest rivers are under Terrain in the panel." },
   { tool: "river", icon: "river", label: "River", tip: "River: tap points along the river; tap the last point again (or Finish in the panel) to end it." },
   { tool: "journey", icon: "journey", label: "Journey", tip: "Journey: tap the places in the order the player first visits them. Tap the last one again to take it off. This sets each route's Start and Finish, the order of levels, and where badges and HMs are expected." },
   { tool: "pan", icon: "pan", label: "Move view", tip: "Move view: drag to pan. You can also drag with two fingers, or with the right mouse button." },
@@ -30,7 +31,7 @@ export function SketchToolbar({ onShowPanel }: { onShowPanel: () => void }) {
           <Icon name={t.icon} />
         </button>
       ))}
-      {(e.tool === "paint" || e.tool === "erase") && (
+      {(e.tool === "paint" || e.tool === "erase" || e.tool === "height") && (
         <>
           {e.tool === "paint" && (
             <button className="tool swatch-button" title="The area being painted. Tap to choose another." aria-label="Choose an area to paint" onClick={onShowPanel}>

@@ -10,6 +10,8 @@
 //     their entrances are, and their own size is a setting.
 //   • Painted areas, one per sketch cell: biomes, lakes and sea. The coastline is
 //     the edge of the sea.
+//   • Height bands, one per sketch cell: lowland, hills, highland, peaks (see
+//     regionTerrain.ts).
 //   • Rivers are lines with a width.
 //   • An underlay (a PDF page or an image) can sit under it all, to trace over.
 //
@@ -83,6 +85,8 @@ export interface Sketch {
   height: number;
   /** Painted areas, one value per sketch cell: 0 = nothing, else 1 + the index in SKETCH_AREAS. */
   areas: Uint8Array;
+  /** The lie of the land, one value per sketch cell: an index into HEIGHT_BANDS (0 = lowland). See regionTerrain.ts. */
+  heights: Uint8Array;
   places: SketchPlace[];
   rivers: SketchRiver[];
   underlay: SketchUnderlay | null;
@@ -102,6 +106,7 @@ export function newSketch(width = DEFAULT_SKETCH_SIZE.width, height = DEFAULT_SK
     width,
     height,
     areas: new Uint8Array((width / SKETCH_CELL) * (height / SKETCH_CELL)),
+    heights: new Uint8Array((width / SKETCH_CELL) * (height / SKETCH_CELL)),
     places: [],
     rivers: [],
     underlay: null,
@@ -393,12 +398,17 @@ export function resizeSketch(sketch: Sketch, width: number, height: number): voi
   const h = Math.max(SKETCH_CELL, Math.min(MAX_SKETCH_SIDE, snap(height)));
   const oldCols = sketchCols(sketch);
   const areas = new Uint8Array((w / SKETCH_CELL) * (h / SKETCH_CELL));
+  const heights = new Uint8Array(areas.length);
   const cols = w / SKETCH_CELL;
   for (let y = 0; y < Math.min(sketchRows(sketch), h / SKETCH_CELL); y++)
-    for (let x = 0; x < Math.min(oldCols, cols); x++) areas[y * cols + x] = sketch.areas[y * oldCols + x];
+    for (let x = 0; x < Math.min(oldCols, cols); x++) {
+      areas[y * cols + x] = sketch.areas[y * oldCols + x];
+      heights[y * cols + x] = sketch.heights[y * oldCols + x];
+    }
   sketch.width = w;
   sketch.height = h;
   sketch.areas = areas;
+  sketch.heights = heights;
 }
 
 /** A deep copy (for undo). The underlay's file is shared, as it never changes in place. */
@@ -406,6 +416,7 @@ export function cloneSketch(s: Sketch): Sketch {
   return {
     ...s,
     areas: s.areas.slice(),
+    heights: s.heights.slice(),
     places: s.places.map((p) => ({ ...p, rects: p.rects.map((r) => ({ ...r })), pins: p.pins.map((q) => ({ ...q })), size: p.size ? { ...p.size } : null, mapIds: [...p.mapIds] })),
     rivers: s.rivers.map((r) => ({ ...r, points: [...r.points] })),
     underlay: s.underlay ? { ...s.underlay } : null,

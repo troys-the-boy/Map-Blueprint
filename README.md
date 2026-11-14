@@ -284,6 +284,33 @@ A picked place has **Open** buttons for its maps.
 
 In a map built from the sketch, the maps connected to it show faded beyond its edges, lined up as the game joins them, so you can see a path or river carry on. Buttons at the edges of the screen (↑ Route 1 (1), → Cedar City…) open them. Turn it off with **Connected maps** in the Paint tab's view list.
 
+### Terrain: the lie of the land
+
+Shape the land of the whole region on the sketch before going into the maps. Every square of the sketch has a height: **Sea**, **Lowland**, **Hills**, **Highland** or **Peaks**. Higher ground is shaded, and a line runs wherever the height changes, like a contour (thicker round the peaks). A new sketch is all lowland.
+
+**Paint it by hand.** Pick the **Heights** tool (the mountain in the tool strip), choose a height in the panel, and paint. The brush size is the same as for painting areas. Sea here is the same sea as the Paint tool's: painting land over the sea makes it land, and biomes and lakes you painted keep their place.
+
+**Or generate it.** Open **Terrain** in the panel:
+
+1. Choose a **Landform**:
+   - *Island:* sea all round, high ground in the middle.
+   - *Coast:* sea along one side, the land rising inland.
+   - *Valley:* low ground through the middle, high ground both sides.
+   - *Mountain range:* a ridge across the sketch.
+2. Set a **Seed**, or press **New seed**. The same seed and landform always give the same land.
+3. Press **Generate terrain**. It replaces every height and the sea; biomes and lakes you painted are kept where they're still on land. **Undo** brings the old land back.
+4. Change it with the Heights tool until it's the region you want.
+
+**Rivers and lakes from the land.** Press **Suggest rivers and lakes**. The tool works out where water would run over your heights: downhill to the sea, to a lake you painted, or off the low edge of the sketch. Suggested rivers show dashed and numbered, and low ground shut in by higher ground shows as a suggested lake (L1, L2…). Nothing is added until you say so:
+
+- **Add** beside a river or lake adds that one. An added river is an ordinary river: reshape it with Pick and move.
+- **Add all** adds them together (one Undo takes them all off).
+- The ✕ dismisses one; **Dismiss all** clears them.
+
+If there's nothing to suggest, the panel says why (the land is all one height, say). **Show heights** hides the shading and lines without changing anything.
+
+The heights don't change your maps yet: in the next part, each map will take its hills, water and biome from the land under it.
+
 ### Trace your own drawing
 
 Under **Drawing to trace**, load a PDF or an image of your own map. It sits under the grid, saved inside the project (up to 15 MB) unless you switch that off.
@@ -678,6 +705,10 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 ---
 
 ## Known limitations
+
+- **Heights are for planning so far.** Painting or generating terrain on the sketch doesn't change any map yet (that comes next), and Build ignores it.
+- **Suggested rivers are rough.** They follow the height bands, which are 5×5-metatile squares, so they can run straight along the edge of the sketch or beside each other. Dismiss the ones you don't want, or reshape them once added. Suggestions don't take account of rivers already on the sketch.
+- **Suggestions aren't saved.** They're gone if you close the project before adding them; press Suggest again (the same seed gives the same ones).
 
 - **Hill towns need width.** Each buildable terrace takes about 8 cells, so small towns (30×30 and under) have little room on their hillsides and may leave buildings out at high Elevation.
 - **A painted building's level comes from the land, not from you.** Elevation you paint on the building itself is ignored: it takes the level of the ground in front of its door. To force a level, paint and lock the ground in front of it at that level; the path then needs stairs you provide (it won't add any, and says so if it can't get there).

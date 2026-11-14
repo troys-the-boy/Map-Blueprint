@@ -146,7 +146,7 @@ describe("settlements in any land", () => {
 describe("project format 16", () => {
   it("saves the land style and settlement", () => {
     const { r, m } = make("town", "forest", "village", 1);
-    expect(CURRENT_SCHEMA_VERSION).toBe(16);
+    expect(CURRENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(16);
     const back = parseProject(serializeProject(r, "test"));
     expect([back.maps[0].mapType, back.maps[0].style, back.maps[0].settlement]).toEqual(["town", "forest", "village"]);
     expect(m.style).toBe("forest");
