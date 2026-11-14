@@ -168,7 +168,9 @@ export class GenContext {
     for (let i = 0; i < this.n; i++) {
       if (input.locks[i]) {
         this.terrain[i] = input.terrain[i];
-        this.elevation[i] = input.elevation[i];
+        // A building has no level of its own: it takes the level of the land it ends up on
+        // (see the terraces in plateaus.ts and the painted buildings in town.ts).
+        this.elevation[i] = input.terrain[i] === T.building ? LEVEL.ground : input.elevation[i];
       } else this.terrain[i] = T.tree;
     }
     // Water the user painted (locked) can be crossed on a bridge, like a river: it's laid

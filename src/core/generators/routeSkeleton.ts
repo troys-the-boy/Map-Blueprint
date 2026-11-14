@@ -142,7 +142,8 @@ export function buildRouteSkeleton(ctx: GenContext): void {
 function connectWarps(ctx: GenContext, cost: (i: number) => number) {
   const line = ctx.mainLine;
   if (!line.length) return;
-  for (const w of ctx.input.warps) {
+  // (Only warps you placed: the generator's own doors are made afresh each time.)
+  for (const w of ctx.input.warps.filter((k) => k.locked)) {
     if (!ctx.inside(w.x, w.y)) continue;
     const target = ctx.idx(w.x, w.y);
     // Start from the nearest point of the path.

@@ -360,7 +360,9 @@ Paint a building with the **Building** terrain or the **Building lot** smart str
 - **The path:** from the step in front of the door to the nearest street or path on the same level. It goes over ground, trees or rock, never through a cliff, water, another building or a wall you locked.
 - **When it can't be done:** Generate says so under the Generate button, with the building's position and why (the step in front is blocked, or there's no path on its level to join). Check also reports the door as unreachable.
 
-Generated buildings keep clear of yours and of the paths to them. On hilly maps the hillsides keep clear of your buildings too, leaving flat ground from each one to the valley down the middle of the map, so a cliff never closes round a door.
+Generated buildings keep clear of yours and of the paths to them.
+
+**On hilly maps** a painted building stands at whatever level the land has where you drew it: in the valley it's on the valley floor, on a hillside it's up on that terrace. The building, a small yard round it and the step in front of its door are evened out to one level, so a cliff never runs through the building or across its door, and the path joins the lane or the stairs on that level. Generating again leaves it where it is. If the ground there can't be raised (it's right by an entrance, or beside something else you locked), the building stays on low ground and the hills leave a flat way from it to the valley.
 
 ## Generate a town (Milestone 5)
 
@@ -678,7 +680,7 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 ## Known limitations
 
 - **Hill towns need width.** Each buildable terrace takes about 8 cells, so small towns (30×30 and under) have little room on their hillsides and may leave buildings out at high Elevation.
-- **A path to a painted building stays on its level.** It won't add stairs: a building you paint on high ground with no stairs up to it gets a note instead of a path.
+- **A painted building's level comes from the land, not from you.** Elevation you paint on the building itself is ignored: it takes the level of the ground in front of its door. To force a level, paint and lock the ground in front of it at that level; the path then needs stairs you provide (it won't add any, and says so if it can't get there).
 - **Settlements outside towns are plain.** A hamlet or village on a route, in a forest or in a cave gets its buildings, doors, walks and the Pokémon Center's heal location, but no people, fences or flower beds yet (those come with town land).
 - **Caves have less room for buildings.** They stand in the rock beside the floor, so a large settlement in a small cave may lose a building or two (Generate says so).
 - **Changing Generate as keeps the other settings.** A setting two land styles share (such as Elevation) carries over when you switch.

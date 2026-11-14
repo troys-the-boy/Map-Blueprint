@@ -2,7 +2,7 @@
 // that build on their slopes.
 
 import { describe, expect, it } from "vitest";
-import { generateRoute } from "../src/core/generate";
+import { applyResult, generateRoute } from "../src/core/generate";
 import { IS_WALKABLE, T } from "../src/core/grid";
 import { addNewMap, newRegion } from "../src/core/model";
 import type { LandStyle, MapBlueprint, MapType, Opening } from "../src/core/model";
@@ -148,17 +148,43 @@ describe("hill towns build on their slopes", () => {
     expect(fit).toBeGreaterThanOrEqual(12 * 9 - 6);
   });
 
-  it("a building painted where a hillside would be keeps a flat way to its door", () => {
-    for (const [mapType, style] of [["town", "town"], ["route", "route"]] as const)
-      for (let seed = 1; seed <= 8; seed++) {
+  it("a building painted on a hillside stands at the hillside's level, with a way to its door", () => {
+    for (const [mapType, style] of [["town", "town"], ["route", "route"]] as const) {
+      let raised = 0;
+      for (let seed = 1; seed <= 10; seed++) {
         const m = make(mapType, style, seed, 50, 40);
         m.params = { elevation: 0.8 };
-        paintBuilding(m, 6, 6, 5, 3);
+        // Near the top edge, where the hills are.
+        paintBuilding(m, 20, 5, 5, 3);
         const res = generateRoute(m);
         expect(res.ok, `${style} seed ${seed}: ${res.issues.filter((i) => i.severity === "error").map((i) => i.message)}`).toBe(true);
         expect(res.notes ?? []).toEqual([]);
-        expect(reachable(m, res, 9 * 50 + 8), `${style} seed ${seed}`).toBe(true);
+        const step = 8 * 50 + 22;
+        expect(reachable(m, res, step), `${style} seed ${seed}`).toBe(true);
+        // The whole building is at the level of the ground in front of its door.
+        for (let y = 5; y < 8; y++) for (let x = 20; x < 25; x++) expect(res.elevation[y * 50 + x]).toBe(res.elevation[step]);
+        if (ELEVATION_LEVELS[res.elevation[step]] !== "ground") raised++;
+        // No cliff touches the building's front.
+        for (let x = 20; x < 25; x++) expect(res.terrain[8 * 50 + x]).not.toBe(T.rockWall);
+        // Generating again gives the same map: the building doesn't sink or climb.
+        applyResult(m, res);
+        const again = generateRoute(m);
+        expect(Array.from(again.elevation)).toEqual(Array.from(res.elevation));
+        expect(Array.from(again.terrain)).toEqual(Array.from(res.terrain));
       }
+      // It isn't kept on low ground: on most of these maps it's up on the hill.
+      expect(raised, style).toBeGreaterThanOrEqual(5);
+    }
+  });
+
+  it("a building painted in the valley stays on the valley floor", () => {
+    const m = make("town", "town", 3, 50, 40);
+    m.params = { elevation: 0.8 };
+    paintBuilding(m, 22, 18, 5, 3);
+    const res = generateRoute(m);
+    expect(res.ok).toBe(true);
+    expect(ELEVATION_LEVELS[res.elevation[18 * 50 + 22]]).toBe("ground");
+    expect(reachable(m, res, 21 * 50 + 24)).toBe(true);
   });
 
   it("a flat town is unchanged: every building on the ground", () => {

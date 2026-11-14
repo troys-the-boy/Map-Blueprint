@@ -49,18 +49,8 @@ export function addPlateaus(ctx: GenContext): void {
       }
   }
   // Warps placed by hand stay on the ground too, with room round them for the path.
-  for (const w of ctx.input.warps)
+  for (const w of ctx.input.warps.filter((k) => k.locked))
     for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) if (ctx.inside(w.x + dx, w.y + dy)) nearEntrance[ctx.idx(w.x + dx, w.y + dy)] = 1;
-  // So do buildings painted by hand, with a flat way from each to the valley floor down the
-  // middle of the map: otherwise a hillside closes round the building and no path can reach its door.
-  const middle = Math.floor((crossLength - 1) / 2);
-  for (let i = 0; i < ctx.n; i++) {
-    if (!ctx.locks[i] || ctx.terrain[i] !== T.building) continue;
-    const [x, y] = ctx.xy(i);
-    const [x0, x1] = ctx.vertical ? [Math.min(x, middle) - 2, Math.max(x, middle) + 2] : [x - 2, x + 2];
-    const [y0, y1] = ctx.vertical ? [y - 2, y + 3] : [Math.min(y, middle) - 2, Math.max(y, middle) + 3];
-    for (let yy = y0; yy <= y1; yy++) for (let xx = x0; xx <= x1; xx++) if (ctx.inside(xx, yy)) nearEntrance[ctx.idx(xx, yy)] = 1;
-  }
   // Separate plateaus keep a cell of ground inside the border; terraces run right up to it.
   const eligibleFrom = (edge: number) => (i: number) =>
     !nearEntrance[i] && ctx.role[i] === Role.None && !ctx.locks[i] && ctx.elevation[i] === LEVEL.ground && ctx.edgeDist(i) >= edge;
@@ -194,11 +184,61 @@ function addTerraces(ctx: GenContext, amount: number, eligible: (i: number) => b
     height[i] = offset < valley ? 0 : (offset - valley) / step + 1 + bumps + ends + hills + climb;
   }
 
+  // Buildings painted by hand stand at whatever level the land has where they were drawn. The
+  // building, the yard round it and the step in front of its door are evened out to one height
+  // (the height in front of the door), so a cliff never runs through the building or across its
+  // door. Where that ground can't be raised (it's by an entrance, or beside something else
+  // locked), the building stays on low ground, with a flat way from it to the valley floor
+  // down the middle of the map, so the hillside doesn't close round it.
+  const isPainted = (i: number) => ctx.locks[i] === 1 && ctx.terrain[i] === T.building;
+  const lifted = new Uint8Array(ctx.n);
+  const pads: Array<{ pad: Set<number>; level: number }> = [];
+  const paintedComp = components(ctx.width, ctx.height, isPainted);
+  const paintedGroups: number[][] = paintedComp.sizes.map(() => []);
+  for (let i = 0; i < ctx.n; i++) if (isPainted(i) && paintedComp.ids[i] >= 0) paintedGroups[paintedComp.ids[i]].push(i);
+  const middle = Math.floor(centre);
+  for (const cells of paintedGroups) {
+    if (!cells.length) continue;
+    const pad = new Set<number>();
+    for (const c of cells) {
+      const [x, y] = ctx.xy(c);
+      for (let dy = -2; dy <= 3; dy++) for (let dx = -2; dx <= 2; dx++) if (ctx.inside(x + dx, y + dy)) pad.add(ctx.idx(x + dx, y + dy));
+    }
+    const low = Math.max(...cells.map((c) => ctx.xy(c)[1]));
+    const row = cells.filter((c) => ctx.xy(c)[1] === low).sort((a, b) => a - b);
+    const mid = row[Math.floor((row.length - 1) / 2)];
+    const front = low + 1 < ctx.height ? mid + ctx.width : mid;
+    const level = Math.min(maxLevel, Math.max(0, Math.floor(height[front])));
+    if (level >= 1 && [...pad].every((i) => isPainted(i) || eligible(i))) {
+      for (const i of pad) height[i] = level + 0.5;
+      for (const c of cells) lifted[c] = 1;
+      pads.push({ pad, level });
+      continue;
+    }
+    for (const i of pad) height[i] = 0;
+    for (const c of cells) {
+      const [x, y] = ctx.xy(c);
+      const [x0, x1] = ctx.vertical ? [Math.min(x, middle) - 2, Math.max(x, middle) + 2] : [x - 2, x + 2];
+      const [y0, y1] = ctx.vertical ? [y - 2, y + 3] : [Math.min(y, middle) - 2, Math.max(y, middle) + 3];
+      for (let yy = y0; yy <= y1; yy++) for (let xx = x0; xx <= x1; xx++) if (ctx.inside(xx, yy)) height[ctx.idx(xx, yy)] = 0;
+    }
+  }
+
   // Build level by level. Each terrace is one connected piece of high-enough ground.
   let stairsBelow: number[] = [];
   let terraces = 0;
   for (let level = 1; level <= maxLevel; level++) {
-    const ok = level === 1 ? eligible : onTopOf(ctx, RAISED[level - 2]);
+    const land = level === 1 ? eligible : onTopOf(ctx, RAISED[level - 2]);
+    // A lifted building is part of the terrace under it (it's locked, so it's not "land").
+    const ok = (i: number) => (lifted[i] ? level === 1 || ctx.elevation[i] === RAISED[level - 2] : land(i));
+    // A building goes up a further level only if its whole yard can: otherwise the next
+    // cliff would cut across it, so it stays on the level below.
+    if (level > 1)
+      for (const p of pads) {
+        if (p.level < level || [...p.pad].every(ok)) continue;
+        for (const i of p.pad) height[i] = level - 0.5;
+        p.level = level - 1;
+      }
     const high = new Uint8Array(ctx.n);
     for (let i = 0; i < ctx.n; i++) if (height[i] >= level && ok(i)) high[i] = 1;
     const comp = components(ctx.width, ctx.height, (i) => high[i] === 1);

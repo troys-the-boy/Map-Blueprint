@@ -338,6 +338,9 @@ function connectPaintedBuildings(ctx: GenContext, street: number, role: Role): v
     const xs = list.map((i) => ctx.xy(i)[0]);
     const ys = list.map((i) => ctx.xy(i)[1]);
     ctx.buildings.push({ kind: "house", x: bx, y: by, w: Math.max(...xs) - Math.min(...xs) + 1, h: Math.max(...ys) - by + 1, door: doors[0], painted: true });
+    // The whole building stands at the level of the ground in front of its (first) door.
+    const [fx, fy] = ctx.xy(doors[0]);
+    if (fy + 1 < ctx.height) for (const c of list) ctx.elevation[c] = ctx.elevation[ctx.idx(fx, fy + 1)];
     for (const door of doors) {
       const [dx, dy] = ctx.xy(door);
       const fail = (why: string) => void ctx.notes.push(`No path could be drawn to the building you painted at (${dx}, ${dy}): ${why}`);
