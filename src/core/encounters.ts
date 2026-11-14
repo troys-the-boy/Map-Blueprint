@@ -12,6 +12,7 @@
 //   • fishing_mons: 10 slots, 70 30 | 60 20 20 | 40 40 15 4 1, groups old_rod [0,1],
 //     good_rod [2,3,4], super_rod [5..9], rate 30.
 
+import { styleOf } from "./model";
 import type { Biome, MapBlueprint } from "./model";
 import { BIOMES } from "./model";
 import { Rng, deriveSeed } from "./rng";
@@ -274,7 +275,7 @@ export function levelBand(map: MapBlueprint): [number, number] {
 export function draftEncounters(map: MapBlueprint, pool: readonly SpeciesEntry[], salt = 0): EncounterPlan {
   const rng = new Rng(deriveSeed(map.seed, `encounters${salt}`));
   const biomes = mapBiomes(map);
-  const cave = map.mapType === "cave";
+  const cave = styleOf(map) === "cave";
   const band = levelBand(map);
   const plan: EncounterPlan = {};
   for (const kind of neededTables(map)) {

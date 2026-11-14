@@ -7,6 +7,8 @@
 // user can change them here. Every Gen 3 building's door is on its front
 // (south) face, because the tilesets draw buildings from the front.
 
+import type { Settlement } from "../model";
+
 export const TOWN_LAYOUTS = ["grid", "organic", "waterfront"] as const;
 export type TownLayout = (typeof TOWN_LAYOUTS)[number];
 
@@ -63,6 +65,27 @@ export const DEFAULT_TOWN_PARAMS: TownParams = {
   edgeGrass: 0.3,
 };
 
+type BuildingSettings = Pick<TownParams, "center" | "mart" | "gym" | "landmark" | "houses" | "largeHouses">;
+
+/**
+ * The buildings each settlement size starts with (each can then be changed in the
+ * Generate tab). A hamlet is a few houses; a village adds a Pokémon Center; a town
+ * has a Mart too.
+ */
+export const SETTLEMENT_BUILDINGS: Record<Settlement, BuildingSettings> = {
+  none: { center: false, mart: false, gym: false, landmark: false, houses: 0, largeHouses: 0 },
+  hamlet: { center: false, mart: false, gym: false, landmark: false, houses: 2, largeHouses: 0 },
+  village: { center: true, mart: false, gym: false, landmark: false, houses: 3, largeHouses: 1 },
+  town: { center: true, mart: true, gym: false, landmark: false, houses: 3, largeHouses: 1 },
+};
+
+export const SETTLEMENT_LABELS: Record<Settlement, string> = {
+  none: "None",
+  hamlet: "Hamlet: houses",
+  village: "Village: + Pokémon Center",
+  town: "Town: + Center and Mart",
+};
+
 export const TOWN_RANGES: Record<"houses" | "largeHouses" | "people" | "edgeGrass", [number, number, boolean]> = {
   houses: [0, 12, true],
   largeHouses: [0, 6, true],
@@ -70,8 +93,10 @@ export const TOWN_RANGES: Record<"houses" | "largeHouses" | "people" | "edgeGras
   edgeGrass: [0, 1, false],
 };
 
-export function readTownParams(params: Record<string, string | number | boolean>): TownParams {
-  const d = DEFAULT_TOWN_PARAMS;
+export function readTownParams(params: Record<string, string | number | boolean>, settlement: Settlement = "town"): TownParams {
+  // With no settlement there are no buildings, whatever the saved building settings say.
+  if (settlement === "none") return { ...readTownParams(params, "town"), ...SETTLEMENT_BUILDINGS.none };
+  const d = { ...DEFAULT_TOWN_PARAMS, ...SETTLEMENT_BUILDINGS[settlement] };
   const n = (key: keyof typeof TOWN_RANGES) => {
     const [min, max, whole] = TOWN_RANGES[key];
     const v = params[key];

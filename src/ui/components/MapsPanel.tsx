@@ -1,5 +1,6 @@
 // List of the project's maps: open, rename, delete, and create new ones.
 
+import { styleOf } from "../../core/model";
 import { useStore } from "../store";
 import { checkMapSize } from "../../core/sizeRule";
 import { Icon } from "./icons";
@@ -51,7 +52,8 @@ export function MapsPanel({ onClose, onNewMap, onResize }: { onClose: () => void
               >
                 <span className="map-name">{m.name}</span>
                 <span className="map-meta">
-                  {TYPE_LABELS[m.mapType]} · {m.width}×{m.height}
+                  {TYPE_LABELS[m.mapType]}
+                  {m.mapType !== "interior_stub" && styleOf(m) !== m.mapType ? ` (as ${TYPE_LABELS[styleOf(m)].toLowerCase()})` : ""} · {m.width}×{m.height}
                   {fits ? "" : " · too big"}
                 </span>
               </button>

@@ -400,3 +400,4 @@ details.sketch-section[open] > summary { margin-bottom: 4px; }
 /* ---- reference image: setting its scale ---- */
 .calibrate-box { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; margin: 6px 0; }
 .save-images-list { list-style: none; padding: 0; margin: 6px 0; display: grid; gap: 4px; max-height: 40vh; overflow: auto; }
+.land-settings { display: grid; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--line); }

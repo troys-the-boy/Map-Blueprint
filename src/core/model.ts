@@ -14,6 +14,36 @@ import type { Seed } from "./rng";
 export const MAP_TYPES = ["route", "town", "forest", "cave", "interior_stub"] as const;
 export type MapType = (typeof MAP_TYPES)[number];
 
+/**
+ * How a map's land is generated. This is separate from what the place is (its
+ * map type): a town can be generated as a forest and is still a town on the
+ * region map and in its header.
+ */
+export const LAND_STYLES = ["route", "town", "forest", "cave"] as const;
+export type LandStyle = (typeof LAND_STYLES)[number];
+
+/** How many buildings are fitted into the land: none, or a hamlet, village or town. */
+export const SETTLEMENTS = ["none", "hamlet", "village", "town"] as const;
+export type Settlement = (typeof SETTLEMENTS)[number];
+
+/** The land style a new map of this type starts with. */
+export function defaultStyle(mapType: MapType): LandStyle {
+  return mapType === "interior_stub" ? "route" : mapType;
+}
+
+/** The settlement a new map of this type starts with: towns have one, the rest don't. */
+export function defaultSettlement(mapType: MapType): Settlement {
+  return mapType === "town" ? "town" : "none";
+}
+
+/**
+ * The land style a map is generated with. A cave place is always a cave: its
+ * ways in are warps and its floors are separate maps joined by ladders.
+ */
+export function styleOf(map: { mapType: MapType; style: LandStyle }): LandStyle {
+  return map.mapType === "cave" ? "cave" : map.style;
+}
+
 import type { Sketch } from "./sketch";
 import type { ReferenceImage } from "./referenceImage";
 
@@ -256,7 +286,12 @@ export interface MapBlueprint {
   /** Internal id, unique in the project (e.g. "map_3"). Not the MAP_* constant. */
   id: string;
   name: string;
+  /** What the place is: sets its header and how the region sketch treats it. */
   mapType: MapType;
+  /** How its land is generated (see styleOf). */
+  style: LandStyle;
+  /** The buildings fitted into the land. */
+  settlement: Settlement;
   width: number;
   height: number;
   seed: Seed;
@@ -425,6 +460,8 @@ export function addNewMap(region: Region, opts: NewMapOptions): MapBlueprint {
     id,
     name: opts.name,
     mapType: opts.mapType,
+    style: defaultStyle(opts.mapType),
+    settlement: defaultSettlement(opts.mapType),
     width: opts.width,
     height: opts.height,
     seed: opts.seed,

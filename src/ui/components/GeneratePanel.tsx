@@ -9,13 +9,13 @@ import { DEFAULT_ROUTE_PARAMS, PARAM_RANGES, POCKET_HMS, readRouteParams, resolv
 import type { Layout, LayoutSetting } from "../../core/generators/params";
 import type { RouteParams } from "../../core/generators/params";
 import { backDir, travelFromOpenings, travelOf, travelProblem } from "../../core/generators/travel";
-import { BUILDING_TYPES, TOWN_LAYOUTS, TOWN_LAYOUT_LABELS, TOWN_RANGES, buildingList, readTownParams } from "../../core/generators/townParams";
+import { BUILDING_TYPES, SETTLEMENT_LABELS, TOWN_LAYOUTS, TOWN_LAYOUT_LABELS, TOWN_RANGES, buildingList, readTownParams } from "../../core/generators/townParams";
 import type { TownLayout } from "../../core/generators/townParams";
 import { FOREST_RANGES, readForestParams } from "../../core/generators/forestParams";
 import { CAVE_RANGES, readCaveParams } from "../../core/generators/caveParams";
 import { cavePlan, floorName, floorOf } from "../../core/caves";
-import { BIOMES, EDGES } from "../../core/model";
-import type { Biome, Edge, Opening, OpeningKind, OpeningRole } from "../../core/model";
+import { BIOMES, EDGES, LAND_STYLES, SETTLEMENTS, styleOf } from "../../core/model";
+import type { Biome, Edge, LandStyle, Opening, OpeningKind, OpeningRole, Settlement } from "../../core/model";
 import { MAX_SEED } from "../../core/rng";
 import { useStore } from "../store";
 import { NumberField } from "./NumberField";
@@ -31,6 +31,15 @@ const BIOME_LABELS: Record<Biome, string> = {
   meadow: "Meadow",
   urban_edge: "Urban edge",
 };
+
+const STYLE_LABELS: Record<LandStyle, string> = {
+  route: "Route: open country",
+  town: "Town: streets",
+  forest: "Forest: maze in the woods",
+  cave: "Cave: rock chambers",
+};
+
+const PLACE_LABELS: Record<string, string> = { route: "route", town: "town", forest: "forest", cave: "cave", interior_stub: "interior" };
 
 const LAYOUT_LABELS: Record<Layout, string> = { land: "Land", coastal: "Coastal", river: "River", water: "Open water" };
 
@@ -65,7 +74,9 @@ function CaveSettings() {
       {slider("waterLevel", "Underground water", "Pools that need Surf, in the far parts of the cave (never on the main way).")}
       {count("rockSmash", "Rock Smash rocks", "Each closes a side passage, with an item behind it.")}
       {count("boulders", "Strength boulders", "Each blocks a side passage: push it in (Strength) to reach the item behind. The Check tab makes sure no push can block the way through.")}
-      {floor === 0 ? (
+      {map.mapType !== "cave" ? (
+        <p className="hint">This {PLACE_LABELS[map.mapType]} is entered through its entrances on the map edge (see Entrances). Exits adds cave mouths as well. It has one floor: only a cave place has more.</p>
+      ) : floor === 0 ? (
         <>
           {count("floors", "Floors", "How many floors the cave has. Generate makes the others (B1F, B2F…) as maps in your project, joined by ladders.")}
           {c.floors > 1 && count("ladders", "Ladders between floors", "Ladders joining each floor to the next. Each is a warp paired with its partner on the other floor.")}
@@ -130,7 +141,7 @@ function ForestSettings() {
 function TownSettings() {
   const s = useStore();
   const map = s.currentMap!;
-  const t = readTownParams(map.params);
+  const t = readTownParams(map.params, map.settlement);
   const rp = readRouteParams(map.params);
   // Towns are flat, with no side streets, until asked (the route defaults don't apply).
   const townElevation = typeof map.params.elevation === "number" ? rp.elevation : 0;
@@ -145,18 +156,9 @@ function TownSettings() {
       </label>
     );
   };
-  const check = (key: "center" | "mart" | "gym" | "landmark", tip: string) => {
-    const b = BUILDING_TYPES[key];
-    return (
-      <label className="check" title={tip}>
-        <input type="checkbox" checked={t[key]} onChange={(e) => set({ [key]: e.target.checked })} />
-        {b.label} ({b.width}×{b.height})
-      </label>
-    );
-  };
   return (
     <details open>
-      <summary title="Streets and buildings">Town</summary>
+      <summary title="Streets, people, hills">Town</summary>
       <label className="field" title="How the streets are laid out.">
         <span>Streets</span>
         <select value={t.townLayout} onChange={(e) => set({ townLayout: e.target.value as TownLayout })}>
@@ -167,15 +169,6 @@ function TownSettings() {
           ))}
         </select>
       </label>
-      <fieldset className="checks" title="Buildings to place. Each gets a door on its front (south) side and a warp to its interior.">
-        <legend>Buildings</legend>
-        {check("center", "A Pokémon Center, near an entrance, with its heal location in front of the door.")}
-        {check("mart", "A Poké Mart, near an entrance.")}
-        {check("gym", "A Gym, further in, with a sign beside the door.")}
-        {check("landmark", "A bigger building of note (a museum, a lab…).")}
-      </fieldset>
-      {count("houses", "Houses", "Small houses (4×3).")}
-      {count("largeHouses", "Of which large", "How many of the houses are larger (5×4).")}
       {count("people", "People", "People wandering beside the streets.")}
       <label className="slider" title="Hillsides along the sides of the town, with cliffs, stairs up and ledges down, as on routes. 0 = flat.">
         <span>
@@ -208,8 +201,54 @@ function TownSettings() {
         <input type="range" min={0} max={1} step={0.05} value={t.edgeGrass} onChange={(e) => set({ edgeGrass: Number(e.target.value) })} />
       </label>
       <p className="hint">
-        Drawn your own streets (locked Path or Road)? Generate uses them: it joins them to the entrances and puts the buildings along them, doors facing south onto east–west streets. {buildingList(t).length} buildings. Doors lead to MAP_…_POKEMON_CENTER_1F, _MART, _GYM, _HOUSE1…: make those interiors in Porymap. Buildings that don't fit are left out (Generate says so): make the map bigger or ask
-        for fewer.
+        Drawn your own streets (locked Path or Road)? Generate uses them: it joins them to the entrances and puts the buildings along them, doors facing south onto east–west streets.
+      </p>
+    </details>
+  );
+}
+
+/** The buildings fitted into the land, whatever its style (see generators/town.ts). */
+function SettlementSettings() {
+  const s = useStore();
+  const map = s.currentMap!;
+  const t = readTownParams(map.params, map.settlement);
+  const town = styleOf(map) === "town";
+  const set = (patch: Record<string, string | number | boolean>) => s.setParams(patch);
+  const count = (key: "houses" | "largeHouses", label: string, tip: string) => {
+    const [min, max] = TOWN_RANGES[key];
+    return (
+      <label className="field inline" title={tip}>
+        <span>{label}</span>
+        <NumberField min={min} max={max} value={t[key]} onChange={(v) => set({ [key]: v })} />
+      </label>
+    );
+  };
+  const check = (key: "center" | "mart" | "gym" | "landmark", tip: string) => {
+    const b = BUILDING_TYPES[key];
+    return (
+      <label className="check" title={tip}>
+        <input type="checkbox" checked={t[key]} onChange={(e) => set({ [key]: e.target.checked })} />
+        {b.label} ({b.width}×{b.height})
+      </label>
+    );
+  };
+  return (
+    <details open>
+      <summary title="The buildings to place">Buildings ({buildingList(t).length})</summary>
+      <fieldset className="checks" title="Buildings to place. Each gets a door on its front (south) side and a warp to its interior.">
+        <legend>Buildings</legend>
+        {check("center", "A Pokémon Center, near an entrance, with its heal location in front of the door.")}
+        {check("mart", "A Poké Mart, near an entrance.")}
+        {check("gym", "A Gym, further in, with a sign beside the door.")}
+        {check("landmark", "A bigger building of note (a museum, a lab…).")}
+      </fieldset>
+      {count("houses", "Houses", "Small houses (4×3).")}
+      {count("largeHouses", "Of which large", "How many of the houses are larger (5×4).")}
+      <p className="hint">
+        {town
+          ? "The buildings go along the streets."
+          : "The buildings stand close together near the main way, where there are only trees, rock or open ground, each with a walk from its door to a path. They never replace a path, water, a cliff or anything you locked."}{" "}
+        Doors lead to MAP_…_POKEMON_CENTER_1F, _MART, _GYM, _HOUSE1…: make those interiors in Porymap. Buildings that don't fit are left out (Generate says so): make the map bigger or ask for fewer.
       </p>
     </details>
   );
@@ -245,10 +284,13 @@ export function GeneratePanel() {
           ? { bad: false, text: `Generate will mark the Start (${oldTravel.from} edge) and Finish (${oldTravel.to} edge) on the entrances it picks.` }
           : { bad: false, text: "No direction yet. Mark one entrance Start and one Finish: ledges then jump back toward the Start, trainers face the player coming from it, the hills rise toward the Finish, and the sign stands at the Start." };
   const supported = canGenerate(map);
-  const town = map.mapType === "town";
-  const forest = map.mapType === "forest";
-  const cave = map.mapType === "cave";
-  const route = map.mapType === "route";
+  const style = styleOf(map);
+  const town = style === "town";
+  const forest = style === "forest";
+  const cave = style === "cave";
+  const route = style === "route";
+  // A cave place is entered by warps; anything else by entrances on its edges.
+  const cavePlace = map.mapType === "cave";
   const last = s.lastGenerate?.mapId === map.id ? s.lastGenerate : null;
   const errors = s.issues.filter((i) => i.severity === "error").length;
   const warnings = s.issues.length - errors;
@@ -373,23 +415,56 @@ export function GeneratePanel() {
         )}
       </div>
 
+      {supported && (
+        <div className="land-settings">
+          <label className="field" title={`How the land is generated. This doesn't change what the place is: it stays a ${PLACE_LABELS[map.mapType]} on the region map and in its header.`}>
+            <span>Generate as</span>
+            <select value={style} disabled={cavePlace} onChange={(e) => s.setStyle(e.target.value as LandStyle)}>
+              {LAND_STYLES.map((l) => (
+                <option key={l} value={l}>
+                  {STYLE_LABELS[l]}
+                </option>
+              ))}
+            </select>
+          </label>
+          {cavePlace && <p className="hint">A cave place is always generated as a cave: it's entered through cave mouths and can have several floors.</p>}
+          {!cavePlace && style !== map.mapType && (
+            <p className="hint">
+              This is still a {PLACE_LABELS[map.mapType]} on the region map and in the game; only its land is made like a {style}. Press Generate to see it.
+            </p>
+          )}
+          <label className="field" title="The look of the map: changes the mix of trees, grass, water and ground.">
+            <span>Biome</span>
+            <select value={map.biome} onChange={(e) => changeLayout(p.layout, e.target.value as Biome)}>
+              {BIOMES.map((b) => (
+                <option key={b} value={b}>
+                  {BIOME_LABELS[b]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field" title="Buildings fitted into the land: none, a few houses, or a village or town with a Pokémon Center and a Mart. Choosing a size sets its buildings; change them under Buildings.">
+            <span>Settlement</span>
+            <select value={map.settlement} onChange={(e) => s.setSettlement(e.target.value as Settlement)}>
+              {SETTLEMENTS.map((z) => (
+                <option key={z} value={z}>
+                  {SETTLEMENT_LABELS[z]}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+
+      {map.settlement !== "none" && <SettlementSettings />}
       {town && <TownSettings />}
       {forest && <ForestSettings />}
       {cave && <CaveSettings />}
 
-      <details open={route}>
-        <summary title={route ? "Biome, path shape" : "Biome"}>Basic</summary>
-        <label className="field" title="The look of the map: changes the mix of trees, grass, water and ground.">
-          <span>Biome</span>
-          <select value={map.biome} onChange={(e) => changeLayout(p.layout, e.target.value as Biome)}>
-            {BIOMES.map((b) => (
-              <option key={b} value={b}>
-                {BIOME_LABELS[b]}
-              </option>
-            ))}
-          </select>
-        </label>
-        {route && (
+      {route && (
+      <details open>
+        <summary title="Path shape, hills, snow">Basic</summary>
+        {(
           <>
             <label className="field" title="The overall shape of the route. Auto = Coastal for the coastal biome, Land otherwise.">
               <span>Layout</span>
@@ -410,8 +485,9 @@ export function GeneratePanel() {
           </>
         )}
       </details>
+      )}
 
-      {!cave && (
+      {!cavePlace && (
         <details>
           <summary title="Where the player enters and leaves the map">Entrances ({map.openings.length || "auto"})</summary>
           {map.openings.length === 0 && <p className="hint">Picked automatically on the first Generate (at each short end, plus surf entrances on the water for coastal and river layouts). You can then move them here.</p>}

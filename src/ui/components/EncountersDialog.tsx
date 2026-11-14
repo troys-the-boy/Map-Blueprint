@@ -2,6 +2,7 @@
 // draft wild encounter tables, which can be redrafted or edited slot by slot.
 // See core/encounters.ts for the rules and the pokeemerald facts behind them.
 
+import { styleOf } from "../../core/model";
 import { Fragment, useState } from "react";
 import { createPortal } from "react-dom";
 import type { EncounterTable, TableKind } from "../../core/encounters";
@@ -39,7 +40,7 @@ export function EncountersDialog({ onClose }: { onClose: () => void }) {
   const plan = map.encounterPlan;
   const needed = neededTables(map);
   const [lo, hi] = levelBand(map);
-  const cave = map.mapType === "cave";
+  const cave = styleOf(map) === "cave";
 
   const useList = () => {
     const { entries, problems } = parseSpeciesList(text);

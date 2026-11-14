@@ -4,6 +4,7 @@
 // Every message is written for the person building the map, and lists the
 // cells involved so the editor can highlight them.
 
+import { styleOf } from "./model";
 import { OBJECT_EVENTS_COUNT, SCREEN_HEIGHT_METATILES, SCREEN_WIDTH_METATILES } from "./constants";
 import type { Hm } from "./constants";
 import { PORYMAP_GROUP, trainerSight } from "./entities";
@@ -94,7 +95,7 @@ export function validateMap(map: MapBlueprint, opts: ValidateOptions = {}): Issu
   const graph = new MoveGraph(view, new Set(hms));
   const everyHm = new MoveGraph(view, new Set(MOVEMENT_HMS));
   // A cave's ways in and out are its warps (cave mouths, ladders), not openings in the edge.
-  const caveExits = map.mapType === "cave" ? map.warps : [];
+  const caveExits = styleOf(map) === "cave" ? map.warps : [];
   if (map.openings.length === 0 && !caveExits.length) warn("no-entrances", "This map has no entrances yet. Generate it, or add entrances in the Generate panel.");
   // Surf entrances only count once the player has Surf.
   const canUse = (o: Opening) => openingNeeds(o).every((h) => hms.includes(h));
@@ -322,8 +323,8 @@ export function validateMap(map: MapBlueprint, opts: ValidateOptions = {}): Issu
       if (terrain[i] !== T.path || gated[i] || nextToStairs(x, y)) continue;
       if ((blocks(x - 1, y) && blocks(x + 1, y)) || (blocks(x, y - 1) && blocks(x, y + 1))) narrow.push(i);
     }
-  // Towns have one-cell walks up to their doors, on purpose.
-  if (map.mapType !== "town")
+  // Towns, and maps with buildings fitted in, have one-cell walks up to their doors, on purpose.
+  if (styleOf(map) !== "town" && map.settlement === "none")
     for (const g of groups(narrow, width, height)) warn("narrow-path", `Path near ${xy(g[0])} is only 1 cell wide.`, g);
 
   const islands: number[] = [];

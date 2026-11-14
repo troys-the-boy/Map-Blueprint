@@ -19,7 +19,7 @@ describe("reference images on maps", () => {
   it("a map's image is saved with the project, and comes back as it was", () => {
     const { r, m } = region();
     m.underlay = { ...newReferenceImage("image", "screenshot.png", PNG), x: 2.5, y: -1, scale: 1 / 16, rotation: 90, opacity: 0.7 };
-    expect(CURRENT_SCHEMA_VERSION).toBe(15);
+    expect(CURRENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(15);
     const back = parseProject(serializeProject(r, "test"));
     expect(back.maps[0].underlay).toEqual(m.underlay);
   });

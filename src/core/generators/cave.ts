@@ -27,6 +27,7 @@ import { MOVEMENT_HMS, MoveGraph } from "../reach";
 import type { GenContext } from "./context";
 import { LEVEL, RAISED, Role } from "./context";
 import { blobShape, buildPlateau, connectStairs } from "./plateaus";
+import { carveOpening } from "./routeSkeleton";
 
 export function buildCave(ctx: GenContext): void {
   const cp = ctx.input.cave!;
@@ -77,6 +78,14 @@ export function buildCave(ctx: GenContext): void {
     if (!ctx.locks[below] && ctx.role[below] !== Role.Border) ctx.set(below, T.caveFloor, Role.Opening);
     fronts.push(below);
   }
+  // Entrances on the map's edge (a town or a route generated as a cave): a gap in the rock
+  // with floor inside, joined to the chambers like an exit.
+  for (const o of ctx.input.openings) {
+    if (o.kind !== "walk") continue;
+    const end = carveOpening(ctx, o);
+    fronts.push(end);
+  }
+  for (let i = 0; i < ctx.n; i++) if (ctx.role[i] === Role.Opening && ctx.terrain[i] === T.path) ctx.set(i, T.caveFloor);
   const wanted = Math.max(0, cp.exits - kept.length);
   const spots: number[] = [];
   for (let i = 0; i < ctx.n; i++) {

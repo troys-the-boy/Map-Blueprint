@@ -5,6 +5,8 @@
 // re-rendering the whole UI. React components subscribe through useStore();
 // the canvas listens for cell changes through onCells().
 
+import type { LandStyle, Settlement } from "../core/model";
+import { SETTLEMENT_BUILDINGS } from "../core/generators/townParams";
 import { useSyncExternalStore } from "react";
 import type { AreaEdit, Edit, Entity, MapBlueprint, NewMapOptions, Opening, Region, Zone } from "../core/model";
 import type { GenerateResult } from "../core/generate";
@@ -666,6 +668,27 @@ class EditorStore {
     const map = this.currentMap;
     if (!map) return;
     map.params = { ...map.params, ...patch };
+    this.markDirty();
+    this.changed();
+    this.scheduleValidate();
+  }
+
+  /** How this map's land is generated (a cave place is always a cave). Takes effect at the next Generate. */
+  setStyle(style: LandStyle) {
+    const map = this.currentMap;
+    if (!map || map.mapType === "cave" || map.style === style) return;
+    map.style = style;
+    this.markDirty();
+    this.changed();
+    this.scheduleValidate();
+  }
+
+  /** The size of this map's settlement: sets the buildings that size starts with (each can then be changed). */
+  setSettlement(settlement: Settlement) {
+    const map = this.currentMap;
+    if (!map || map.settlement === settlement) return;
+    map.settlement = settlement;
+    map.params = { ...map.params, ...SETTLEMENT_BUILDINGS[settlement] };
     this.markDirty();
     this.changed();
     this.scheduleValidate();

@@ -21,14 +21,14 @@
 //   5. The town sign, a sign by the Gym, people walking about, hidden items,
 //      and the Pokémon Center's heal location (in front of its door).
 
-import { DIRS, IS_WALKABLE, T, cheapestPath, distanceField } from "../grid";
+import { DIRS, IS_WALKABLE, IS_WALL, T, cheapestPath, distanceField } from "../grid";
 import type { Warp } from "../model";
 import { MoveGraph, openingCells } from "../reach";
 import type { GenContext } from "./context";
 import { Role } from "./context";
 import { carveOpening } from "./routeSkeleton";
 import { addPlateaus, connectStairs } from "./plateaus";
-import type { BuildingKind } from "./townParams";
+import type { BuildingKind, TownParams } from "./townParams";
 import { BUILDING_TYPES, buildingList } from "./townParams";
 
 const PEOPLE_GRAPHICS = ["BOY_1", "GIRL_1", "MAN_1", "WOMAN_1", "OLD_MAN", "OLD_WOMAN", "POKEFAN_M", "POKEFAN_F", "SCHOOL_KID_M", "GENTLEMAN"];
@@ -156,7 +156,7 @@ export function buildTown(ctx: GenContext): void {
   addSideStreets(ctx, street, streetOk);
 
   // 3. Buildings.
-  placeBuildings(ctx, street);
+  placeBuildings(ctx, street, tp, { build: (i) => free(ctx, i), walk: (i) => free(ctx, i), maxWalk: 6, role: Role.MainPath, yard: true, focus: null });
 
   // 4. Gardens, fences, trees and edge grass.
   decorate(ctx);
@@ -243,9 +243,58 @@ function addSideStreets(ctx: GenContext, street: number, streetOk: (i: number) =
   }
 }
 
-function placeBuildings(ctx: GenContext, street: number): void {
-  const tp = ctx.input.town!;
+/** Where buildings may go, and how their doors are joined to the streets. */
+interface Site {
+  /** May a building stand on this cell? */
+  build: (i: number) => boolean;
+  /** May a door's walk be paved over this cell? */
+  walk: (i: number) => boolean;
+  /** The longest walk from a door to a street, in cells. */
+  maxWalk: number;
+  /** What the walk counts as. */
+  role: Role;
+  /** Keep a ring of clear yard round each building (towns). */
+  yard: boolean;
+  /** Keep the buildings together, near this cell (a settlement in other land). */
+  focus: number | null;
+}
+
+/**
+ * Fit a settlement into land that isn't a town: a hamlet beside a route, a village
+ * in a forest, houses built into the rock of a cave. Buildings stand where there's
+ * nothing the map needs (trees, rock, open ground), close together near the main
+ * way, each with a walk from its door to a path. They never replace a path, water,
+ * a cliff, a ledge or anything locked.
+ */
+export function addSettlement(ctx: GenContext): void {
+  const tp = ctx.input.settlement;
+  if (!tp || !buildingList(tp).length) return;
+  const bt = ctx.params.borderThickness;
+  const taken = new Set<number>(ctx.entities.map((e) => ctx.idx(e.x, e.y)));
+  for (const w of ctx.input.warps) if (w.locked && ctx.inside(w.x, w.y)) taken.add(ctx.idx(w.x, w.y));
+  // A forest's clearings are its junctions: a building there would block the way.
+  const clearings = ctx.input.mapType !== "forest";
+  const open = (i: number) => {
+    const r = ctx.role[i];
+    const t = ctx.terrain[i];
+    return !ctx.locks[i] && (r === Role.None || (clearings && r === Role.Clearing)) && (IS_WALKABLE[t] || IS_WALL[t]) && ctx.edgeDist(i) >= bt && !ctx.keepClear.has(i) && !taken.has(i);
+  };
+  // The middle of the settlement: of a few spots along the main way, the one with the most room.
+  let focus: number | null = null;
+  let room = -1;
+  for (let k = 0; k < 8 && ctx.mainLine.length; k++) {
+    const c = ctx.mainLine[Math.floor(ctx.mainLine.length * ctx.rng.range(0.15, 0.85))];
+    const [cx, cy] = ctx.xy(c);
+    let n = 0;
+    for (let y = cy - 8; y <= cy + 8; y++) for (let x = cx - 8; x <= cx + 8; x++) if (ctx.inside(x, y) && open(ctx.idx(x, y))) n++;
+    if (n > room) (room = n, (focus = c));
+  }
+  placeBuildings(ctx, ctx.trail, tp, { build: open, walk: open, maxWalk: 8, role: Role.Branch, yard: false, focus });
+}
+
+function placeBuildings(ctx: GenContext, street: number, tp: TownParams, site: Site): void {
   const kinds = buildingList(tp);
+  const [focusX, focusY] = site.focus === null ? [0, 0] : ctx.xy(site.focus);
   const fromStreet = distanceField(ctx.width, ctx.height, ctx.mainLine);
   const fromEntrance = distanceField(ctx.width, ctx.height, ctx.openingEnds.length ? ctx.openingEnds : [0]);
   let houseNo = 0;
@@ -273,14 +322,14 @@ function placeBuildings(ctx: GenContext, street: number): void {
             const inside = xx >= x && xx < x + w && yy >= y;
             // The building itself on free, level ground; its margin may be ground or trees, never street or another building.
             ok = inside
-              ? free(ctx, i) && ctx.elevation[i] === ctx.elevation[ctx.idx(x, y + h - 1)]
+              ? site.build(i) && ctx.elevation[i] === ctx.elevation[ctx.idx(x, y + h - 1)]
               : ctx.role[i] !== Role.MainPath && ctx.role[i] !== Role.Branch && ctx.role[i] !== Role.Building && ctx.role[i] !== Role.Opening;
           }
         if (!ok) continue;
         // The door is in the middle of the front (bottom) row. From the cell in front of it, a
         // short walk (it may turn) leads to a street.
         const doorX = x + Math.floor(w / 2);
-        const walk = walkToStreet(ctx, ctx.idx(doorX, y + h), (i) => {
+        const walk = walkToStreet(ctx, ctx.idx(doorX, y + h), site, (i) => {
           const [ix, iy] = ctx.xy(i);
           return ix >= x - 1 && ix <= x + w && iy >= y - 1 && iy < y + h;
         });
@@ -292,7 +341,8 @@ function placeBuildings(ctx: GenContext, street: number): void {
           ctx.rng.next() * 6 +
           (kind === "center" || kind === "mart" ? -near * 0.5 : kind === "gym" || kind === "landmark" ? Math.min(near, 25) * 0.3 : 0) -
           walk.length * 1.5 -
-          fromStreet[door] * 0.2;
+          fromStreet[door] * 0.2 -
+          (site.focus === null ? 0 : (Math.abs(doorX - focusX) + Math.abs(y + h - 1 - focusY)) * 0.8);
         lots.push({ x, y, walk, score });
       }
     if (!lots.length) continue;
@@ -300,9 +350,14 @@ function placeBuildings(ctx: GenContext, street: number): void {
     const lot = lots[0];
     for (let yy = lot.y; yy < lot.y + h; yy++) for (let xx = lot.x; xx < lot.x + w; xx++) ctx.set(ctx.idx(xx, yy), T.building, Role.Building);
     // A one-cell ring of yard around it stays clear (no trees or fences against the walls).
-    for (let yy = lot.y - 1; yy <= lot.y + h; yy++)
-      for (let xx = lot.x - 1; xx <= lot.x + w; xx++) if (ctx.inside(xx, yy) && ctx.role[ctx.idx(xx, yy)] === Role.None) ctx.role[ctx.idx(xx, yy)] = Role.Clearing;
-    for (const c of lot.walk) ctx.set(c, street, Role.MainPath);
+    if (site.yard)
+      for (let yy = lot.y - 1; yy <= lot.y + h; yy++)
+        for (let xx = lot.x - 1; xx <= lot.x + w; xx++) if (ctx.inside(xx, yy) && ctx.role[ctx.idx(xx, yy)] === Role.None) ctx.role[ctx.idx(xx, yy)] = Role.Clearing;
+    for (const c of lot.walk) {
+      ctx.set(c, street, site.role);
+      // Outside a town nothing else may stand on the walk (a trainer there would block the door).
+      if (!site.yard) ctx.keepClear.add(c);
+    }
     const doorX = lot.x + Math.floor(w / 2);
     const doorY = lot.y + h - 1;
     const front = ctx.idx(doorX, doorY + 1);
@@ -346,17 +401,17 @@ function placeBuildings(ctx: GenContext, street: number): void {
 }
 
 /**
- * The shortest walk (at most 6 cells) over free ground from a door's front step to
+ * The shortest walk (at most the site's longest) over free ground from a door's front step to
  * a street, not through the lot itself. Returns the cells to pave (empty if the
  * step is already on a street), or null if there's no street that close.
  */
-function walkToStreet(ctx: GenContext, step: number, inLot: (i: number) => boolean): number[] | null {
+function walkToStreet(ctx: GenContext, step: number, site: Site, inLot: (i: number) => boolean): number[] | null {
   if (isStreet(ctx, step)) return [];
-  if (!free(ctx, step)) return null;
+  if (!site.walk(step)) return null;
   const level = ctx.elevation[step];
   const prev = new Map<number, number>([[step, -1]]);
   let frontier = [step];
-  for (let depth = 0; depth < 6 && frontier.length; depth++) {
+  for (let depth = 0; depth < site.maxWalk && frontier.length; depth++) {
     const next: number[] = [];
     for (const c of frontier) {
       const [x, y] = ctx.xy(c);
@@ -369,7 +424,7 @@ function walkToStreet(ctx: GenContext, step: number, inLot: (i: number) => boole
           for (let k = c; k >= 0; k = prev.get(k)!) out.push(k);
           return out;
         }
-        if (!free(ctx, j)) continue;
+        if (!site.walk(j)) continue;
         prev.set(j, c);
         next.push(j);
       }

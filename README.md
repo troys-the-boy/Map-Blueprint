@@ -322,9 +322,39 @@ When you save a project with images switched on, a box shows how much they add t
 - **Over 25 MB:** a strong warning, every time: a project file can be at most 30 MB.
 - **Over 30 MB in all:** it won't save until you untick some, as the file couldn't be opened again.
 
+## Land style and settlement
+
+What a place **is** and how its land is **made** are two separate things. The top of the Generate tab has three settings, in this order:
+
+1. **Generate as:** how the land is made.
+   - *Route:* a path through open country.
+   - *Town:* streets and open ground.
+   - *Forest:* a maze of paths through dense woods.
+   - *Cave:* chambers and tunnels in rock.
+2. **Biome:** the look of that land (rainforest, coastal, alpine…).
+3. **Settlement:** the buildings fitted into it.
+   - *None.*
+   - *Hamlet:* two houses.
+   - *Village:* three houses and a Pokémon Center.
+   - *Town:* three houses, a Center and a Mart.
+
+Changing **Generate as** doesn't change what the place is. A town generated as a forest is still a town on the region sketch, on the region map and in its game header (`MAP_TYPE_TOWN`); only its land is a forest. The Maps list shows it as "Town (as forest)". Press **Generate** to see the change.
+
+Choosing a **Settlement** size sets the buildings that size starts with. Change any of them under **Buildings**: tick the Center, Mart, Gym or landmark, and set the number of houses.
+
+A settlement fits into any land:
+
+- **On town land** the buildings go along the streets, as before.
+- **On a route or in a forest** they stand close together near the main way, among the trees or on open ground, each with a walk from its door to a path.
+- **In a cave** they're built into the rock, with their doors opening onto the cave floor.
+
+They never replace a path, water, a cliff, a ledge or anything you locked. Buildings that don't fit are left out, and Generate says so.
+
+A **cave place** (made as a Cave, or a cave pin on the sketch) is always generated as a cave, because it's entered through cave mouths and can have several floors. Any other place generated as a cave has one floor and is entered through its entrances on the map edge; set **Exits** above 0 to add cave mouths as well.
+
 ## Generate a town (Milestone 5)
 
-Make a map of type **Town** (sizes S 20×20, M 30×30, L 40×40), then press **Generate**. The **Town** group in the Generate tab sets:
+Make a map of type **Town** (sizes S 20×20, M 30×30, L 40×40), then press **Generate**. The **Buildings** and **Town** groups in the Generate tab set:
 
 - **Streets:** *Grid* (roads in blocks), *Organic* (winding lanes) or *Waterfront* (the sea along one side, the main road along the shore).
 - **Buildings:** Pokémon Center (5×4), Mart (4×4), Gym (7×6), a landmark building (6×5), and houses (4×3, some 5×4). Each sits on a lot beside a street with its door in the middle of its front (south) side, a walk to the street, and a **door warp** to its interior: `MAP_<TOWN>_POKEMON_CENTER_1F`, `_MART`, `_GYM`, `_HOUSE1`… (vanilla's naming). The interiors aren't made: build them in Porymap. Buildings that don't fit are left out, and Generate says so.
@@ -636,6 +666,10 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 ---
 
 ## Known limitations
+
+- **Settlements outside towns are plain.** A hamlet or village on a route, in a forest or in a cave gets its buildings, doors, walks and the Pokémon Center's heal location, but no people, fences or flower beds yet (those come with town land).
+- **Caves have less room for buildings.** They stand in the rock beside the floor, so a large settlement in a small cave may lose a building or two (Generate says so).
+- **Changing Generate as keeps the other settings.** A setting two land styles share (such as Elevation) carries over when you switch.
 
 - **Cave floors and Undo.** Undo after generating a cave's first floor undoes that floor only; floors it made or re-paired stay (delete them in the Maps list if you don't want them).
 - **Boulders need narrow side passages,** so a cave may get fewer than you asked for.

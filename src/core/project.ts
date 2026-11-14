@@ -35,7 +35,7 @@ import {
   ENTITY_KINDS,
   OPENING_KINDS,
   OPENING_ROLES,
-  MAP_TYPES,
+  LAND_STYLES, MAP_TYPES, SETTLEMENTS,
   WARP_KINDS,
   makeGrid,
 } from "./model";
@@ -62,7 +62,7 @@ import {
 import { ELEVATION_LEVELS, TERRAIN_TYPES, terrainIndex } from "./terrain";
 
 export const FILE_FORMAT_ID = "gen3-map-blueprint-project";
-export const CURRENT_SCHEMA_VERSION = 15;
+export const CURRENT_SCHEMA_VERSION = 16;
 
 /** Safety limits for opened files. Anything bigger is rejected. */
 export const FILE_LIMITS = {
@@ -164,6 +164,8 @@ function saveMap(m: MapBlueprint) {
     id: m.id,
     name: m.name,
     mapType: m.mapType,
+    style: m.style,
+    settlement: m.settlement,
     width: m.width,
     height: m.height,
     seed: m.seed,
@@ -428,6 +430,8 @@ const savedMapCheck = object({
   id: str(64, ID),
   name: text(),
   mapType: oneOf(MAP_TYPES),
+  style: oneOf(LAND_STYLES),
+  settlement: oneOf(SETTLEMENTS),
   width: num(1, FILE_LIMITS.maxMapSide),
   height: num(1, FILE_LIMITS.maxMapSide),
   seed: num(0, MAX_SEED),
@@ -650,6 +654,20 @@ export const MIGRATIONS: Record<number, Migration> = {
     if (settings && typeof settings === "object" && !Array.isArray(settings) && (settings as Record<string, unknown>).targetSegmentLength === 80)
       settings = { ...(settings as object), targetSegmentLength: 90 };
     return { ...file, schemaVersion: 10, region: region && maps ? { ...region, settings, maps: maps.map(upgradeMap) } : region };
+  },
+  // v15 → v16 (land and settlements, part A): each map gains "style" (how its land is
+  // generated) and "settlement" (its buildings). Older maps were generated as what they are,
+  // and only towns had buildings.
+  15: (file) => {
+    const region = file.region as Record<string, unknown> | null;
+    if (!region || !Array.isArray(region.maps)) return { ...file, schemaVersion: 16 };
+    const maps = region.maps.map((m) => {
+      if (!m || typeof m !== "object" || Array.isArray(m)) return m;
+      const t = (m as { mapType?: unknown }).mapType;
+      const style = t === "town" || t === "forest" || t === "cave" ? t : "route";
+      return { ...m, style, settlement: t === "town" ? "town" : "none" };
+    });
+    return { ...file, schemaVersion: 16, region: { ...region, maps } };
   },
   // v14 → v15 (revisions after Milestone 6): each map may have a reference image ("underlay",
   // null in older files), and reference images gain "save" (save the file with the project;

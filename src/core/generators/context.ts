@@ -68,12 +68,14 @@ export interface GenInput {
   openings: Opening[];
   /** Warps placed by hand (doors, cave mouths…): the path must lead to each one. */
   warps: Warp[];
-  /** What kind of map this is (routes and towns have their own generators). */
+  /** How the land is generated: the map's land style (see styleOf in model.ts). */
   mapType?: MapType;
   /** The map's MAP_* constant, for naming interiors behind generated doors. */
   mapConstant?: string;
-  /** Town settings (towns only). */
+  /** Town settings (the town land style only). */
   town?: TownParams;
+  /** The buildings to fit into another land style (a hamlet by a route, a village in a forest or cave). */
+  settlement?: TownParams;
   /** Forest settings (forests only). */
   forest?: ForestParams;
   /** Cave settings (caves only). */
