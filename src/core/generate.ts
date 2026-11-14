@@ -31,7 +31,7 @@ import { addSnow } from "./generators/snow";
 import { applyMarsh, applyZones, prepareZones, shiftOpeningsOutOfZones } from "./generators/zones";
 import { ELEVATION_LEVELS } from "./terrain";
 import { addSettlement, buildTown, connectBuildings } from "./generators/town";
-import { buildingList, readTownParams } from "./generators/townParams";
+import { buildingList, readTownParams, townWater } from "./generators/townParams";
 import type { CaveParams } from "./generators/caveParams";
 import { openingLevel, styleOf } from "./model";
 import { openingCells } from "./reach";
@@ -288,7 +288,7 @@ export function generateRoute(map: MapBlueprint, validate: Omit<ValidateOptions,
         ledges: 0,
         hmPockets: 0,
         travel: "auto" as const,
-        layout: town.townLayout === "waterfront" ? ("coastal" as const) : ("land" as const),
+        layout: townWater(town.townLayout),
         surfEntrances: false,
         water: -0.5, // a narrower sea, so a waterfront town has room for its buildings
       }
@@ -351,7 +351,7 @@ export function applyResult(map: MapBlueprint, result: GenerateResult): void {
   // The border block shows beyond the map edges: water for sea routes, the wall style otherwise.
   const p = readRouteParams(map.params);
   const style = styleOf(map);
-  const layout = style === "town" ? (readTownParams(map.params).townLayout === "waterfront" ? "coastal" : "land") : resolveLayout(p, map.biome);
+  const layout = style === "town" ? townWater(readTownParams(map.params).townLayout) : resolveLayout(p, map.biome);
   const border = style === "cave" ? "rock_wall" : layout === "water" || layout === "coastal" ? "water_deep" : resolveBorder(p, map.biome) === "cliff" ? "rock_wall" : "tree";
   map.layout.borderBlock = [border, border, border, border];
 }

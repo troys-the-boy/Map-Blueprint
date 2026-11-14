@@ -482,7 +482,8 @@ export function addNewMap(region: Region, opts: NewMapOptions): MapBlueprint {
     height: opts.height,
     seed: opts.seed,
     biome: opts.biome ?? region.settings.defaultBiome,
-    params: {},
+    // New towns start with the market-square plan (older towns keep the grid they were made with).
+    params: opts.mapType === "town" ? { townLayout: "square" } : {},
     layers: {
       terrain: makeGrid(opts.width, opts.height, fill),
       elevation: makeGrid(opts.width, opts.height, ground),

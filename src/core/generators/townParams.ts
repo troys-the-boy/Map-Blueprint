@@ -9,14 +9,27 @@
 
 import type { Settlement } from "../model";
 
-export const TOWN_LAYOUTS = ["grid", "organic", "waterfront"] as const;
+// Town plans. Every plan grows the town from a core (the middle of the town, between its
+// entrances): the Pokémon Center and Mart stand there, and the houses fill outward from it,
+// close together, so a big map gets a compact town with country round it instead of buildings
+// scattered across the whole map. (Growing a settlement in phases from a core is the approach
+// Magna Urbis describes for its towns; this is written for this grid, not taken from it.)
+export const TOWN_LAYOUTS = ["square", "crossroads", "grid", "organic", "waterfront", "riverside"] as const;
 export type TownLayout = (typeof TOWN_LAYOUTS)[number];
 
 export const TOWN_LAYOUT_LABELS: Record<TownLayout, string> = {
+  square: "Market square",
+  crossroads: "Crossroads village",
   grid: "Grid: streets in blocks",
-  organic: "Organic: winding lanes",
-  waterfront: "Waterfront: along the shore",
+  organic: "Winding lanes",
+  waterfront: "Harbour: along the shore",
+  riverside: "Riverside: a river through town",
 };
+
+/** The water a plan needs laid before the town is built: the sea along one side, a river through it, or none. */
+export function townWater(layout: TownLayout): "coastal" | "river" | "land" {
+  return layout === "waterfront" ? "coastal" : layout === "riverside" ? "river" : "land";
+}
 
 export const BUILDING_KINDS = ["center", "mart", "gym", "landmark", "house"] as const;
 export type BuildingKind = (typeof BUILDING_KINDS)[number];
@@ -47,6 +60,8 @@ export interface TownParams {
   houses: number;
   /** Some houses are bigger (5×4), like the larger family houses in vanilla towns. */
   largeHouses: number;
+  /** A wall (fence) round the built-up part of the town, with gaps where the streets pass. */
+  wall: boolean;
   /** People walking around town. */
   people: number;
   /** Small optional patches of tall grass near the edges, 0 … 1. Never needed to get anywhere. */
@@ -61,6 +76,7 @@ export const DEFAULT_TOWN_PARAMS: TownParams = {
   landmark: false,
   houses: 3,
   largeHouses: 1,
+  wall: false,
   people: 3,
   edgeGrass: 0.3,
 };
@@ -113,6 +129,7 @@ export function readTownParams(params: Record<string, string | number | boolean>
     landmark: b("landmark"),
     houses: n("houses"),
     largeHouses: n("largeHouses"),
+    wall: params.wall === true,
     people: n("people"),
     edgeGrass: n("edgeGrass"),
   };

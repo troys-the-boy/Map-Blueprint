@@ -424,7 +424,16 @@ Under **Entrances** in the Generate tab, each walking entrance on route or town 
 
 Make a map of type **Town** (sizes S 20×20, M 30×30, L 40×40), then press **Generate**. The **Buildings** and **Town** groups in the Generate tab set:
 
-- **Streets:** *Grid* (roads in blocks), *Organic* (winding lanes) or *Waterfront* (the sea along one side, the main road along the shore).
+- **Plan:** how the town is laid out.
+  - *Market square:* a paved square in the middle, a street in from each entrance, and a street each way along its south side. New towns start with this.
+  - *Crossroads village:* streets from each entrance meet at a crossing. Suits a hamlet or village.
+  - *Grid:* a main street the long way through, with cross streets every few blocks.
+  - *Winding lanes:* a lane that wanders between the entrances, with a few lanes off it.
+  - *Harbour:* the sea along one side, and the main road along the shore.
+  - *Riverside:* a river through the town, lanes along its banks, and a bridge across. Needs room: 40×40 or more.
+- **A town grows from its core.** Whatever the plan, the core is the flat, dry land nearest the middle of the town's entrances. The Pokémon Center and Mart stand right by it, the Gym and landmark a little way off, and the houses fill outward from it in rows, close together. A big map gets a compact town with open country round it, not buildings scattered across the whole map.
+- **Town wall:** a fence round the built-up part, three cells out from the buildings, with gaps where the streets pass.
+- **Hill towns:** set **Elevation**, or give the map raised ground, with any plan: the terraces get lanes and their share of the buildings.
 - **Buildings:** Pokémon Center (5×4), Mart (4×4), Gym (7×6), a landmark building (6×5), and houses (4×3, some 5×4). Each sits on a lot beside a street with its door in the middle of its front (south) side, a walk to the street, and a **door warp** to its interior: `MAP_<TOWN>_POKEMON_CENTER_1F`, `_MART`, `_GYM`, `_HOUSE1`… (vanilla's naming). The interiors aren't made: build them in Porymap. Buildings that don't fit are left out, and Generate says so.
 - **People** wandering beside the streets, and **Grass at the edges**: small tall-grass patches near the border that are never in the way (every exit and door can be reached without stepping in grass).
 
@@ -734,6 +743,11 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 ---
 
 ## Known limitations
+
+- **Towns you regenerate will look different.** Buildings now cluster round the core on every plan, so an older town's buildings move closer together the next time you Generate it. Its plan stays the one it had (older towns are Grid).
+- **Harbour and riverside towns need room.** The water takes land, so on a 30×30 map most buildings won't fit; use 40×40 or bigger.
+- **The grid's streets still cover the whole map,** though the buildings keep to the core. Use Market square or Crossroads for a small town on a big map.
+- **The town wall is a plain rectangle,** and is cut short where the buildings come close to the map's edge.
 
 - **Grid towns don't read the land.** Their streets are straight lines that stop at a cliff; stairs join the parts, but the streets aren't planned round the hills. (Town plans come in a later part.)
 - **Winding-lane towns will look a little different** if you regenerate them: lanes now follow lanes already laid.

@@ -4,7 +4,11 @@
 //      along one side for a waterfront town). The user's zones and locked cells
 //      stay as they are. With the Elevation setting, hillsides with cliffs,
 //      stairs and ledges, as on routes.
-//   2. Streets: a grid of roads, winding lanes, or a road along the shore. If
+//   2. The core: the middle of the town, on flat buildable land between its
+//      entrances. Everything grows from it.
+//      Streets, by the town's plan: a market square with streets in from the
+//      entrances; a crossroads; a grid of roads; winding lanes; a road along the
+//      shore; or lanes along a river. If
 //      the user drew streets (locked path or road), those are the streets: they
 //      are joined to the entrances and to each other, and the buildings go along
 //      them. Streets cross rivers and locked water on bridges. Then the side
@@ -61,7 +65,8 @@ export function buildTown(ctx: GenContext): void {
   ctx.openingEnds = ends.filter((e) => e.o.kind === "walk").map((e) => e.end);
 
   // 2. Streets.
-  const street = tp.townLayout === "organic" ? T.path : T.road;
+  const winding = tp.townLayout === "organic" || tp.townLayout === "riverside";
+  const street = winding ? T.path : T.road;
   const m = bt + 1;
   const streetOk = (j: number) => !ctx.locks[j] && (ctx.role[j] === Role.None || ctx.role[j] === Role.MainPath || ctx.role[j] === Role.Keep) && ctx.edgeDist(j) >= bt;
   // Over a river or water the user locked, a street becomes a bridge.
@@ -92,6 +97,24 @@ export function buildTown(ctx: GenContext): void {
       landLo = Math.min(landLo, across);
       landHi = Math.max(landHi, across);
     }
+  // The core of the town: flat, dry, buildable land nearest the middle of its entrances.
+  const core = townCore(ctx, streetOk, land);
+  const [coreX, coreY] = ctx.xy(core);
+  // Lanes read the terrain: they climb a cliff where a flight of stairs fits (cutting it
+  // there), cross water straight, and follow a lane that's already laid rather than run beside it.
+  const gates = roadGates(ctx);
+  const laneOver = (cost: (i: number) => number, turn = 0) => (a: number, b: number): number[] | null => {
+    const leg = cheapestRoad(
+      ctx.width,
+      ctx.height,
+      a,
+      b,
+      (i) => (gates[i] && ctx.role[i] === Role.Cliff ? CLIMB_COST : ctx.role[i] === Role.Stairs ? 1 : ctx.role[i] === Role.MainPath ? Math.min(0.5, cost(i)) : cost(i)),
+      { gate: (i) => gates[i], straight: (i) => ctx.role[i] === Role.Sea, least: 0.5, turn },
+    );
+    for (const c of leg ?? []) if (gates[c] && ctx.role[c] === Role.Cliff) cutStairs(ctx, c);
+    return leg;
+  };
   if (drawn >= 8) {
     // The user drew the streets: join every entrance and every separate piece of street.
     joinStreets(ctx, (i) => {
@@ -99,6 +122,43 @@ export function buildTown(ctx: GenContext): void {
       if (ctx.role[i] === Role.MainPath || ctx.role[i] === Role.Opening) return 1;
       return streetOk(i) ? 3 : Infinity;
     }, (c) => pave(c, 1));
+  } else if (tp.townLayout === "square" || tp.townLayout === "crossroads") {
+    // Grown from the core: a market square (or just the crossing), a street in from every
+    // entrance, a street each way along the south side for house fronts, and a short one north.
+    const plain = (i: number) => {
+      if (ctx.role[i] === Role.Sea) return ctx.crossable[i] ? 14 : Infinity;
+      if (!streetOk(i) && ctx.role[i] !== Role.Opening) return Infinity;
+      return ctx.edgeDist(i) < m ? 30 : 1;
+    };
+    const lane = laneOver(plain, 2);
+    const level = ctx.elevation[core];
+    const big = ctx.width >= 50 && ctx.height >= 50;
+    const pw = tp.townLayout === "square" ? (big ? 8 : 6) : 2;
+    const ph = tp.townLayout === "square" ? (big ? 5 : 4) : 2;
+    const x0 = coreX - Math.floor(pw / 2);
+    const y0 = coreY - Math.floor(ph / 2);
+    for (let y = y0; y < y0 + ph; y++)
+      for (let x = x0; x < x0 + pw; x++) {
+        if (!ctx.inside(x, y)) continue;
+        const i = ctx.idx(x, y);
+        if (streetOk(i) && land(i) && ctx.elevation[i] === level) ctx.set(i, street, Role.MainPath);
+      }
+    for (const end of ctx.openingEnds) for (const c of lane(end, core) ?? []) pave(c);
+    // A straight street from the core, as far as the land stays level and clear.
+    const run = (x: number, y: number, dx: number, dy: number, length: number) => {
+      for (let k = 0; k < length; k++, x += dx, y += dy) {
+        if (!ctx.inside(x, y) || !ctx.inside(x + 1, y + 1)) break;
+        const i = ctx.idx(x, y);
+        if (!streetOk(i) || !land(i) || ctx.elevation[i] !== level || ctx.edgeDist(i) < m + 1) break;
+        pave(i);
+      }
+    };
+    const along = Math.max(8, Math.min(18, Math.round(ctx.width / 4)));
+    const up = Math.max(5, Math.min(10, Math.round(ctx.height / 6)));
+    const row = y0 + ph - 2;
+    run(x0 - 1, row, -1, 0, along);
+    run(x0 + pw, row, 1, 0, along);
+    run(coreX, y0 - 1, 0, -1, up);
   } else if (tp.townLayout === "grid") {
     // A main street the long way through, cross streets every few blocks, and a side street if there's room.
     const avg = (k: 0 | 1) => Math.round(endsXY.reduce((s, p) => s + p[k], 0) / Math.max(1, endsXY.length));
@@ -118,33 +178,19 @@ export function buildTown(ctx: GenContext): void {
       for (let x = m + ctx.rng.int(5, 8); x < ctx.width - m - 4; x += block) line(x, clampY(landLo), x, clampY(landHi - 1));
     }
   } else {
-    // Organic and waterfront: a lane between the entrances that wanders (or follows the shore),
-    // then a few lanes off it.
-    const fromSea = ctx.input.layout === "coastal" ? distanceField(ctx.width, ctx.height, Array.from({ length: ctx.n }, (_, i) => i).filter((i) => ctx.role[i] === Role.Sea)) : null;
+    // Winding lanes, the harbour and the riverside: a lane between the entrances that wanders
+    // (or follows the shore or the river bank), then a few lanes off it.
+    const fromSea = ctx.input.layout === "coastal" || ctx.input.layout === "river" ? distanceField(ctx.width, ctx.height, Array.from({ length: ctx.n }, (_, i) => i).filter((i) => ctx.role[i] === Role.Sea)) : null;
     const cost = (i: number) => {
       if (ctx.role[i] === Role.Sea) return ctx.crossable[i] ? 14 : Infinity;
       if (!streetOk(i) && ctx.role[i] !== Role.Opening) return Infinity;
       if (ctx.edgeDist(i) < m) return 30;
       const [x, y] = ctx.xy(i);
-      // Waterfront: cheapest a few cells in from the beach.
-      const shore = fromSea ? Math.abs(fromSea[i] - 6) * 0.8 : 0;
-      return 1 + shore + (tp.townLayout === "organic" ? 4 * ctx.noise.fractal(x, y, 9, 2) : 0);
+      // Harbour: cheapest a few cells in from the beach. Riverside: along the bank.
+      const shore = fromSea ? Math.abs(fromSea[i] - (ctx.input.layout === "river" ? 4 : 6)) * 0.8 : 0;
+      return 1 + shore + (winding ? 4 * ctx.noise.fractal(x, y, 9, 2) : 0);
     };
-    // Lanes read the terrain: they climb a cliff where a flight of stairs fits (cutting it
-    // there), cross water straight, and follow a lane that's already laid rather than run beside it.
-    const gates = roadGates(ctx);
-    const lane = (a: number, b: number): number[] | null => {
-      const leg = cheapestRoad(
-        ctx.width,
-        ctx.height,
-        a,
-        b,
-        (i) => (gates[i] && ctx.role[i] === Role.Cliff ? CLIMB_COST : ctx.role[i] === Role.Stairs ? 1 : ctx.role[i] === Role.MainPath ? Math.min(0.5, cost(i)) : cost(i)),
-        { gate: (i) => gates[i], straight: (i) => ctx.role[i] === Role.Sea, least: 0.5 },
-      );
-      for (const c of leg ?? []) if (gates[c] && ctx.role[c] === Role.Cliff) cutStairs(ctx, c);
-      return leg;
-    };
+    const lane = laneOver(cost);
     const main: number[] = [];
     const first = ctx.openingEnds[0];
     for (const target of ctx.openingEnds.slice(1)) {
@@ -159,7 +205,7 @@ export function buildTown(ctx: GenContext): void {
     // More lanes in bigger towns: about one per 110 cells of land (small towns need the room for buildings).
     let landCells = 0;
     for (let i = 0; i < ctx.n; i++) if (land(i) && ctx.edgeDist(i) >= m) landCells++;
-    const lanes = Math.max(1, Math.min(tp.townLayout === "organic" ? 5 : 6, Math.round(landCells / 110)));
+    const lanes = Math.max(1, Math.min(winding ? 5 : 6, Math.round(landCells / 110)));
     for (let k = 0; k < lanes && main.length > 10; k++) {
       const from = main[Math.floor(main.length * ctx.rng.range(0.2, 0.8))];
       const [fx, fy] = ctx.xy(from);
@@ -169,6 +215,31 @@ export function buildTown(ctx: GenContext): void {
       const ty = ctx.vertical ? clampY(fy + ctx.rng.int(-3, 3)) : clampY(fy + away * reach);
       const leg = lane(from, ctx.idx(tx, ty));
       if (leg) for (const c of leg) pave(c, 2);
+    }
+    // A riverside town is on both banks: if the lanes so far all keep to one bank, one more
+    // crosses to the biggest stretch of land on the other side, a few cells in from the water.
+    if (tp.townLayout === "riverside" && main.length && fromSea) {
+      const dry = (i: number) => land(i) && ctx.edgeDist(i) >= m && (streetOk(i) || ctx.role[i] === Role.Opening);
+      const banks = components(ctx.width, ctx.height, dry);
+      const home = new Set<number>();
+      for (let i = 0; i < ctx.n; i++) if (ctx.role[i] === Role.MainPath && banks.ids[i] >= 0) home.add(banks.ids[i]);
+      let far = -1;
+      banks.sizes.forEach((size, id) => {
+        if (!home.has(id) && size >= 40 && (far < 0 || size > banks.sizes[far])) far = id;
+      });
+      if (far >= 0) {
+        const from = main[Math.floor(main.length / 2)];
+        const [fx, fy] = ctx.xy(from);
+        let target = -1;
+        let best = Infinity;
+        for (let i = 0; i < ctx.n; i++) {
+          if (banks.ids[i] !== far || fromSea[i] < 3 || fromSea[i] > 7) continue;
+          const [x, y] = ctx.xy(i);
+          const d = Math.abs(x - fx) + Math.abs(y - fy);
+          if (d < best) (best = d, (target = i));
+        }
+        if (target >= 0) for (const c of lane(from, target) ?? []) pave(c, 2);
+      }
     }
   }
   // Trails up the hillsides' stairs, and a street along each terrace, so there are lots up there too.
@@ -186,7 +257,8 @@ export function buildTown(ctx: GenContext): void {
   addSideStreets(ctx, street, streetOk);
 
   // 3. Buildings.
-  placeBuildings(ctx, street, tp, { build: (i) => free(ctx, i), walk: (i) => free(ctx, i), maxWalk: 6, role: Role.MainPath, yard: true, focus: null });
+  placeBuildings(ctx, street, tp, { build: (i) => free(ctx, i), walk: (i) => free(ctx, i), maxWalk: 6, role: Role.MainPath, yard: true, focus: core });
+  if (tp.wall) addTownWall(ctx);
 
   // 4. Gardens, fences, trees and edge grass.
   decorate(ctx);
@@ -419,6 +491,54 @@ function connectPaintedBuildings(ctx: GenContext, street: number, role: Role): v
   });
 }
 
+/**
+ * The core of a town: the cell nearest the middle of its entrances (or of the map) with
+ * flat, dry, buildable land all round it. The square or crossing goes here, the Pokémon
+ * Center and Mart beside it, and the houses fill outward from it.
+ */
+function townCore(ctx: GenContext, streetOk: (i: number) => boolean, land: (i: number) => boolean): number {
+  const ends = ctx.openingEnds.map((c) => ctx.xy(c));
+  const mx = ends.length >= 2 ? ends.reduce((s, p) => s + p[0], 0) / ends.length : (ctx.width - 1) / 2;
+  const my = ends.length >= 2 ? ends.reduce((s, p) => s + p[1], 0) / ends.length : (ctx.height - 1) / 2;
+  const room = ctx.params.borderThickness + 5;
+  let best = ctx.idx(Math.round(mx), Math.round(my));
+  let bestD = Infinity;
+  for (let y = room; y < ctx.height - room; y++)
+    for (let x = room; x < ctx.width - room; x++) {
+      const d = Math.abs(x - mx) + Math.abs(y - my);
+      if (d >= bestD) continue;
+      const level = ctx.elevation[ctx.idx(x, y)];
+      let ok = true;
+      for (let dy = -3; dy <= 3 && ok; dy++)
+        for (let dx = -4; dx <= 4 && ok; dx++) {
+          const i = ctx.idx(x + dx, y + dy);
+          ok = streetOk(i) && land(i) && ctx.elevation[i] === level;
+        }
+      if (ok) (bestD = d, (best = ctx.idx(x, y)));
+    }
+  return best;
+}
+
+/**
+ * A wall round the built-up part of the town: a fence along a rectangle three cells
+ * out from the buildings. It's only put on open ground, so every street, walk and
+ * door step passes through a gap in it.
+ */
+function addTownWall(ctx: GenContext): void {
+  if (ctx.buildings.length < 3) return;
+  const edge = ctx.params.borderThickness + 1;
+  const x0 = Math.max(edge, Math.min(...ctx.buildings.map((b) => b.x)) - 3);
+  const y0 = Math.max(edge, Math.min(...ctx.buildings.map((b) => b.y)) - 3);
+  const x1 = Math.min(ctx.width - 1 - edge, Math.max(...ctx.buildings.map((b) => b.x + b.w - 1)) + 3);
+  const y1 = Math.min(ctx.height - 1 - edge, Math.max(...ctx.buildings.map((b) => b.y + b.h)) + 3);
+  const post = (x: number, y: number) => {
+    const i = ctx.idx(x, y);
+    if (free(ctx, i) && !ctx.keepClear.has(i)) ctx.set(i, T.fence, Role.Building);
+  };
+  for (let x = x0; x <= x1; x++) (post(x, y0), post(x, y1));
+  for (let y = y0 + 1; y < y1; y++) (post(x0, y), post(x1, y));
+}
+
 /** Where buildings may go, and how their doors are joined to the streets. */
 interface Site {
   /** May a building stand on this cell? */
@@ -526,15 +646,29 @@ function placeBuildings(ctx: GenContext, street: number, tp: TownParams, site: S
         // The Center and Mart sit near the entrances on the main street; the Gym and landmark further in; houses anywhere.
         const near = fromEntrance[door];
         const level = ctx.elevation[door];
+        const fromCore = site.focus === null ? 0 : Math.abs(doorX - focusX) + Math.abs(y + h - 1 - focusY);
+        // A town grows outward from its core, close together: the Center and Mart right by
+        // it, the Gym and the landmark a little way off, houses as near as there's room, and
+        // a lot beside a building already there (in the same row) is better still.
+        const town = site.yard && site.focus !== null;
+        const beside = (xx: number) => ctx.inside(xx, y + h - 1) && ctx.role[ctx.idx(xx, y + h - 1)] === Role.Building;
+        const row = town && (beside(x - 2) || beside(x + w + 1)) ? 2.5 : 0;
+        const place = !town
+          ? (kind === "center" || kind === "mart" ? -near * 0.5 : kind === "gym" || kind === "landmark" ? Math.min(near, 25) * 0.3 : 0) - fromCore * 0.8
+          : kind === "center" || kind === "mart"
+            ? -fromCore * 1.4
+            : kind === "gym" || kind === "landmark"
+              ? -Math.abs(fromCore - 10) * 0.6
+              : -fromCore * 0.7;
         const score =
-          ctx.rng.next() * 6 -
+          ctx.rng.next() * (town ? 3 : 6) -
           crowding(level) +
           // The Gym and the landmark look down on the town from high ground.
           (hilly && (kind === "gym" || kind === "landmark") ? 3 * (RAISED.indexOf(level) + 1) : 0) +
-          (kind === "center" || kind === "mart" ? -near * 0.5 : kind === "gym" || kind === "landmark" ? Math.min(near, 25) * 0.3 : 0) -
+          place +
+          row -
           walk.length * 1.5 -
-          fromStreet[door] * 0.2 -
-          (site.focus === null ? 0 : (Math.abs(doorX - focusX) + Math.abs(y + h - 1 - focusY)) * 0.8);
+          fromStreet[door] * 0.2;
         lots.push({ x, y, walk, score });
       }
     if (!lots.length) continue;

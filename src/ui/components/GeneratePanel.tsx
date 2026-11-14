@@ -41,6 +41,15 @@ const STYLE_LABELS: Record<LandStyle, string> = {
 
 const PLACE_LABELS: Record<string, string> = { route: "route", town: "town", forest: "forest", cave: "cave", interior_stub: "interior" };
 
+const PLAN_HINTS: Record<TownLayout, string> = {
+  square: "A square in the middle of town, a street in from each entrance, and a street each way along its south side.",
+  crossroads: "Streets from each entrance meet at a crossing, with a street each way for house fronts. Suits a village.",
+  grid: "A main street the long way through, with cross streets every few blocks across the whole map.",
+  organic: "A lane that wanders between the entrances, with a few lanes off it.",
+  waterfront: "The sea along one side, and the main road along the shore.",
+  riverside: "A river through the town, with lanes along its banks and bridges across. Needs room: 40×40 or more.",
+};
+
 const LAYOUT_LABELS: Record<Layout, string> = { land: "Land", coastal: "Coastal", river: "River", water: "Open water" };
 
 /** Cave settings: exits, how open, platforms, water, Rock Smash rocks, dark (see generators/cave.ts). */
@@ -159,8 +168,8 @@ function TownSettings() {
   return (
     <details open>
       <summary title="Streets, people, hills">Town</summary>
-      <label className="field" title="How the streets are laid out.">
-        <span>Streets</span>
+      <label className="field" title="The town's plan: how its streets are laid out. Whatever the plan, the town grows from its core, with the Pokémon Center and Mart there and the houses close round them.">
+        <span>Plan</span>
         <select value={t.townLayout} onChange={(e) => set({ townLayout: e.target.value as TownLayout })}>
           {TOWN_LAYOUTS.map((l) => (
             <option key={l} value={l}>
@@ -168,6 +177,11 @@ function TownSettings() {
             </option>
           ))}
         </select>
+      </label>
+      <p className="hint">{PLAN_HINTS[t.townLayout]}</p>
+      <label className="check" title="A wall (fence) round the built-up part of the town, three cells out from the buildings, with gaps where the streets pass.">
+        <input type="checkbox" checked={t.wall} onChange={(e) => set({ wall: e.target.checked })} />
+        Town wall
       </label>
       {count("people", "People", "People wandering beside the streets.")}
       <label className="slider" title="Hillsides along the sides of the town, with cliffs, stairs up and ledges down, as on routes. 0 = flat.">
