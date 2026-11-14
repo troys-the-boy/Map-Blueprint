@@ -62,6 +62,8 @@ export interface TownParams {
   largeHouses: number;
   /** A wall (fence) round the built-up part of the town, with gaps where the streets pass. */
   wall: boolean;
+  /** Fields, orchards, paddocks, ponds and berry patches round the town, 0 … 1 (0 = none). See outskirts.ts. */
+  outskirts: number;
   /** People walking around town. */
   people: number;
   /** Small optional patches of tall grass near the edges, 0 … 1. Never needed to get anywhere. */
@@ -77,6 +79,7 @@ export const DEFAULT_TOWN_PARAMS: TownParams = {
   houses: 3,
   largeHouses: 1,
   wall: false,
+  outskirts: 0.5,
   people: 3,
   edgeGrass: 0.3,
 };
@@ -102,11 +105,12 @@ export const SETTLEMENT_LABELS: Record<Settlement, string> = {
   town: "Town: + Center and Mart",
 };
 
-export const TOWN_RANGES: Record<"houses" | "largeHouses" | "people" | "edgeGrass", [number, number, boolean]> = {
+export const TOWN_RANGES: Record<"houses" | "largeHouses" | "people" | "edgeGrass" | "outskirts", [number, number, boolean]> = {
   houses: [0, 12, true],
   largeHouses: [0, 6, true],
   people: [0, 10, true],
   edgeGrass: [0, 1, false],
+  outskirts: [0, 1, false],
 };
 
 export function readTownParams(params: Record<string, string | number | boolean>, settlement: Settlement = "town"): TownParams {
@@ -130,6 +134,7 @@ export function readTownParams(params: Record<string, string | number | boolean>
     houses: n("houses"),
     largeHouses: n("largeHouses"),
     wall: params.wall === true,
+    outskirts: n("outskirts"),
     people: n("people"),
     edgeGrass: n("edgeGrass"),
   };

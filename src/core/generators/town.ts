@@ -36,6 +36,7 @@ import { addPlateaus, connectStairs, cutStairs, joinLevels, roadGates, zonedHeig
 import { CLIMB_COST } from "./routeSkeleton";
 import type { BuildingKind, TownParams } from "./townParams";
 import { BUILDING_TYPES, buildingList } from "./townParams";
+import { addOutskirts } from "./outskirts";
 
 const PEOPLE_GRAPHICS = ["BOY_1", "GIRL_1", "MAN_1", "WOMAN_1", "OLD_MAN", "OLD_WOMAN", "POKEFAN_M", "POKEFAN_F", "SCHOOL_KID_M", "GENTLEMAN"];
 
@@ -264,7 +265,8 @@ export function buildTown(ctx: GenContext): void {
   placeBuildings(ctx, street, tp, { build: (i) => free(ctx, i), walk: (i) => free(ctx, i), maxWalk: 6, role: Role.MainPath, yard: true, focus: core });
   if (tp.wall) addTownWall(ctx);
 
-  // 4. Gardens, fences, trees and edge grass.
+  // 4. Fields and outskirts round the town, then gardens, fences, trees and edge grass.
+  addOutskirts(ctx, tp.outskirts, tp.edgeGrass > 0);
   decorate(ctx);
   addEdgeGrass(ctx);
 
@@ -810,10 +812,19 @@ function decorate(ctx: GenContext): void {
       if (ctx.noise.fractal(x + 6100, y + 6300, 5, 2) > 0.58) ctx.set(i, T.flowers, Role.Clearing);
     }
   // Trees dotted about the open ground, never beside a street, door or another tree group's gap.
+  // The town thins out to wild land: few trees among the buildings, more beyond them, and
+  // out past the fields they gather into clumps.
   const fromStreet = distanceField(ctx.width, ctx.height, ctx.mainLine);
+  const built: number[] = [];
+  for (let i = 0; i < ctx.n; i++) if (ctx.terrain[i] === T.building) built.push(i);
+  const fromTown = built.length ? distanceField(ctx.width, ctx.height, built) : null;
   for (let i = 0; i < ctx.n; i++) {
     if (!free(ctx, i) || fromStreet[i] < 2 || ctx.keepClear.has(i)) continue;
-    if (ctx.rng.next() < p.treeDensity * 0.12 && !cornerOnly(ctx, i)) ctx.set(i, T.tree, Role.None);
+    const d = fromTown ? fromTown[i] : 8;
+    const [x, y] = ctx.xy(i);
+    const grove = d > 14 && ctx.noise.fractal(x + 7300, y + 7500, 7, 2) > 0.56;
+    const chance = grove ? Math.max(0.35, p.treeDensity * 0.8) : p.treeDensity * 0.12 * (d > 10 ? 1.6 : d < 5 ? 0.5 : 1);
+    if (ctx.rng.next() < chance && !cornerOnly(ctx, i)) ctx.set(i, T.tree, Role.None);
   }
   // Near the border the trees thicken into the edge of the woods.
   for (let i = 0; i < ctx.n; i++) {

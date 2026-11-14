@@ -41,7 +41,7 @@ describe("a map's own water is the water it's built on", () => {
   it("a riverside town uses the river that's there and adds no other", () => {
     for (let seed = 1; seed <= 8; seed++) {
       // A river down the west side, at x = 12 to 15: not where the plan would put its own.
-      const m = map("town", 50, 50, seed, { townLayout: "riverside", houses: 5 });
+      const m = map("town", 50, 50, seed, { townLayout: "riverside", houses: 5, outskirts: 0 });
       water(m, "river", (x) => x >= 12 && x < 16);
       const res = generateRoute(m);
       expect(res.ok, `seed ${seed}: ${res.issues.filter((i) => i.severity === "error").map((i) => i.message)}`).toBe(true);
@@ -60,7 +60,7 @@ describe("a map's own water is the water it's built on", () => {
 
   it("a harbour uses the sea that's there", () => {
     for (let seed = 1; seed <= 6; seed++) {
-      const m = map("town", 50, 50, seed, { townLayout: "waterfront" });
+      const m = map("town", 50, 50, seed, { townLayout: "waterfront", outskirts: 0 });
       m.openings = [
         { id: "o1", edge: "north", start: 24, width: 3, kind: "walk" },
         { id: "o2", edge: "west", start: 15, width: 3, kind: "walk" },
@@ -129,6 +129,7 @@ describe("the sketch is a starting point with soft edges", () => {
     addOutdoor(r.sketch!, "town", { x: 80, y: 40, w: 50, h: 50 });
     buildRegion(r);
     const m = r.maps[0];
+    m.params = { ...m.params, outskirts: 0 }; // no ponds: this is about the river
     const mask = m.layers.zones.find((z) => z.data.water === "river")!.mask.data;
     let uneven = 0;
     for (let seed = 1; seed <= 6; seed++) {

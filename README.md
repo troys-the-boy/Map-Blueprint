@@ -436,6 +436,14 @@ Make a map of type **Town** (sizes S 20×20, M 30×30, L 40×40), then press **G
   - *Riverside:* a river through the town, lanes along its banks, and a bridge across. Needs room: 40×40 or more.
   - **Harbour and Riverside build on the water that's there.** If the map already has a river (from the region sketch, or a river zone you painted), a riverside town is built along *that* river and no other is added; the same goes for a harbour and the sea. Only a map with no such water gets one made for it. The Generate tab says which.
 - **A town grows from its core.** Whatever the plan, the core is the flat, dry land nearest the middle of the town's entrances. The Pokémon Center and Mart stand right by it, the Gym and landmark a little way off, and the houses fill outward from it in rows, close together. A big map gets a compact town with open country round it, not buildings scattered across the whole map.
+- **Fields and outskirts:** the open ground round the town is worked country. The slider sets how much (0 = none; about one feature per 400 cells of map at 50):
+  - *Fields:* fenced plots of tilled rows, each with a gate.
+  - *Orchards:* trees in a regular grid, with ground to walk between them.
+  - *Paddocks:* fenced enclosures with a gate. They hold tall grass if **Grass at the edges** is above 0, bare ground if not.
+  - *Ponds:* small pools of shallow water (no Surf needed, no wild encounters).
+  - *Berry patches:* a row of berry trees on soft soil, with the row in front kept clear to stand on. Their Porymap fields are suggestions to check, like other generated things.
+  - They go on free, level ground a few cells out from the buildings, off the streets, and never on anything you locked. Every fence has a gate, so nothing is shut in.
+  - **Out to the wild:** there are few trees among the buildings, more beyond them, and past the fields they gather into groves before the border woods.
 - **Town wall:** a fence round the built-up part, three cells out from the buildings, with gaps where the streets pass.
 - **Hill towns:** set **Elevation**, or give the map raised ground, with any plan: the terraces get lanes and their share of the buildings.
 - **Buildings:** Pokémon Center (5×4), Mart (4×4), Gym (7×6), a landmark building (6×5), and houses (4×3, some 5×4). Each sits on a lot beside a street with its door in the middle of its front (south) side, a walk to the street, and a **door warp** to its interior: `MAP_<TOWN>_POKEMON_CENTER_1F`, `_MART`, `_GYM`, `_HOUSE1`… (vanilla's naming). The interiors aren't made: build them in Porymap. Buildings that don't fit are left out, and Generate says so.
@@ -747,6 +755,10 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 ---
 
 ## Known limitations
+
+- **Fields are drawn with existing terrain:** tilled rows are Mud and Flowers, and there's no crop or well tile. Pick the tiles you want for them in Porymap.
+- **Outskirts are only made on town land.** A hamlet or village fitted into a route, forest or cave still has just its buildings.
+- **On a small town (30×30) there's room for only a field or two.**
 
 - **Maps built before this change** keep their old exact-edged river zones until you press **Build the maps** again; Build then lists them to generate again.
 - **A layout's own extras need its own water.** A Coastal route's surf entrances and a River route's river-long shape are only made when the layout makes the water itself; on a map that takes its water from the sketch, the route is laid round that water as it finds it.

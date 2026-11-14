@@ -214,6 +214,12 @@ function TownSettings() {
           </label>
         </>
       )}
+      <label className="slider" title="Fields, orchards, paddocks, ponds and berry patches on the open ground round the town. 0 = none. Fences always have a gate, and nothing is put on streets, doors or anything you locked.">
+        <span>
+          Fields and outskirts <b>{Math.round(t.outskirts * 100)}</b>
+        </span>
+        <input type="range" min={0} max={1} step={0.05} value={t.outskirts} onChange={(e) => set({ outskirts: Number(e.target.value) })} />
+      </label>
       <label className="slider" title="Small patches of tall grass near the edges. They're never in the way: every exit and door can be reached without stepping in grass.">
         <span>
           Grass at the edges <b>{Math.round(t.edgeGrass * 100)}</b>
