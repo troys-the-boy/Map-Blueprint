@@ -404,6 +404,18 @@ Generated buildings keep clear of yours and of the paths to them.
 
 **On hilly maps** a painted building stands at whatever level the land has where you drew it: in the valley it's on the valley floor, on a hillside it's up on that terrace. The building, a small yard round it and the step in front of its door are evened out to one level, so a cliff never runs through the building or across its door, and the path joins the lane or the stairs on that level. Generating again leaves it where it is. If the ground there can't be raised (it's right by an entrance, or beside something else you locked), the building stays on low ground and the hills leave a flat way from it to the valley.
 
+### Roads that read the land
+
+On land with cliffs or rivers, paths and lanes are laid by reading the terrain:
+
+- **They climb where it suits the road.** A path that has to get up a cliff cuts its own flight of stairs, straight up, where that's shorter than going round to stairs somewhere else. So a route over a hill runs up to the cliff, up the stairs and on, instead of wandering off to the far side. It still uses stairs that are already there when they're close.
+- **They keep to a level otherwise.** A climb costs the road about as much as 12 cells of walking, so it only climbs when it must or when it saves a real detour.
+- **They cross water straight.** A bridge runs straight across a river at right angles, where the crossing is short: never at a slant, round a corner, or along the river. Paths don't stop or branch in the middle of a bridge.
+- **Lanes follow lanes.** In a town with winding lanes, a new lane joins and follows one that's already laid rather than running beside it.
+- **Side branches and paths to hand-placed warps** are laid the same way.
+
+This applies to route land, and to towns with **Organic** or **Waterfront** streets. A **Grid** town keeps its straight streets; where a hill cuts a grid town in two, stairs are added so it's still joined up. Flat, dry routes and grid towns are laid exactly as before.
+
 ### Entrances above low ground
 
 Under **Entrances** in the Generate tab, each walking entrance on route or town land has a level: **Low** (the map's low ground), or **1 up**, **2 up**, **3 up**. Build sets it from the region sketch; on a map you made by hand you can set it yourself. A raised entrance arrives on a flat shelf at that level, joined to the rest of the map by stairs where needed, and its cells on the map's edge are crossing tiles (elevation 0), so it works whatever number the next map gives that ground. Forest and cave land is flat, so the level is ignored there.
@@ -722,6 +734,10 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 ---
 
 ## Known limitations
+
+- **Grid towns don't read the land.** Their streets are straight lines that stop at a cliff; stairs join the parts, but the streets aren't planned round the hills. (Town plans come in a later part.)
+- **Winding-lane towns will look a little different** if you regenerate them: lanes now follow lanes already laid.
+- **The bank beside a river** can still be wetted by a later stage where a path runs along it, giving a short bridge along the bank.
 
 - **Each map counts levels from its own lowest land.** That keeps its shores at ground level, which Gen 3 needs for Surf and fishing. A map that lies wholly on high ground is flat inside. Where two maps count their shared entrance differently, its edge cells are crossing tiles (elevation 0): set those cells to elevation 0 in Porymap on both maps.
 - **A raised entrance on flat land** gets a small shelf to arrive on, with stairs down.

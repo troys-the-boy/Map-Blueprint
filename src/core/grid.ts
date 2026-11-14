@@ -153,6 +153,84 @@ export function components(width: number, height: number, member: (i: number) =>
   return { ids, sizes };
 }
 
+/** What a road must respect on the way (see cheapestRoad). */
+export interface RoadRules {
+  /**
+   * Cells that can only be crossed in a straight line: 1 = east–west, 2 = north–south,
+   * 0 = no rule. A flight of stairs is one: the road goes straight up it, never along it.
+   */
+  gate?: (i: number) => number;
+  /** Cells where the road may not turn (water: a bridge runs straight across). */
+  straight?: (i: number) => boolean;
+  /** Extra cost for each turn; 0 lets the road wander freely. */
+  turn?: number;
+  /** The lowest cost any cell has (default 1), so the search still finds the cheapest road when some cells cost less. */
+  least?: number;
+}
+
+/**
+ * The cheapest 4-neighbour road from `from` to `to`, like cheapestPath, but the
+ * search remembers which way it arrived at each cell. That lets a road climb a
+ * cliff only straight through a spot where stairs fit, and cross water without
+ * turning. (Searching over position and direction together is how road planners
+ * for real terrain get sensible climbs: see Galin et al., "Procedural Generation of
+ * Roads", 2010, the approach Magna Urbis describes for its regional roads. This is
+ * written for this grid, not taken from either.)
+ */
+export function cheapestRoad(width: number, height: number, from: number, to: number, cost: (i: number) => number, rules: RoadRules = {}): number[] | null {
+  const n = width * height;
+  // State = cell × the direction it was entered by (4 = the start, no direction yet).
+  const best = new Float64Array(n * 5).fill(Infinity);
+  const prev = new Int32Array(n * 5).fill(-1);
+  const heap = new MinHeap();
+  const tx = to % width;
+  const ty = (to - tx) / width;
+  const least = Math.min(1, rules.least ?? 1);
+  const turn = rules.turn ?? 0;
+  const gate = rules.gate ?? (() => 0);
+  const axisOf = (d: number) => (DIRS[d].dx !== 0 ? 1 : 2);
+  best[from * 5 + 4] = 0;
+  heap.push(0, from * 5 + 4);
+  let end = -1;
+  while (heap.size) {
+    const [, s] = heap.pop();
+    const d = s % 5;
+    const i = (s - d) / 5;
+    if (i === to) {
+      end = s;
+      break;
+    }
+    const x = i % width;
+    const y = (i - x) / width;
+    const here = gate(i);
+    const noTurn = here !== 0 || (rules.straight?.(i) ?? false);
+    for (let e = 0; e < 4; e++) {
+      // Straight on only, through a gate or across water.
+      if (noTurn && d !== 4 && e !== d) continue;
+      if (here !== 0 && axisOf(e) !== here) continue;
+      const nx = x + DIRS[e].dx;
+      const ny = y + DIRS[e].dy;
+      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+      const j = ny * width + nx;
+      const there = gate(j);
+      if (there !== 0 && axisOf(e) !== there) continue;
+      const c = cost(j);
+      if (c === Infinity) continue;
+      const g = best[s] + c + (d !== 4 && e !== d ? turn : 0);
+      const t = j * 5 + e;
+      if (g < best[t]) {
+        best[t] = g;
+        prev[t] = s;
+        heap.push(g + least * (Math.abs(nx - tx) + Math.abs(ny - ty)), t);
+      }
+    }
+  }
+  if (end < 0) return null;
+  const out: number[] = [];
+  for (let s = end; s !== -1; s = prev[s]) out.push(Math.floor(s / 5));
+  return out.reverse();
+}
+
 /** Binary min-heap of (priority, value) pairs, for shortest-path searches. */
 export class MinHeap {
   private pri: number[] = [];

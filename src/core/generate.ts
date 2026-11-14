@@ -21,7 +21,7 @@ import { hmsFor, readRouteParams, resolveBorder, resolveLayout } from "./generat
 import { buildRouteSkeleton } from "./generators/routeSkeleton";
 import { applyLayout, computeGeometry, layoutOpenings } from "./generators/layout";
 import type { Geometry } from "./generators/layout";
-import { addPlateaus, connectStairs } from "./generators/plateaus";
+import { addPlateaus, joinLevels, connectStairs } from "./generators/plateaus";
 import { addGrassShortcut, addPathGrass } from "./generators/shortcut";
 import { fillTerrain } from "./generators/terrainFill";
 import { addHmPockets, addLedgePockets, addLedgeRows } from "./generators/features";
@@ -159,6 +159,7 @@ function routeStages(ctx: GenContext, geometry: Geometry) {
   applyZones(ctx); // the user's water, boundaries and keep-clear areas
   addPlateaus(ctx); // elevation: cliffs, stairs, ledges
   buildRouteSkeleton(ctx); // entrances, main path, branches
+  joinLevels(ctx); // stairs wherever an entrance is still cut off by a hill
   connectStairs(ctx); // trails up to every flight of stairs
   addGrassShortcut(ctx); // the second way through, in tall grass
   addPathGrass(ctx); // grass across the main path

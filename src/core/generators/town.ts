@@ -21,14 +21,15 @@
 //   5. The town sign, a sign by the Gym, people walking about, hidden items,
 //      and the Pokémon Center's heal location (in front of its door).
 
-import { DIRS, IS_WALKABLE, IS_WALL, IS_WATER, T, cheapestPath, components, distanceField } from "../grid";
+import { DIRS, IS_WALKABLE, IS_WALL, IS_WATER, T, cheapestPath, cheapestRoad, components, distanceField } from "../grid";
 import type { Warp } from "../model";
 import { openingLevel } from "../model";
 import { MoveGraph, openingCells } from "../reach";
 import type { GenContext } from "./context";
 import { LEVEL, RAISED, Role } from "./context";
 import { carveOpening } from "./routeSkeleton";
-import { addPlateaus, connectStairs, zonedHeights } from "./plateaus";
+import { addPlateaus, connectStairs, cutStairs, joinLevels, roadGates, zonedHeights } from "./plateaus";
+import { CLIMB_COST } from "./routeSkeleton";
 import type { BuildingKind, TownParams } from "./townParams";
 import { BUILDING_TYPES, buildingList } from "./townParams";
 
@@ -129,11 +130,29 @@ export function buildTown(ctx: GenContext): void {
       const shore = fromSea ? Math.abs(fromSea[i] - 6) * 0.8 : 0;
       return 1 + shore + (tp.townLayout === "organic" ? 4 * ctx.noise.fractal(x, y, 9, 2) : 0);
     };
+    // Lanes read the terrain: they climb a cliff where a flight of stairs fits (cutting it
+    // there), cross water straight, and follow a lane that's already laid rather than run beside it.
+    const gates = roadGates(ctx);
+    const lane = (a: number, b: number): number[] | null => {
+      const leg = cheapestRoad(
+        ctx.width,
+        ctx.height,
+        a,
+        b,
+        (i) => (gates[i] && ctx.role[i] === Role.Cliff ? CLIMB_COST : ctx.role[i] === Role.Stairs ? 1 : ctx.role[i] === Role.MainPath ? Math.min(0.5, cost(i)) : cost(i)),
+        { gate: (i) => gates[i], straight: (i) => ctx.role[i] === Role.Sea, least: 0.5 },
+      );
+      for (const c of leg ?? []) if (gates[c] && ctx.role[c] === Role.Cliff) cutStairs(ctx, c);
+      return leg;
+    };
     const main: number[] = [];
     const first = ctx.openingEnds[0];
     for (const target of ctx.openingEnds.slice(1)) {
-      const leg = cheapestPath(ctx.width, ctx.height, first, target, cost);
-      if (leg) main.push(...leg);
+      const leg = lane(first, target);
+      if (leg) {
+        main.push(...leg);
+        for (const c of leg) pave(c);
+      }
     }
     for (const c of main) pave(c);
     // Lanes off the main one, out into the town.
@@ -148,11 +167,13 @@ export function buildTown(ctx: GenContext): void {
       const away = fromSea ? (fromSea[ctx.idx(clampX(fx + 1), fy)] > fromSea[from] ? 1 : -1) : ctx.rng.chance(0.5) ? 1 : -1;
       const tx = ctx.vertical ? clampX(fx + away * reach) : clampX(fx + ctx.rng.int(-3, 3));
       const ty = ctx.vertical ? clampY(fy + ctx.rng.int(-3, 3)) : clampY(fy + away * reach);
-      const leg = cheapestPath(ctx.width, ctx.height, from, ctx.idx(tx, ty), cost);
+      const leg = lane(from, ctx.idx(tx, ty));
       if (leg) for (const c of leg) pave(c, 2);
     }
   }
   // Trails up the hillsides' stairs, and a street along each terrace, so there are lots up there too.
+  // Stairs wherever an entrance is still cut off by a hill (a grid of streets doesn't climb).
+  joinLevels(ctx);
   if (ctx.stairs.length) {
     connectStairs(ctx);
     addTerraceStreets(ctx, street, streetOk);

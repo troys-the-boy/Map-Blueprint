@@ -8,7 +8,8 @@
 // 4. Add side branches that end in dead ends.
 
 import type { Opening } from "../model";
-import { T, cheapestPath, distanceField } from "../grid";
+import { T, cheapestPath, cheapestRoad, distanceField } from "../grid";
+import { cutStairs, roadGates } from "./plateaus";
 import { IS_WALKABLE } from "../grid";
 import type { GenContext } from "./context";
 import { Role } from "./context";
@@ -48,6 +49,16 @@ export function carveOpening(ctx: GenContext, o: Opening): number {
   return inner;
 }
 
+/**
+ * What it costs a road to cut a new flight of stairs, in cells of ordinary ground: it
+ * climbs where that saves a detour of about this many cells, and uses stairs that are
+ * already there otherwise.
+ */
+export const CLIMB_COST = 12;
+
+/** Lay a road between two cells (see buildRouteSkeleton), optionally with its own cost per cell. */
+type Road = (a: number, b: number, cost?: (i: number) => number) => number[] | null;
+
 /** Cost of laying path through a cell: noise makes paths wander; locked walls can't be crossed. */
 function pathCost(ctx: GenContext, margin: number) {
   const winding = ctx.params.winding;
@@ -85,7 +96,8 @@ function waypoints(ctx: GenContext, a: number, b: number, margin: number): numbe
     else y = Math.round(margin + ctx.rng.range(0, 1) * (ctx.height - 2 * margin - 1) * sway + y * (1 - sway));
     x = Math.min(ctx.width - margin - 1, Math.max(margin, x));
     y = Math.min(ctx.height - margin - 1, Math.max(margin, y));
-    out.push(ctx.idx(x, y));
+    // Never a stop in the water: the path would have to turn on its bridge.
+    if (ctx.role[ctx.idx(x, y)] !== Role.Sea) out.push(ctx.idx(x, y));
   }
   return out;
 }
@@ -101,6 +113,19 @@ export function buildRouteSkeleton(ctx: GenContext): void {
   ctx.openingEnds = ends.filter((e) => e.o.kind === "walk").map((e) => e.end);
   // Open water: the surfing lane (made by the layout) is the route; there's no path to lay.
   if (ctx.layout === "water" || ctx.openingEnds.length === 0) return;
+
+  // On land with cliffs or rivers the path reads the terrain: it may climb a cliff where a
+  // flight of stairs fits (cutting the stairs there, straight up, where the climb suits the
+  // way it's going, instead of detouring to stairs put somewhere else), and it crosses
+  // water in a straight line, so bridges are short and square. Flat, dry land is laid as before.
+  const gates = roadGates(ctx);
+  const aware = gates.includes(1) || gates.includes(2) || ctx.crossable.includes(1);
+  const road: Road = (a, b, extra = cost) => {
+    if (!aware) return cheapestPath(ctx.width, ctx.height, a, b, extra);
+    const leg = cheapestRoad(ctx.width, ctx.height, a, b, (i) => (gates[i] && ctx.role[i] === Role.Cliff ? CLIMB_COST : extra(i)), { gate: (i) => gates[i], straight: (i) => ctx.role[i] === Role.Sea });
+    for (const c of leg ?? []) if (gates[c] && ctx.role[c] === Role.Cliff) cutStairs(ctx, c);
+    return leg;
+  };
 
   // Main path: from the first entrance to every other one.
   const first = ctx.openingEnds[0];
@@ -122,7 +147,7 @@ export function buildRouteSkeleton(ctx: GenContext): void {
     // next leg starts from the last stop actually reached.
     let at = stops[0];
     for (let s = 1; s < stops.length; s++) {
-      const leg = cheapestPath(ctx.width, ctx.height, at, stops[s], cost);
+      const leg = road(at, stops[s]);
       if (!leg) continue; // Blocked by locked cells or water; validation will report it if the end can't be reached.
       mainLine.push(...(mainLine.length && mainLine[mainLine.length - 1] === leg[0] ? leg.slice(1) : leg));
       at = stops[s];
@@ -137,8 +162,8 @@ export function buildRouteSkeleton(ctx: GenContext): void {
     ctx.stamp(c, width, T.path, Role.MainPath, (j) => canPave(ctx, j, c === j));
   });
 
-  connectWarps(ctx, cost);
-  buildBranches(ctx, cost, margin);
+  connectWarps(ctx, cost, road);
+  buildBranches(ctx, road, margin);
 }
 
 /**
@@ -148,7 +173,7 @@ export function buildRouteSkeleton(ctx: GenContext): void {
  * terrain (a building's door, say); in "whole map" mode its cell becomes path,
  * or a cave entrance for a cave mouth.
  */
-function connectWarps(ctx: GenContext, cost: (i: number) => number) {
+function connectWarps(ctx: GenContext, cost: (i: number) => number, road: Road) {
   const line = ctx.mainLine;
   if (!line.length) return;
   // (Only warps you placed: the generator's own doors are made afresh each time.)
@@ -156,13 +181,14 @@ function connectWarps(ctx: GenContext, cost: (i: number) => number) {
     if (!ctx.inside(w.x, w.y)) continue;
     const target = ctx.idx(w.x, w.y);
     // Start from the nearest point of the path.
-    const from = line.reduce((best, c) => {
+    const dry = line.filter((c) => ctx.role[c] !== Role.Bridge && ctx.role[c] !== Role.Sea);
+    const from = (dry.length ? dry : line).reduce((best, c) => {
       const [cx, cy] = ctx.xy(c);
       const [bx, by] = ctx.xy(best);
       return Math.abs(cx - w.x) + Math.abs(cy - w.y) < Math.abs(bx - w.x) + Math.abs(by - w.y) ? c : best;
-    }, line[0]);
+    }, (dry.length ? dry : line)[0]);
     // The warp's own cell can always be stepped into, whatever its terrain.
-    const leg = cheapestPath(ctx.width, ctx.height, from, target, (i) => (i === target ? 1 : cost(i)));
+    const leg = road(from, target, (i) => (i === target ? 1 : cost(i)));
     if (!leg) continue; // Validation reports a warp that can't be reached.
     for (const c of leg.slice(0, -1)) ctx.stamp(c, ctx.params.pathWidthMin, T.path, Role.Branch, (j) => j !== target && ctx.role[j] !== Role.MainPath && canPave(ctx, j, c === j));
     ctx.set(target, w.kind === "cave_mouth" ? T.caveEntrance : T.path, Role.Opening);
@@ -170,7 +196,7 @@ function connectWarps(ctx: GenContext, cost: (i: number) => number) {
   }
 }
 
-function buildBranches(ctx: GenContext, cost: (i: number) => number, margin: number) {
+function buildBranches(ctx: GenContext, road: Road, margin: number) {
   const p = ctx.params;
   const line = ctx.mainLine;
   if (line.length < 10) return;
@@ -185,10 +211,12 @@ function buildBranches(ctx: GenContext, cost: (i: number) => number, margin: num
       const tx = Math.min(ctx.width - margin - 1, Math.max(margin, ctx.vertical ? fx + side * reach : fx + along));
       const ty = Math.min(ctx.height - margin - 1, Math.max(margin, ctx.vertical ? fy + along : fy + side * reach));
       const target = ctx.idx(tx, ty);
+      // A branch never starts on a bridge or ends in the water.
+      if (ctx.role[from] === Role.Bridge || ctx.role[from] === Role.Sea || ctx.role[target] === Role.Sea) continue;
       // The tip must be well away from existing paths, or it isn't a real branch.
       const dist = distanceField(ctx.width, ctx.height, ctx.mainLine.concat(ctx.deadEnds));
       if (dist[target] < 5) continue;
-      const leg = cheapestPath(ctx.width, ctx.height, from, target, cost);
+      const leg = road(from, target);
       if (!leg) continue;
       for (const c of leg) ctx.stamp(c, p.pathWidthMin, T.path, Role.Branch, (j) => ctx.role[j] !== Role.MainPath && canPave(ctx, j, c === j));
       ctx.deadEnds.push(target);

@@ -86,7 +86,6 @@ export function addPlateaus(ctx: GenContext): void {
   // Raised-ground zones say where the hills are: nothing else is added.
   if (zoned || highEntrance) {
     addTerraces(ctx, amount, eligibleFrom(bt), alpine, 0, zoned ?? (amount > 0 ? null : new Uint8Array(ctx.n)));
-    joinLevels(ctx);
     if (zoned || amount <= 0) return;
     if (!alpine && crossLength >= 34) addSeparatePlateaus(ctx, amount, eligibleFrom(bt + 1));
     return;
@@ -97,18 +96,76 @@ export function addPlateaus(ctx: GenContext): void {
   if (!alpine && crossLength >= 34) addSeparatePlateaus(ctx, amount, eligibleFrom(bt + 1));
 }
 
+/** Ground a road or the player can be on: not a cliff, a wall, the sea, the stairs themselves or a locked obstacle. */
+function isFloor(ctx: GenContext, i: number): boolean {
+  return (
+    ctx.edgeDist(i) >= ctx.params.borderThickness &&
+    ctx.role[i] !== Role.Cliff &&
+    ctx.role[i] !== Role.Border &&
+    ctx.role[i] !== Role.Sea &&
+    ctx.terrain[i] !== T.stairs &&
+    !(ctx.locks[i] && !IS_WALKABLE[ctx.terrain[i]])
+  );
+}
+
 /**
- * With raised-ground zones a hill can run right across the map, or close round an
- * entrance (which always stays on low ground). The stairs a plateau picks for itself
- * may then all be on the wrong side. This makes sure every entrance, and every warp
- * placed by hand, can reach the first entrance on foot: where a stretch of ground is
- * cut off, a flight of stairs is added in the cliff between it and the next stretch
- * toward the rest of the map.
+ * Could a flight of stairs go in this cliff cell? It needs ground straight through it,
+ * one level apart, and cliff on both sides. Returns which way it's crossed (1 =
+ * east–west, 2 = north–south) and the cells at its foot and its top, or null.
  */
-function joinLevels(ctx: GenContext): void {
+export function stairSpot(ctx: GenContext, i: number): { axis: 1 | 2; low: number; high: number } | null {
+  if (ctx.role[i] !== Role.Cliff || ctx.locks[i]) return null;
+  const [x, y] = ctx.xy(i);
+  for (const [dx, dy, axis] of [
+    [1, 0, 1],
+    [0, 1, 2],
+  ] as const) {
+    if (!ctx.inside(x - dx, y - dy) || !ctx.inside(x + dx, y + dy) || !ctx.inside(x - dy, y - dx) || !ctx.inside(x + dy, y + dx)) continue;
+    const a = ctx.idx(x - dx, y - dy);
+    const b = ctx.idx(x + dx, y + dy);
+    if (!isFloor(ctx, a) || !isFloor(ctx, b) || ctx.locks[a] || ctx.locks[b]) continue;
+    if (Math.abs(levelRank(ctx.elevation[a]) - levelRank(ctx.elevation[b])) !== 1) continue;
+    if (ctx.role[ctx.idx(x - dy, y - dx)] !== Role.Cliff || ctx.role[ctx.idx(x + dy, y + dx)] !== Role.Cliff) continue;
+    const up = levelRank(ctx.elevation[a]) > levelRank(ctx.elevation[b]);
+    return { axis, low: up ? b : a, high: up ? a : b };
+  }
+  return null;
+}
+
+/** Turn a cliff cell into a flight of stairs, if one fits there. Returns true if it did. */
+export function cutStairs(ctx: GenContext, i: number): boolean {
+  const sp = stairSpot(ctx, i);
+  if (!sp) return false;
+  ctx.set(i, T.stairs, Role.Stairs);
+  for (const c of [sp.low, sp.high]) ctx.set(c, ctx.floor, Role.Stairs);
+  ctx.stairs.push({ cell: i, front: sp.low, back: sp.high });
+  return true;
+}
+
+/**
+ * For road building: every cell a road may only cross in a straight line because
+ * it's a flight of stairs, or a cliff where one could be cut (1 = east–west, 2 =
+ * north–south, 0 = neither).
+ */
+export function roadGates(ctx: GenContext): Uint8Array {
+  const gates = new Uint8Array(ctx.n);
+  for (let i = 0; i < ctx.n; i++) gates[i] = stairSpot(ctx, i)?.axis ?? 0;
+  for (const st of ctx.stairs) if (ctx.terrain[st.cell] === T.stairs) gates[st.cell] = Math.abs(st.front - st.back) === 2 ? 1 : 2;
+  return gates;
+}
+
+/**
+ * A last resort after the roads are laid: make sure every entrance, and every warp
+ * placed by hand, can reach the first entrance on foot. A hill can run right across
+ * a map or close round an entrance, and the roads may not have climbed it (a town's
+ * grid of streets doesn't). Where a stretch of ground is cut off, a flight of stairs
+ * is cut in the cliff between it and the next stretch toward the rest of the map.
+ */
+export function joinLevels(ctx: GenContext): void {
   const bt = ctx.params.borderThickness;
+  if (!ctx.role.includes(Role.Cliff)) return;
   // Stretches of ground: connected cells on one level, with no cliff, wall or sea between them.
-  const floor = (i: number) => ctx.edgeDist(i) >= bt && ctx.role[i] !== Role.Cliff && ctx.role[i] !== Role.Border && ctx.role[i] !== Role.Sea && ctx.terrain[i] !== T.stairs && !(ctx.locks[i] && !IS_WALKABLE[ctx.terrain[i]]);
+  const floor = (i: number) => isFloor(ctx, i);
   const piece = new Int32Array(ctx.n).fill(-1);
   let count = 0;
   for (let start = 0; start < ctx.n; start++) {
@@ -134,26 +191,11 @@ function joinLevels(ctx: GenContext): void {
   const find = (k: number): number => (group[k] === k ? k : (group[k] = find(group[k])));
   const join = (a: number, b: number) => void (group[find(a)] = find(b));
   for (const st of ctx.stairs) if (ctx.terrain[st.cell] === T.stairs && piece[st.front] >= 0 && piece[st.back] >= 0) join(piece[st.front], piece[st.back]);
-  // Where stairs could go: a cliff cell with ground straight through it, one level apart, and
-  // cliff on both sides of it.
   type Spot = { cell: number; low: number; high: number };
   const spots: Spot[] = [];
   for (let i = 0; i < ctx.n; i++) {
-    if (ctx.role[i] !== Role.Cliff || ctx.locks[i]) continue;
-    const [x, y] = ctx.xy(i);
-    for (const [dx, dy] of [
-      [1, 0],
-      [0, 1],
-    ]) {
-      if (!ctx.inside(x - dx, y - dy) || !ctx.inside(x + dx, y + dy) || !ctx.inside(x - dy, y - dx) || !ctx.inside(x + dy, y + dx)) continue;
-      const a = ctx.idx(x - dx, y - dy);
-      const b = ctx.idx(x + dx, y + dy);
-      if (piece[a] < 0 || piece[b] < 0 || ctx.locks[a] || ctx.locks[b]) continue;
-      if (Math.abs(levelRank(ctx.elevation[a]) - levelRank(ctx.elevation[b])) !== 1) continue;
-      if (ctx.role[ctx.idx(x - dy, y - dx)] !== Role.Cliff || ctx.role[ctx.idx(x + dy, y + dx)] !== Role.Cliff) continue;
-      const up = levelRank(ctx.elevation[a]) > levelRank(ctx.elevation[b]);
-      spots.push({ cell: i, low: up ? b : a, high: up ? a : b });
-    }
+    const sp = stairSpot(ctx, i);
+    if (sp && piece[sp.low] >= 0 && piece[sp.high] >= 0) spots.push({ cell: i, low: sp.low, high: sp.high });
   }
   // What must be joined: the cell just inside each walking entrance, and the cells round each hand-placed warp.
   const need: number[] = [];
@@ -196,12 +238,7 @@ function joinLevels(ctx: GenContext): void {
     if (reached < 0) continue; // The checks report an entrance that can't be reached.
     const flights: Spot[] = [];
     for (let g = reached; via.get(g); g = from.get(g)!) flights.push(via.get(g)!);
-    for (const sp of flights) {
-      ctx.set(sp.cell, T.stairs, Role.Stairs);
-      for (const c of [sp.low, sp.high]) ctx.set(c, ctx.floor, Role.Stairs);
-      ctx.stairs.push({ cell: sp.cell, front: sp.low, back: sp.high });
-      join(piece[sp.low], piece[sp.high]);
-    }
+    for (const sp of flights) if (cutStairs(ctx, sp.cell)) join(piece[sp.low], piece[sp.high]);
   }
 }
 
