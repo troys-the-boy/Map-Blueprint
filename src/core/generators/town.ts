@@ -180,14 +180,18 @@ export function buildTown(ctx: GenContext): void {
   } else {
     // Winding lanes, the harbour and the riverside: a lane between the entrances that wanders
     // (or follows the shore or the river bank), then a few lanes off it.
-    const fromSea = ctx.input.layout === "coastal" || ctx.input.layout === "river" ? distanceField(ctx.width, ctx.height, Array.from({ length: ctx.n }, (_, i) => i).filter((i) => ctx.role[i] === Role.Sea)) : null;
+    // (The water may be the plan's own, or a river or sea the map already had from the
+    // region sketch or its zones: the lanes follow whichever is there.)
+    const riverside = tp.townLayout === "riverside";
+    const wet = riverside || tp.townLayout === "waterfront" ? Array.from({ length: ctx.n }, (_, i) => i).filter((i) => ctx.role[i] === Role.Sea) : [];
+    const fromSea = wet.length ? distanceField(ctx.width, ctx.height, wet) : null;
     const cost = (i: number) => {
       if (ctx.role[i] === Role.Sea) return ctx.crossable[i] ? 14 : Infinity;
       if (!streetOk(i) && ctx.role[i] !== Role.Opening) return Infinity;
       if (ctx.edgeDist(i) < m) return 30;
       const [x, y] = ctx.xy(i);
       // Harbour: cheapest a few cells in from the beach. Riverside: along the bank.
-      const shore = fromSea ? Math.abs(fromSea[i] - (ctx.input.layout === "river" ? 4 : 6)) * 0.8 : 0;
+      const shore = fromSea ? Math.abs(fromSea[i] - (riverside ? 4 : 6)) * 0.8 : 0;
       return 1 + shore + (winding ? 4 * ctx.noise.fractal(x, y, 9, 2) : 0);
     };
     const lane = laneOver(cost);
@@ -218,7 +222,7 @@ export function buildTown(ctx: GenContext): void {
     }
     // A riverside town is on both banks: if the lanes so far all keep to one bank, one more
     // crosses to the biggest stretch of land on the other side, a few cells in from the water.
-    if (tp.townLayout === "riverside" && main.length && fromSea) {
+    if (riverside && main.length && fromSea) {
       const dry = (i: number) => land(i) && ctx.edgeDist(i) >= m && (streetOk(i) || ctx.role[i] === Role.Opening);
       const banks = components(ctx.width, ctx.height, dry);
       const home = new Set<number>();

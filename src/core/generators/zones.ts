@@ -44,6 +44,10 @@ function membership(ctx: GenContext, z: Zone, k: number): Uint8Array {
   let thickest = 0;
   if (toOutside) for (const i of inside) thickest = Math.max(thickest, toOutside[i]);
   const inward = toOutside ? Math.min(wobble, Math.max(0, (thickest - 1) / 2)) : wobble;
+  // A zone from the region sketch runs on into the next map, which has its own noise: its
+  // edge is kept exact at the map's edge and loosens over the first few cells in, so a river,
+  // a shore or a hillside meets its other half across the join.
+  const fromSketch = z.data.fromSketch === true;
   for (let i = 0; i < ctx.n; i++) {
     const depth = mask[i] ? (toOutside ? toOutside[i] : Infinity) - 0.5 : 0.5 - toInside[i];
     if (Math.abs(depth) > wobble + 1) {
@@ -52,7 +56,8 @@ function membership(ctx: GenContext, z: Zone, k: number): Uint8Array {
     }
     const [x, y] = ctx.xy(i);
     const n = ctx.noise.fractal(x + 8100 + k * 97, y + 8300, 6, 2) - 0.5;
-    const jitter = n * 2 * (n < 0 ? inward : wobble);
+    const ease = fromSketch ? Math.min(1, ctx.edgeDist(i) / 6) : 1;
+    const jitter = n * 2 * (n < 0 ? inward : wobble) * ease;
     out[i] = depth + jitter > 0 ? 1 : 0;
   }
   return out;

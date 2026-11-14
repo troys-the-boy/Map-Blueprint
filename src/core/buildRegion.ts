@@ -36,7 +36,7 @@ import { deriveSeed } from "./rng";
 import type { Sketch, SketchPlace, SketchRect } from "./sketch";
 import { SKETCH_CELL, areaAt, inRect, isOutdoor, parentOf, placePieces, sketchCols, sketchIssues, sketchRows } from "./sketch";
 import { levelAt } from "./regionTerrain";
-import { DEFAULT_FUZZINESS } from "./zones";
+import { DEFAULT_FUZZINESS, zonedWater } from "./zones";
 
 export interface BuildReport {
   /** Errors in the sketch that stop the build. */
@@ -331,10 +331,17 @@ export function buildRegion(region: Region): BuildReport {
   // --- 5. Painted areas and rivers become zones ----------------------------------------------
   for (const u of outdoor) {
     const m = u.map!;
-    const before = JSON.stringify(m.layers.zones.filter((z) => z.data.fromSketch === true).map((z) => [z.kind, z.data, Array.from(z.mask.data)]));
+    const before = JSON.stringify(m.layers.zones.filter((z) => z.data.fromSketch === true).map((z) => [z.kind, z.data, z.hard, z.fuzziness, Array.from(z.mask.data)]));
     m.layers.zones = [...m.layers.zones.filter((z) => z.data.fromSketch !== true), ...sketchZones(sketch, m, u.rect!)];
-    const after = JSON.stringify(m.layers.zones.filter((z) => z.data.fromSketch === true).map((z) => [z.kind, z.data, Array.from(z.mask.data)]));
+    const after = JSON.stringify(m.layers.zones.filter((z) => z.data.fromSketch === true).map((z) => [z.kind, z.data, z.hard, z.fuzziness, Array.from(z.mask.data)]));
     if (after !== before) changed.add(m.id);
+    // A new town's plan suits its land: on a river it's a riverside town, by the sea a harbour.
+    if (report.created.includes(m.id) && m.mapType === "town") {
+      const has = zonedWater(m);
+      const sea = m.layers.zones.filter((z) => z.kind === "water" && z.data.water === "ocean").reduce((n, z) => n + z.mask.data.reduce((a, b) => a + b, 0), 0);
+      if (has.river) m.params.townLayout = "riverside";
+      else if (sea >= m.width * m.height * 0.08) m.params.townLayout = "waterfront";
+    }
   }
 
   pairRegionWarps(region);
@@ -435,9 +442,11 @@ function sketchZones(sketch: Sketch, m: MapBlueprint, r: SketchRect): Zone[] {
     if (!any) return;
     const label =
       kind === "water" ? `${data.water === "ocean" ? "Sea" : data.water === "river" ? "River" : "Lake"} (sketch)` : kind === "height" ? `Raised ground, ${data.level} up (sketch)` : `${data.biome} (sketch)`;
-    zones.push({ id: `sketch_${kind}_${zones.length + 1}`, name: label, kind, hard, fuzziness: hard ? 0 : DEFAULT_FUZZINESS, mask, data: { ...data, fromSketch: true } });
+    // (A river is narrow: a gentler wobble keeps its width about what was drawn.)
+    zones.push({ id: `sketch_${kind}_${zones.length + 1}`, name: label, kind, hard, fuzziness: hard ? 0 : data.water === "river" ? 0.3 : DEFAULT_FUZZINESS, mask, data: { ...data, fromSketch: true } });
   };
-  // Lakes and sea follow the painted squares loosely; rivers exactly, so they meet at map edges.
+  // Everything from the sketch is a starting point, followed loosely with natural edges (and
+  // exactly at the map's own edge, so it meets the next map: see membership in generators/zones.ts).
   make("water", { water: "lake", depth: "deep" }, (x, y) => at(x, y) === "lake", false);
   make("water", { water: "ocean", depth: "deep" }, (x, y) => at(x, y) === "sea", false);
   for (const b of BIOMES) if (b !== m.biome) make("biome", { biome: b }, (x, y) => at(x, y) === b, false);
@@ -457,7 +466,7 @@ function sketchZones(sketch: Sketch, m: MapBlueprint, r: SketchRect): Zone[] {
   }
   for (const river of sketch.rivers) {
     const half = river.width / 2;
-    make("water", { water: "river", depth: "deep" }, (x, y) => distanceToLine(river.points, r.x + x + 0.5, r.y + y + 0.5) <= half, true);
+    make("water", { water: "river", depth: "deep" }, (x, y) => distanceToLine(river.points, r.x + x + 0.5, r.y + y + 0.5) <= half, false);
   }
   return zones;
 }

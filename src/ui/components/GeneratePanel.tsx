@@ -1,6 +1,7 @@
 // The Generate panel: seed, settings in collapsible groups, and the button.
 // Every setting has a default, so Generate works without touching anything.
 
+import { zonedWater } from "../../core/zones";
 import { useState } from "react";
 import { HMS } from "../../core/constants";
 import type { Hm } from "../../core/constants";
@@ -179,6 +180,11 @@ function TownSettings() {
         </select>
       </label>
       <p className="hint">{PLAN_HINTS[t.townLayout]}</p>
+      {((t.townLayout === "riverside" && zonedWater(map).river) || (t.townLayout === "waterfront" && zonedWater(map).sea)) && (
+        <p className="hint">
+          This map already has {t.townLayout === "riverside" ? "a river" : "the sea"} (from the region sketch, or its zones): the town is built along that one, and no other is added.
+        </p>
+      )}
       <label className="check" title="A wall (fence) round the built-up part of the town, three cells out from the buildings, with gaps where the streets pass.">
         <input type="checkbox" checked={t.wall} onChange={(e) => set({ wall: e.target.checked })} />
         Town wall
@@ -498,6 +504,11 @@ export function GeneratePanel() {
                 <option value="water">Open water: sea or lake, surfing</option>
               </select>
             </label>
+            {((layout === "river" && zonedWater(map).river) || (layout === "coastal" && zonedWater(map).sea)) && (
+              <p className="hint">
+                This map already has {layout === "river" ? "a river" : "the sea"} (from the region sketch, or its zones), so the layout doesn't add another: the route is built round the one that's there.
+              </p>
+            )}
             {layout === "water" && <p className="hint">Open-water routes are crossed by surfing, so the checks assume the player has Surf.</p>}
             {num("elevation", "Elevation", "How hilly the route is. Hillsides rise along the sides of the route, with cliffs, stairs up and ledges down: higher values give more of them and more levels (up to 3, or 4 on alpine routes). Also adds ledge rows. 0 = flat.")}
             {num("snow", "Snow", "How much of the route is under snow, highest ground first. 0 = none, 100 = snowed in. Grass becomes snowy grass, ponds freeze into slippery ice, some trees become snowdrifts.")}

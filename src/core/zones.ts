@@ -108,6 +108,25 @@ export function edgeBand(map: MapBlueprint, edge: Edge, from: number, to: number
   return out;
 }
 
+/**
+ * The water a map's zones already give it (from the region sketch, or painted in the Zones
+ * tab): a river, and/or the sea (an ocean zone or a coast along an edge). A map that has
+ * one doesn't get another of the same kind generated on top: the generator builds on it.
+ */
+export function zonedWater(map: Pick<MapBlueprint, "layers">): { river: boolean; sea: boolean } {
+  const zones = map.layers.zones.filter((z) => z.data.generated !== true && z.mask.data.includes(1));
+  return {
+    river: zones.some((z) => (z.kind === "water" && z.data.water === "river") || (z.kind === "edge" && z.data.boundary === "riverbank")),
+    sea: zones.some((z) => (z.kind === "water" && z.data.water === "ocean") || (z.kind === "edge" && z.data.boundary === "coast")),
+  };
+}
+
+/** The layout to generate, given the water the map's zones already have: no second river, no second sea. */
+export function layoutOver<L extends string>(map: Pick<MapBlueprint, "layers">, layout: L): L | "land" {
+  const has = zonedWater(map);
+  return (layout === "river" && has.river) || (layout === "coastal" && has.sea) ? "land" : layout;
+}
+
 export function isBiome(v: unknown): v is Biome {
   return typeof v === "string" && (BIOMES as readonly string[]).includes(v);
 }

@@ -317,7 +317,10 @@ If there's nothing to suggest, the panel says why (the land is all one height, s
 - **Crossing between maps.** Each map counts levels from its own lowest land, so the two maps of a connection can give the same ground different numbers. Where they do, the cells on the map's edge are **crossing** tiles (Gen 3 elevation 0, the same as stairs), which the player can step across from any level. Build works this out for both maps.
 - **Always joined up.** Where a hill runs right across a map or closes round an entrance, stairs are added so every entrance can still be reached.
 - **Neighbours agree.** Two maps that share an edge read the same squares along it, so a hillside that crosses the edge is on both.
-- **Water and biomes** come from the sketch as before (sea, lakes, rivers and painted biomes).
+- **Water and biomes** come from the sketch (sea, lakes, rivers and painted biomes).
+- **The sketch is the starting point, and the maps build on it.** A river, a sea or a hillside on the sketch is the one the map uses: a River or Coastal route layout, or a Riverside or Harbour town, follows the sketch's water instead of adding its own. The maps then add the detail: banks, beaches, bridges, ponds, paths and buildings.
+- **Soft edges everywhere.** Everything from the sketch (rivers too) is followed loosely, with natural, uneven edges, never as ruler-straight blocks. At the very edge of a map it's followed exactly, easing into the natural edge over the first few cells in, so a river, a shore or a hillside meets its other half on the next map.
+- **A new town's plan suits its land:** on a river it starts as Riverside, by the sea as Harbour, otherwise Market square. Change it freely; building again doesn't change it back.
 - **A new map's starting look.** The first time a map is built, it starts hillier on hills (Elevation 50), highland (70) and peaks (90), and a map mostly on highland or peaks with no biome painted starts **Alpine**. These are starting values only: change them freely, and building again never changes them back.
 
 On each map the raised ground shows in the **Zones** tab as zones named "Raised ground, 1 up (sketch)". Building again replaces those from the sketch; zones you make yourself are kept. After changing heights on the sketch, build again and then Generate the maps it lists.
@@ -431,6 +434,7 @@ Make a map of type **Town** (sizes S 20×20, M 30×30, L 40×40), then press **G
   - *Winding lanes:* a lane that wanders between the entrances, with a few lanes off it.
   - *Harbour:* the sea along one side, and the main road along the shore.
   - *Riverside:* a river through the town, lanes along its banks, and a bridge across. Needs room: 40×40 or more.
+  - **Harbour and Riverside build on the water that's there.** If the map already has a river (from the region sketch, or a river zone you painted), a riverside town is built along *that* river and no other is added; the same goes for a harbour and the sea. Only a map with no such water gets one made for it. The Generate tab says which.
 - **A town grows from its core.** Whatever the plan, the core is the flat, dry land nearest the middle of the town's entrances. The Pokémon Center and Mart stand right by it, the Gym and landmark a little way off, and the houses fill outward from it in rows, close together. A big map gets a compact town with open country round it, not buildings scattered across the whole map.
 - **Town wall:** a fence round the built-up part, three cells out from the buildings, with gaps where the streets pass.
 - **Hill towns:** set **Elevation**, or give the map raised ground, with any plan: the terraces get lanes and their share of the buildings.
@@ -743,6 +747,9 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 ---
 
 ## Known limitations
+
+- **Maps built before this change** keep their old exact-edged river zones until you press **Build the maps** again; Build then lists them to generate again.
+- **A layout's own extras need its own water.** A Coastal route's surf entrances and a River route's river-long shape are only made when the layout makes the water itself; on a map that takes its water from the sketch, the route is laid round that water as it finds it.
 
 - **Towns you regenerate will look different.** Buildings now cluster round the core on every plan, so an older town's buildings move closer together the next time you Generate it. Its plan stays the one it had (older towns are Grid).
 - **Harbour and riverside towns need room.** The water takes land, so on a 30×30 map most buildings won't fit; use 40×40 or bigger.

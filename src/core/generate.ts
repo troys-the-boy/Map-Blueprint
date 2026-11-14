@@ -7,6 +7,7 @@
 // example a painted wall across the only way through), the best attempt is
 // returned along with the validation errors that explain why.
 
+import { layoutOver } from "./zones";
 import type { Entity, MapBlueprint, Opening, Warp, Zone } from "./model";
 import type { Area } from "./selection";
 import { inArea } from "./selection";
@@ -293,7 +294,9 @@ export function generateRoute(map: MapBlueprint, validate: Omit<ValidateOptions,
         water: -0.5, // a narrower sea, so a waterfront town has room for its buildings
       }
     : routeParams;
-  const layout = resolveLayout(params, map.biome);
+  // A river or a sea the map already has (from the region sketch, or its zones) is the one
+  // the map is built on: the layout doesn't add another.
+  const layout = layoutOver(map, resolveLayout(params, map.biome));
   const layoutSeed = deriveSeed(map.seed, "layout");
   const geometry = computeGeometry(map.width, map.height, params, layout, layoutSeed);
   const openings = cave
@@ -351,7 +354,7 @@ export function applyResult(map: MapBlueprint, result: GenerateResult): void {
   // The border block shows beyond the map edges: water for sea routes, the wall style otherwise.
   const p = readRouteParams(map.params);
   const style = styleOf(map);
-  const layout = style === "town" ? townWater(readTownParams(map.params).townLayout) : resolveLayout(p, map.biome);
+  const layout = layoutOver(map, style === "town" ? townWater(readTownParams(map.params).townLayout) : resolveLayout(p, map.biome));
   const border = style === "cave" ? "rock_wall" : layout === "water" || layout === "coastal" ? "water_deep" : resolveBorder(p, map.biome) === "cliff" ? "rock_wall" : "tree";
   map.layout.borderBlock = [border, border, border, border];
 }
