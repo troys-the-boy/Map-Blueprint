@@ -6,6 +6,8 @@
 //   • edge        { boundary }              – a boundary along a map edge or a drawn line:
 //                                              coast, riverbank, cliff, forest wall or open
 //   • keep_clear  {}                         – walkable ground: no water, no trees
+//   • height      { level }                  – raised ground, 1 to 4 levels above the map's low
+//                                              ground: a hill with cliffs, stairs and ledges
 //
 // Zones are soft by default: the generator follows their general shape with
 // natural, irregular edges (fuzziness 0 = exact, 1 = loose). A hard zone is
@@ -17,7 +19,7 @@
 import type { Biome, Edge, MapBlueprint, Zone } from "./model";
 import { BIOMES, makeGrid } from "./model";
 
-export const ZONE_KINDS = ["biome", "water", "edge", "keep_clear"] as const;
+export const ZONE_KINDS = ["biome", "water", "edge", "keep_clear", "height"] as const;
 export type ZoneKind = (typeof ZONE_KINDS)[number];
 
 export const WATER_TYPES = ["lake", "pond", "river", "ocean", "marsh"] as const;
@@ -37,6 +39,15 @@ export const BIOME_NAMES: Record<Biome, string> = {
   urban_edge: "Urban edge",
 };
 
+/** The most levels a raised-ground zone can ask for (Porymap elevations 4 to 7; only alpine maps build the fourth). */
+export const MAX_HEIGHT_LEVEL = 4;
+
+/** How many levels above the low ground a raised-ground zone is (1 if its setting is missing or odd). */
+export function heightLevel(z: Zone): number {
+  const v = Number(z.data.level);
+  return Number.isFinite(v) ? Math.max(1, Math.min(MAX_HEIGHT_LEVEL, Math.round(v))) : 1;
+}
+
 /** Default fuzziness of a new (soft) zone. */
 export const DEFAULT_FUZZINESS = 0.5;
 
@@ -51,6 +62,7 @@ export function zoneLabel(z: Zone): string {
   if (z.kind === "water") return `${WATER_LABELS[z.data.water as WaterType] ?? "Water"}${z.data.water !== "marsh" ? ` (${z.data.depth === "shallow" ? "shallow" : "deep"})` : ""}`;
   if (z.kind === "edge") return `${BOUNDARY_LABELS[z.data.boundary as BoundaryType] ?? "Edge"} edge`;
   if (z.kind === "keep_clear") return "Keep clear";
+  if (z.kind === "height") return `Raised ground (${heightLevel(z)} up)`;
   return z.name;
 }
 
@@ -63,6 +75,7 @@ export function newZone(map: MapBlueprint, kind: ZoneKind, data: Zone["data"] = 
     water: { water: "lake", depth: "deep" },
     edge: { boundary: "coast" },
     keep_clear: {},
+    height: { level: 1 },
   };
   const z: Zone = {
     id: `zone_${n}`,

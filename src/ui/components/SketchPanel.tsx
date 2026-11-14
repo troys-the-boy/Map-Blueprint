@@ -245,7 +245,9 @@ function TerrainSection() {
   return (
     <details className="sketch-section">
       <summary title="Heights, landforms, and where rivers and lakes would be">Terrain</summary>
-      <p className="hint">Shape the land of the whole region here: paint heights by hand, or generate a landform and change it.</p>
+      <p className="hint">
+        Shape the land of the whole region here: paint heights by hand, or generate a landform and change it. Build the maps then gives each map its hills where the land under it is higher than its lowest part.
+      </p>
       <div className="field-row wrap">
         <button className={`secondary ${e.tool === "height" ? "active" : ""}`} title="Paint heights with a brush: sea, lowland, hills, highland, peaks." onClick={() => e.setTool("height")}>
           Paint heights

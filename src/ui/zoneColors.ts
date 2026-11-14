@@ -20,6 +20,7 @@ export function zoneColor(z: Zone): string {
   if (z.kind === "water") return WATER_COLORS[String(z.data.water)] ?? "#3f86e0";
   if (z.kind === "edge") return EDGE_COLORS[String(z.data.boundary)] ?? "#cccccc";
   if (z.kind === "keep_clear") return "#f4f4f4";
+  if (z.kind === "height") return ["#b89b62", "#8a6a4f", "#6d5140", "#e8e8ee"][Math.max(0, Math.min(3, Number(z.data.level) - 1 || 0))];
   return "#cccccc";
 }
 

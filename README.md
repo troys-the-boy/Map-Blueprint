@@ -309,7 +309,18 @@ Shape the land of the whole region on the sketch before going into the maps. Eve
 
 If there's nothing to suggest, the panel says why (the land is all one height, say). **Show heights** hides the shading and lines without changing anything.
 
-The heights don't change your maps yet: in the next part, each map will take its hills, water and biome from the land under it.
+**From the sketch to the maps.** Press **Build the maps** (or build again) and each town and route takes its land from the sketch under it:
+
+- **Hills.** The lowest land under a map is that map's ground. Land in a higher band becomes **raised ground**, one level up per band, with cliffs, stairs and ledges where the height changes. A map that lies all on one band is flat as far as the sketch goes (its own **Elevation** setting still gives it hills).
+- **Where exactly.** The hills follow the sketch's squares with a natural, uneven edge, so they don't look like 5×5 blocks.
+- **Entrances stay on low ground**, on both maps of a connection, so the player can always cross. Where a hill runs right across a map or closes round an entrance, stairs are added so every entrance can still be reached.
+- **Neighbours agree.** Two maps that share an edge read the same squares along it, so a hillside that crosses the edge is on both.
+- **Water and biomes** come from the sketch as before (sea, lakes, rivers and painted biomes).
+- **A new map's starting look.** The first time a map is built, it starts hillier on hills (Elevation 50), highland (70) and peaks (90), and a map mostly on highland or peaks with no biome painted starts **Alpine**. These are starting values only: change them freely, and building again never changes them back.
+
+On each map the raised ground shows in the **Zones** tab as zones named "Raised ground, 1 up (sketch)". Building again replaces those from the sketch; zones you make yourself are kept. After changing heights on the sketch, build again and then Generate the maps it lists.
+
+You can also make raised ground by hand on any map: **Zones → Raised ground**, paint the area, and choose how many levels up. Where a map has any raised-ground zones, its hills are exactly where they say, and the Elevation setting no longer places hills (it still adds ledge rows).
 
 ### Trace your own drawing
 
@@ -706,7 +717,10 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 
 ## Known limitations
 
-- **Heights are for planning so far.** Painting or generating terrain on the sketch doesn't change any map yet (that comes next), and Build ignores it.
+- **Heights are relative to each map.** A map's lowest land is its ground, so a map that lies wholly on high ground is flat, and a cliff the sketch shows on one map may be level ground on the neighbour that lies all above it. The entrance between them is on low ground on both, so the player can still cross.
+- **Forests and caves ignore heights.** Only route and town land has hills.
+- **Three levels at most** (four on alpine maps), however many bands the land under a map spans.
+- **A hill over the whole map** (a raised-ground zone you paint across every cell) sometimes can't be joined up; leave some low ground.
 - **Suggested rivers are rough.** They follow the height bands, which are 5×5-metatile squares, so they can run straight along the edge of the sketch or beside each other. Dismiss the ones you don't want, or reshape them once added. Suggestions don't take account of rivers already on the sketch.
 - **Suggestions aren't saved.** They're gone if you close the project before adding them; press Suggest again (the same seed gives the same ones).
 

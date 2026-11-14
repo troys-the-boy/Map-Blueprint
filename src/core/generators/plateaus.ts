@@ -19,16 +19,39 @@
 // Alpine routes count as more mountainous (see effectiveElevation).
 // With a travel direction the hillsides are low near the start and rise toward
 // the end, so the route climbs as the player goes.
+//
+// Raised-ground zones (painted in the Zones tab, or made from the region sketch's
+// heights) replace all of that: where a map has any, its hills are exactly where
+// the zones say, each zone's level above the low ground, whatever the Elevation
+// setting. They're still built the same way: cliffs, stairs, ledges, each level
+// inside the one below.
 
-import { DIRS, T, components, distanceField } from "../grid";
+import { DIRS, IS_WALKABLE, T, components, distanceField } from "../grid";
 import type { GenContext } from "./context";
 import { LEVEL, RAISED, Role } from "./context";
 import { effectiveElevation } from "./params";
+import { heightLevel } from "../zones";
 import { backDir, progress } from "./travel";
 
+/**
+ * The level each cell should be raised to by the map's raised-ground zones (0 =
+ * low ground), or null if the map has none.
+ */
+export function zonedHeights(ctx: GenContext): Uint8Array | null {
+  let out: Uint8Array | null = null;
+  for (const { zone, cells } of ctx.zoneCells) {
+    if (zone.kind !== "height") continue;
+    const level = heightLevel(zone);
+    out ??= new Uint8Array(ctx.n);
+    for (let i = 0; i < ctx.n; i++) if (cells[i] && out[i] < level) out[i] = level;
+  }
+  return out;
+}
+
 export function addPlateaus(ctx: GenContext): void {
+  const zoned = zonedHeights(ctx);
   const amount = effectiveElevation(ctx.params, ctx.input.biome);
-  if (amount <= 0 || ctx.layout === "water") return;
+  if ((amount <= 0 && !zoned) || ctx.layout === "water") return;
   const alpine = ctx.input.biome === "alpine";
   const crossLength = ctx.vertical ? ctx.width : ctx.height;
   // Cells too close to entrances stay flat, so every entrance starts on the ground.
@@ -55,10 +78,124 @@ export function addPlateaus(ctx: GenContext): void {
   const eligibleFrom = (edge: number) => (i: number) =>
     !nearEntrance[i] && ctx.role[i] === Role.None && !ctx.locks[i] && ctx.elevation[i] === LEVEL.ground && ctx.edgeDist(i) >= edge;
   const bt = ctx.params.borderThickness;
+  // Raised-ground zones say where the hills are: nothing else is added.
+  if (zoned) {
+    addTerraces(ctx, amount, eligibleFrom(bt), alpine, 0, zoned);
+    joinLevels(ctx);
+    return;
+  }
   // If no stretch of hillside came out (small maps, low settings), widen the hilly stretches and try again.
   for (let more = 0; more < 3; more++) if (addTerraces(ctx, amount, eligibleFrom(bt), alpine, more * 0.2) > 0) break;
   // Wide routes also get free-standing plateaus out in the middle.
   if (!alpine && crossLength >= 34) addSeparatePlateaus(ctx, amount, eligibleFrom(bt + 1));
+}
+
+/**
+ * With raised-ground zones a hill can run right across the map, or close round an
+ * entrance (which always stays on low ground). The stairs a plateau picks for itself
+ * may then all be on the wrong side. This makes sure every entrance, and every warp
+ * placed by hand, can reach the first entrance on foot: where a stretch of ground is
+ * cut off, a flight of stairs is added in the cliff between it and the next stretch
+ * toward the rest of the map.
+ */
+function joinLevels(ctx: GenContext): void {
+  const bt = ctx.params.borderThickness;
+  // Stretches of ground: connected cells on one level, with no cliff, wall or sea between them.
+  const floor = (i: number) => ctx.edgeDist(i) >= bt && ctx.role[i] !== Role.Cliff && ctx.role[i] !== Role.Border && ctx.role[i] !== Role.Sea && ctx.terrain[i] !== T.stairs && !(ctx.locks[i] && !IS_WALKABLE[ctx.terrain[i]]);
+  const piece = new Int32Array(ctx.n).fill(-1);
+  let count = 0;
+  for (let start = 0; start < ctx.n; start++) {
+    if (piece[start] >= 0 || !floor(start)) continue;
+    const stack = [start];
+    piece[start] = count;
+    while (stack.length) {
+      const i = stack.pop()!;
+      const [x, y] = ctx.xy(i);
+      for (const { dx, dy } of DIRS) {
+        if (!ctx.inside(x + dx, y + dy)) continue;
+        const j = ctx.idx(x + dx, y + dy);
+        if (piece[j] < 0 && floor(j) && ctx.elevation[j] === ctx.elevation[i]) {
+          piece[j] = count;
+          stack.push(j);
+        }
+      }
+    }
+    count++;
+  }
+  // Which stretches are already joined by stairs.
+  const group = Array.from({ length: count }, (_, k) => k);
+  const find = (k: number): number => (group[k] === k ? k : (group[k] = find(group[k])));
+  const join = (a: number, b: number) => void (group[find(a)] = find(b));
+  for (const st of ctx.stairs) if (ctx.terrain[st.cell] === T.stairs && piece[st.front] >= 0 && piece[st.back] >= 0) join(piece[st.front], piece[st.back]);
+  // Where stairs could go: a cliff cell with ground straight through it, one level apart, and
+  // cliff on both sides of it.
+  type Spot = { cell: number; low: number; high: number };
+  const spots: Spot[] = [];
+  for (let i = 0; i < ctx.n; i++) {
+    if (ctx.role[i] !== Role.Cliff || ctx.locks[i]) continue;
+    const [x, y] = ctx.xy(i);
+    for (const [dx, dy] of [
+      [1, 0],
+      [0, 1],
+    ]) {
+      if (!ctx.inside(x - dx, y - dy) || !ctx.inside(x + dx, y + dy) || !ctx.inside(x - dy, y - dx) || !ctx.inside(x + dy, y + dx)) continue;
+      const a = ctx.idx(x - dx, y - dy);
+      const b = ctx.idx(x + dx, y + dy);
+      if (piece[a] < 0 || piece[b] < 0 || ctx.locks[a] || ctx.locks[b]) continue;
+      if (Math.abs(levelRank(ctx.elevation[a]) - levelRank(ctx.elevation[b])) !== 1) continue;
+      if (ctx.role[ctx.idx(x - dy, y - dx)] !== Role.Cliff || ctx.role[ctx.idx(x + dy, y + dx)] !== Role.Cliff) continue;
+      const up = levelRank(ctx.elevation[a]) > levelRank(ctx.elevation[b]);
+      spots.push({ cell: i, low: up ? b : a, high: up ? a : b });
+    }
+  }
+  // What must be joined: the cell just inside each walking entrance, and the cells round each hand-placed warp.
+  const need: number[] = [];
+  for (const o of ctx.input.openings) {
+    if (o.kind !== "walk") continue;
+    const along = o.start + Math.floor(o.width / 2);
+    const d = bt + 1;
+    const [x, y] = o.edge === "north" ? [along, d] : o.edge === "south" ? [along, ctx.height - 1 - d] : o.edge === "west" ? [d, along] : [ctx.width - 1 - d, along];
+    if (ctx.inside(x, y) && piece[ctx.idx(x, y)] >= 0) need.push(piece[ctx.idx(x, y)]);
+  }
+  for (const w of ctx.input.warps.filter((k) => k.locked))
+    for (const { dx, dy } of DIRS) if (ctx.inside(w.x + dx, w.y + dy) && piece[ctx.idx(w.x + dx, w.y + dy)] >= 0) {
+      need.push(piece[ctx.idx(w.x + dx, w.y + dy)]);
+      break;
+    }
+  if (need.length < 2) return;
+  for (const target of need.slice(1)) {
+    if (find(target) === find(need[0])) continue;
+    // The fewest new flights from this stretch to one already joined to the first entrance.
+    const via = new Map<number, Spot | null>([[find(target), null]]);
+    const from = new Map<number, number>();
+    const queue = [find(target)];
+    let reached = -1;
+    while (queue.length && reached < 0) {
+      const g = queue.shift()!;
+      for (const sp of spots) {
+        const a = find(piece[sp.low]);
+        const b = find(piece[sp.high]);
+        const next = a === g ? b : b === g ? a : -1;
+        if (next < 0 || via.has(next)) continue;
+        via.set(next, sp);
+        from.set(next, g);
+        if (next === find(need[0])) {
+          reached = next;
+          break;
+        }
+        queue.push(next);
+      }
+    }
+    if (reached < 0) continue; // The checks report an entrance that can't be reached.
+    const flights: Spot[] = [];
+    for (let g = reached; via.get(g); g = from.get(g)!) flights.push(via.get(g)!);
+    for (const sp of flights) {
+      ctx.set(sp.cell, T.stairs, Role.Stairs);
+      for (const c of [sp.low, sp.high]) ctx.set(c, ctx.floor, Role.Stairs);
+      ctx.stairs.push({ cell: sp.cell, front: sp.low, back: sp.high });
+      join(piece[sp.low], piece[sp.high]);
+    }
+  }
 }
 
 /** Where a level may be built on top of the level below: away from its stairs, and two cells from
@@ -132,7 +269,7 @@ function addSeparatePlateaus(ctx: GenContext, amount: number, eligible: (i: numb
  * hills along stretches of each side (more and higher with the Elevation
  * setting, up to 3 levels), so they work on narrow routes too.
  */
-function addTerraces(ctx: GenContext, amount: number, eligible: (i: number) => boolean, alpine: boolean, widen = 0): number {
+function addTerraces(ctx: GenContext, amount: number, eligible: (i: number) => boolean, alpine: boolean, widen = 0, zoned: Uint8Array | null = null): number {
   const bt = ctx.params.borderThickness;
   const crossLength = ctx.vertical ? ctx.width : ctx.height;
   const alongLength = ctx.vertical ? ctx.height : ctx.width;
@@ -157,7 +294,9 @@ function addTerraces(ctx: GenContext, amount: number, eligible: (i: number) => b
   // terrace step (a cliff, then a ledge of ground at least 2 wide).
   const floor = Math.max(3, ctx.params.pathWidthMax + (amount > 0.7 ? 0 : 1));
   const valley = town ? Math.max(floor + 2, halfOpen * (0.5 - 0.2 * amount)) : Math.max(floor, halfOpen * (alpine ? 0.6 - 0.35 * amount : 0.7 - 0.35 * amount));
-  const maxLevel = town ? Math.max(1, Math.min(wantLevels, Math.floor((halfOpen - valley) / TERRACE))) : wantLevels;
+  // With raised-ground zones: as many levels as they ask for (3 at most; 4 on alpine maps).
+  const zonedTop = zoned ? Math.min(alpine ? 4 : 3, zoned.reduce((a, b) => Math.max(a, b), 0)) : 0;
+  const maxLevel = zoned ? zonedTop : town ? Math.max(1, Math.min(wantLevels, Math.floor((halfOpen - valley) / TERRACE))) : wantLevels;
   const step = Math.max(town ? TERRACE : 3, (halfOpen - valley) / maxLevel);
   const centre = (crossLength - 1) / 2;
   // Only some stretches of each side are hills: more of them at higher settings.
@@ -166,6 +305,10 @@ function addTerraces(ctx: GenContext, amount: number, eligible: (i: number) => b
 
   const height = new Float32Array(ctx.n);
   for (let i = 0; i < ctx.n; i++) {
+    if (zoned) {
+      height[i] = zoned[i] ? zoned[i] + 0.5 : 0;
+      continue;
+    }
     const [x, y] = ctx.xy(i);
     const across = ctx.vertical ? x : y;
     const along = ctx.vertical ? y : x;

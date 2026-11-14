@@ -289,6 +289,7 @@ export function GeneratePanel() {
   const forest = style === "forest";
   const cave = style === "cave";
   const route = style === "route";
+  const raisedZones = map.layers.zones.filter((z) => z.kind === "height");
   // A cave place is entered by warps; anything else by entrances on its edges.
   const cavePlace = map.mapType === "cave";
   const last = s.lastGenerate?.mapId === map.id ? s.lastGenerate : null;
@@ -443,6 +444,13 @@ export function GeneratePanel() {
               ))}
             </select>
           </label>
+          {raisedZones.length > 0 && (
+            <p className="hint">
+              {style === "forest" || style === "cave"
+                ? `This map has ${raisedZones.length} raised-ground zone${raisedZones.length === 1 ? "" : "s"}, but a ${style} is flat: they're only used on route and town land.`
+                : `This map's hills are where its ${raisedZones.length} raised-ground zone${raisedZones.length === 1 ? " is" : "s are"} (see the Zones tab)${raisedZones.some((z) => z.data.fromSketch === true) ? ", from the heights on the region sketch" : ""}. The Elevation setting doesn't place hills while a map has any.`}
+            </p>
+          )}
           <label className="field" title="Buildings fitted into the land: none, a few houses, or a village or town with a Pokémon Center and a Mart. Choosing a size sets its buildings; change them under Buildings.">
             <span>Settlement</span>
             <select value={map.settlement} onChange={(e) => s.setSettlement(e.target.value as Settlement)}>

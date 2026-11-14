@@ -27,7 +27,7 @@ import { MoveGraph, openingCells } from "../reach";
 import type { GenContext } from "./context";
 import { LEVEL, RAISED, Role } from "./context";
 import { carveOpening } from "./routeSkeleton";
-import { addPlateaus, connectStairs } from "./plateaus";
+import { addPlateaus, connectStairs, zonedHeights } from "./plateaus";
 import type { BuildingKind, TownParams } from "./townParams";
 import { BUILDING_TYPES, buildingList } from "./townParams";
 
@@ -52,7 +52,7 @@ export function buildTown(ctx: GenContext): void {
     else ctx.set(i, T.ground, Role.None);
   }
   // Hills, like a route's hillsides (only when the Elevation setting is above 0).
-  if (ctx.params.elevation > 0) addPlateaus(ctx);
+  if (ctx.params.elevation > 0 || zonedHeights(ctx)) addPlateaus(ctx);
   // A hilltop is building land like the valley (on routes it's left as open ground).
   for (let i = 0; i < ctx.n; i++) if (!ctx.locks[i] && ctx.role[i] === Role.Clearing) ctx.role[i] = Role.None;
   const ends = ctx.input.openings.map((o) => ({ o, end: carveOpening(ctx, o) }));
@@ -152,7 +152,7 @@ export function buildTown(ctx: GenContext): void {
     }
   }
   // Trails up the hillsides' stairs, and a street along each terrace, so there are lots up there too.
-  if (ctx.params.elevation > 0) {
+  if (ctx.stairs.length) {
     connectStairs(ctx);
     addTerraceStreets(ctx, street, streetOk);
   }

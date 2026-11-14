@@ -10,8 +10,13 @@
 //   • connections and the edge entrances between neighbouring maps, with the
 //     Start and Finish from the journey;
 //   • the warps between a route or town and the forests and caves on it;
-//   • zones for painted lakes, sea, biomes and rivers (data.fromSketch = true);
-//     the user's own zones are kept.
+//   • zones for painted lakes, sea, biomes and rivers, and for the sketch's heights
+//     (raised ground where the land under the map is higher than its lowest part)
+//     (data.fromSketch = true); the user's own zones are kept.
+//
+// A new map also starts with a look that suits its land: how hilly it is, and the
+// alpine biome on high ground with no biome painted. Those are only starting
+// values: Build never changes them afterwards.
 //
 // Maps it made whose place has gone from the sketch are not deleted, only
 // reported. Connections follow pokeemerald (src/fieldmap.c, FillSouthConnection
@@ -29,7 +34,8 @@ import type { Anchor } from "./resize";
 import { resizeMap } from "./resize";
 import { deriveSeed } from "./rng";
 import type { Sketch, SketchPlace, SketchRect } from "./sketch";
-import { SKETCH_CELL, areaAt, inRect, isOutdoor, parentOf, placePieces, sketchIssues } from "./sketch";
+import { SKETCH_CELL, areaAt, inRect, isOutdoor, parentOf, placePieces, sketchCols, sketchIssues, sketchRows } from "./sketch";
+import { levelAt } from "./regionTerrain";
 import { DEFAULT_FUZZINESS } from "./zones";
 
 export interface BuildReport {
@@ -88,6 +94,26 @@ function mainBiome(sketch: Sketch, r: SketchRect): Biome | null {
   return best as Biome | null;
 }
 
+/** The lie of the land under a rectangle of the sketch: its lowest and highest bands, and the band most of it is. */
+export function landUnder(sketch: Sketch, r: SketchRect): { low: number; high: number; main: number } | null {
+  const cols = sketchCols(sketch);
+  const counts = [0, 0, 0, 0];
+  for (let y = r.y; y < r.y + r.h; y += SKETCH_CELL)
+    for (let x = r.x; x < r.x + r.w; x += SKETCH_CELL) {
+      const cx = Math.floor(x / SKETCH_CELL);
+      const cy = Math.floor(y / SKETCH_CELL);
+      if (cx < 0 || cy < 0 || cx >= cols || cy >= sketchRows(sketch)) continue;
+      const band = levelAt(sketch, cy * cols + cx);
+      if (band >= 0) counts[band]++;
+    }
+  if (!counts.some((n) => n)) return null;
+  const present = counts.map((n, band) => (n ? band : -1)).filter((b) => b >= 0);
+  return { low: present[0], high: present[present.length - 1], main: counts.indexOf(Math.max(...counts)) };
+}
+
+/** How hilly a new map starts, by the band most of it lies on (lowland keeps the usual default). */
+const STARTING_ELEVATION: Record<"route" | "town", Array<number | null>> = { route: [null, 0.5, 0.7, 0.9], town: [null, 0.4, 0.6, 0.8] };
+
 /** Which way to grow or shrink a map so its contents stay where they were on the sketch. */
 function anchorFor(oldX: number, newX: number, oldW: number, newW: number): 0 | 1 | 2 {
   const dx = oldX - newX;
@@ -122,8 +148,15 @@ export function buildRegion(region: Region): BuildReport {
     const existing = byId.get(u.place.mapIds[u.index] ?? "");
     const pj = plan.places.get(u.place.id);
     if (!existing) {
-      const biome = (u.rect && mainBiome(sketch, u.rect)) ?? (!isOutdoor(u.place.kind) ? (parentBiome(sketch, u.place) ?? region.settings.defaultBiome) : region.settings.defaultBiome);
+      // The land under it sets how it starts: high ground with no biome painted is alpine,
+      // and hills, highland and peaks start hillier.
+      const land = u.rect ? landUnder(sketch, u.rect) : null;
+      const biome =
+        (u.rect && mainBiome(sketch, u.rect)) ??
+        (!isOutdoor(u.place.kind) ? (parentBiome(sketch, u.place) ?? region.settings.defaultBiome) : land && land.main >= 2 ? "alpine" : region.settings.defaultBiome);
       u.map = addNewMap(region, { name: u.name, mapType: u.mapType, width: u.w, height: u.h, seed: deriveSeed(region.seed, `${u.place.id}:${u.index}`), biome });
+      const hilly = land && (u.mapType === "route" || u.mapType === "town") ? STARTING_ELEVATION[u.mapType][land.main] : null;
+      if (hilly !== null) u.map.params.elevation = hilly;
       byId.set(u.map.id, u.map);
       report.created.push(u.map.id);
       changed.add(u.map.id);
@@ -374,7 +407,7 @@ export function pairRegionWarps(region: Region): void {
 function sketchZones(sketch: Sketch, m: MapBlueprint, r: SketchRect): Zone[] {
   const zones: Zone[] = [];
   const at = (x: number, y: number) => areaAt(sketch, r.x + x, r.y + y);
-  const make = (kind: "water" | "biome", data: Record<string, string>, test: (x: number, y: number) => boolean, hard: boolean) => {
+  const make = (kind: "water" | "biome" | "height", data: Record<string, string | number>, test: (x: number, y: number) => boolean, hard: boolean) => {
     const mask = makeGrid(m.width, m.height);
     let any = false;
     for (let y = 0; y < m.height; y++)
@@ -384,13 +417,28 @@ function sketchZones(sketch: Sketch, m: MapBlueprint, r: SketchRect): Zone[] {
           any = true;
         }
     if (!any) return;
-    const label = kind === "water" ? `${data.water === "ocean" ? "Sea" : data.water === "river" ? "River" : "Lake"} (sketch)` : `${data.biome} (sketch)`;
+    const label =
+      kind === "water" ? `${data.water === "ocean" ? "Sea" : data.water === "river" ? "River" : "Lake"} (sketch)` : kind === "height" ? `Raised ground, ${data.level} up (sketch)` : `${data.biome} (sketch)`;
     zones.push({ id: `sketch_${kind}_${zones.length + 1}`, name: label, kind, hard, fuzziness: hard ? 0 : DEFAULT_FUZZINESS, mask, data: { ...data, fromSketch: true } });
   };
   // Lakes and sea follow the painted squares loosely; rivers exactly, so they meet at map edges.
   make("water", { water: "lake", depth: "deep" }, (x, y) => at(x, y) === "lake", false);
   make("water", { water: "ocean", depth: "deep" }, (x, y) => at(x, y) === "sea", false);
   for (const b of BIOMES) if (b !== m.biome) make("biome", { biome: b }, (x, y) => at(x, y) === b, false);
+  // Heights: the map's lowest land is its ground; land in a higher band is raised ground, one
+  // level per band (each level's zone holds the levels above it too, so they nest). A map
+  // that lies all on one band is flat as far as the sketch goes.
+  const land = landUnder(sketch, r);
+  if (land && land.high > land.low) {
+    const cols = sketchCols(sketch);
+    const rows = sketchRows(sketch);
+    const above = (x: number, y: number) => {
+      const cx = Math.floor((r.x + x) / SKETCH_CELL);
+      const cy = Math.floor((r.y + y) / SKETCH_CELL);
+      return cx < 0 || cy < 0 || cx >= cols || cy >= rows ? 0 : levelAt(sketch, cy * cols + cx) - land.low;
+    };
+    for (let level = 1; level <= land.high - land.low; level++) make("height", { level }, (x, y) => above(x, y) >= level, false);
+  }
   for (const river of sketch.rivers) {
     const half = river.width / 2;
     make("water", { water: "river", depth: "deep" }, (x, y) => distanceToLine(river.points, r.x + x + 0.5, r.y + y + 0.5) <= half, true);

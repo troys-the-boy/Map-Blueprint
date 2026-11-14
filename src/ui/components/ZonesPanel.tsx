@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useStore } from "../store";
 import { BIOMES, EDGES } from "../../core/model";
 import type { Edge, Zone } from "../../core/model";
-import { BIOME_NAMES, BOUNDARY_LABELS, BOUNDARY_TYPES, WATER_LABELS, WATER_TYPES, userZones } from "../../core/zones";
+import { BIOME_NAMES, BOUNDARY_LABELS, BOUNDARY_TYPES, MAX_HEIGHT_LEVEL, WATER_LABELS, WATER_TYPES, heightLevel, userZones } from "../../core/zones";
 import type { ZoneKind } from "../../core/zones";
 import { areaCells } from "../../core/selection";
 import { zoneColor } from "../zoneColors";
@@ -20,6 +20,7 @@ const NEW_ZONES: Array<{ kind: ZoneKind; label: string; tip: string }> = [
   { kind: "water", label: "Water", tip: "Where water must be: lake, pond, river, ocean or marsh." },
   { kind: "edge", label: "Boundary", tip: "A boundary you paint, e.g. a cliff line or forest wall. For a stretch of the map edge, use the form below." },
   { kind: "keep_clear", label: "Keep clear", tip: "Walkable ground with no water or trees: a clearing, a town lot, a landmark." },
+  { kind: "height", label: "Raised ground", tip: "A hill: ground one or more levels up, with cliffs, stairs and ledges. Where a map has raised-ground zones, its hills are where they say (the Elevation setting no longer places them)." },
 ];
 
 export function ZonesPanel() {
@@ -188,6 +189,15 @@ function ZoneRow({ z }: { z: Zone }) {
           {BOUNDARY_TYPES.map((b) => (
             <option key={b} value={b}>
               {BOUNDARY_LABELS[b]}
+            </option>
+          ))}
+        </select>
+      )}
+      {z.kind === "height" && (
+        <select value={heightLevel(z)} aria-label="Levels up" title="How many levels above the map's low ground. Levels build on each other, so 2 up has a 1-up step round it. Only alpine maps build a fourth." onChange={(e) => s.updateZone(z.id, { data: { level: Number(e.target.value) } })}>
+          {Array.from({ length: MAX_HEIGHT_LEVEL }, (_, k) => k + 1).map((n) => (
+            <option key={n} value={n}>
+              {n} level{n === 1 ? "" : "s"} up
             </option>
           ))}
         </select>

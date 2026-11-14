@@ -41,6 +41,8 @@ When the format changes, `schemaVersion` goes up and a migration in `src/core/pr
 | 15 | Revisions after 6 | Each map gains `underlay` (a reference image, or null; null in older files). Reference images (the sketch's and the maps') gain `save`: when false the file is left out (`data` is `""`) but the rest is kept. Older sketch drawings get `save: true`. |
 | 16 | Land and settlements, part A | Each map gains `style` (how its land is generated: `route`, `town`, `forest` or `cave`) and `settlement` (its buildings: `none`, `hamlet`, `village` or `town`). Older maps get their `mapType` as `style` (`route` for an interior), and `settlement` is `town` for towns, `none` otherwise, so they generate as before. |
 | 17 | Land and settlements, part C | The sketch gains `heights`: a height band per 5×5 square (`lowland`, `hills`, `highland`, `peaks`), saved like `areas`. Older sketches are all `lowland`. The sea is still the `sea` area. |
+
+Zones gained a kind without a version change (older tools skip kinds they don't know): `height`, raised ground, with `data.level` = 1 to 4 levels above the map's low ground. Build makes these from the sketch's heights with `data.fromSketch` = true.
 | 13 | 6 (part D) | The sketch gains `journey` (the order the player visits places, and where progression steps start). Older sketches get an empty one. |
 | 12 | 6 (part C) | The sketch gains `regionMap` (the in-game region map's grid size and sections placed by hand). Version-11 sketches get Emerald's 28 × 15 grid and none placed by hand. |
 
