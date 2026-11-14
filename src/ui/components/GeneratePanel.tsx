@@ -1,7 +1,7 @@
 // The Generate panel: seed, settings in collapsible groups, and the button.
 // Every setting has a default, so Generate works without touching anything.
 
-import { zonedWater } from "../../core/zones";
+import { OPEN_WATER_SHARE, seaShare, zonedWater } from "../../core/zones";
 import { useState } from "react";
 import { HMS } from "../../core/constants";
 import type { Hm } from "../../core/constants";
@@ -515,6 +515,12 @@ export function GeneratePanel() {
                 This map already has {layout === "river" ? "a river" : "the sea"} (from the region sketch, or its zones), so the layout doesn't add another: the route is built round the one that's there.
               </p>
             )}
+            {layout === "water" && zonedWater(map).sea && seaShare(map) < OPEN_WATER_SHARE && (
+              <p className="hint">
+                The region sketch has land on {Math.round((1 - seaShare(map)) * 100)}% of this map, so it isn't made all sea: the sea is where the sketch has it and the route runs on the land.
+              </p>
+            )}
+            {(p.stream !== "no") && (zonedWater(map).river || zonedWater(map).sea) && <p className="hint">A stream on this map runs into the water that's already there, as a tributary.</p>}
             {layout === "water" && <p className="hint">Open-water routes are crossed by surfing, so the checks assume the player has Surf.</p>}
             {num("elevation", "Elevation", "How hilly the route is. Hillsides rise along the sides of the route, with cliffs, stairs up and ledges down: higher values give more of them and more levels (up to 3, or 4 on alpine routes). Also adds ledge rows. 0 = flat.")}
             {num("snow", "Snow", "How much of the route is under snow, highest ground first. 0 = none, 100 = snowed in. Grass becomes snowy grass, ponds freeze into slippery ice, some trees become snowdrifts.")}

@@ -36,7 +36,7 @@ import { deriveSeed } from "./rng";
 import type { Sketch, SketchPlace, SketchRect } from "./sketch";
 import { SKETCH_CELL, areaAt, inRect, isOutdoor, parentOf, placePieces, sketchCols, sketchIssues, sketchRows } from "./sketch";
 import { levelAt } from "./regionTerrain";
-import { DEFAULT_FUZZINESS, zonedWater } from "./zones";
+import { DEFAULT_FUZZINESS, OPEN_WATER_SHARE, seaShare, zonedWater } from "./zones";
 
 export interface BuildReport {
   /** Errors in the sketch that stop the build. */
@@ -236,7 +236,45 @@ export function buildRegion(region: Region): BuildReport {
       const hi = alongX ? Math.min(a.rect!.x + a.rect!.w, b.rect!.x + b.rect!.w) : Math.min(a.rect!.y + a.rect!.h, b.rect!.y + b.rect!.h);
       const width = Math.min(GAP, hi - lo);
       const margin = Math.max(0, Math.min(MARGIN, Math.floor((hi - lo - width) / 2)));
-      const start = Math.max(lo + margin, Math.min(hi - margin - width, Math.floor((lo + hi) / 2) - Math.floor(width / 2)));
+      let start = Math.max(lo + margin, Math.min(hi - margin - width, Math.floor((lo + hi) / 2) - Math.floor(width / 2)));
+      // The sketch's water decides where the entrance can be. It stays in the middle of the
+      // shared edge if that's dry land; if water is there (sea, a lake, a river running through),
+      // it moves along to the nearest dry stretch. Where the two maps meet only across the sea,
+      // it's a surf entrance instead.
+      const cellsAt = (t: number): [number, number, number, number] => {
+        const [px, py] = side === "north" ? [t, a.rect!.y] : side === "south" ? [t, a.rect!.y + a.rect!.h - 1] : side === "west" ? [a.rect!.x, t] : [a.rect!.x + a.rect!.w - 1, t];
+        const [qx, qy] = side === "north" ? [px, py - 1] : side === "south" ? [px, py + 1] : side === "west" ? [px - 1, py] : [px + 1, py];
+        return [px, py, qx, qy];
+      };
+      const wetAt = (x: number, y: number) =>
+        bandAt(sketch, x, y) < 0 || areaAt(sketch, x, y) === "lake" || sketch.rivers.some((rv) => distanceToLine(rv.points, x + 0.5, y + 0.5) <= rv.width / 2 + 2);
+      const seaAt = (t: number) => {
+        const [px, py, qx, qy] = cellsAt(t);
+        return areaAt(sketch, px, py) === "sea" && areaAt(sketch, qx, qy) === "sea";
+      };
+      const dry = (from: number) => {
+        for (let t = from; t < from + width; t++) {
+          const [px, py, qx, qy] = cellsAt(t);
+          if (wetAt(px, py) || wetAt(qx, qy)) return false;
+        }
+        return true;
+      };
+      let kind: "walk" | "surf" = "walk";
+      if (!dry(start)) {
+        let moved = false;
+        for (let step = 1; step <= hi - lo && !moved; step++)
+          for (const s of [start - step, start + step]) {
+            if (s < lo || s + width > hi || !dry(s)) continue;
+            start = s;
+            moved = true;
+            break;
+          }
+        if (!moved) {
+          let allSea = true;
+          for (let t = start; t < start + width; t++) if (!seaAt(t)) allSea = false;
+          if (allSea) kind = "surf";
+        }
+      }
       const id = `o${openings.length + 1}`;
       // Its level: the land where the two maps meet (the lower of the two squares either side
       // of the line, so both maps agree), counted from each map's own lowest land. Where the
@@ -247,7 +285,7 @@ export function buildRegion(region: Region): BuildReport {
       const band = Math.max(0, Math.min(bandAt(sketch, ax, ay), bandAt(sketch, bx, by)));
       const own = Math.max(0, Math.min(3, band - (landUnder(sketch, a.rect!)?.low ?? band)));
       const theirs = Math.max(0, Math.min(3, band - (landUnder(sketch, b.rect!)?.low ?? band)));
-      openings.push({ id, edge: side, start: start - (alongX ? a.rect!.x : a.rect!.y), width, kind: "walk", ...(own > 0 ? { level: own } : {}), ...(own !== theirs ? { crossLevel: true } : {}) });
+      openings.push({ id, edge: side, start: start - (alongX ? a.rect!.x : a.rect!.y), width, kind, ...(kind === "walk" && own > 0 ? { level: own } : {}), ...(kind === "walk" && own !== theirs ? { crossLevel: true } : {}) });
       partners.set(id, b.map!.id);
     }
     m.connections = connections;
@@ -335,6 +373,8 @@ export function buildRegion(region: Region): BuildReport {
     m.layers.zones = [...m.layers.zones.filter((z) => z.data.fromSketch !== true), ...sketchZones(sketch, m, u.rect!)];
     const after = JSON.stringify(m.layers.zones.filter((z) => z.data.fromSketch === true).map((z) => [z.kind, z.data, z.hard, z.fuzziness, Array.from(z.mask.data)]));
     if (after !== before) changed.add(m.id);
+    // A new route that's nearly all sea is an open-water route, crossed by surfing.
+    if (report.created.includes(m.id) && m.mapType === "route" && seaShare(m) >= OPEN_WATER_SHARE) m.params.layout = "water";
     // A new town's plan suits its land: on a river it's a riverside town, by the sea a harbour.
     if (report.created.includes(m.id) && m.mapType === "town") {
       const has = zonedWater(m);

@@ -135,10 +135,31 @@ function addWater(ctx: GenContext, dist: Float64Array) {
   if (!wantStream || ctx.mainLine.length < 12 || ctx.layout === "river" || ctx.layout === "water") return;
   const span = ctx.vertical ? height : width;
   const at = Math.round(span * rng.range(0.3, 0.7));
-  const a = ctx.vertical ? ctx.idx(0, at) : ctx.idx(at, 0);
+  let a = ctx.vertical ? ctx.idx(0, at) : ctx.idx(at, 0);
   const bAt = Math.min(span - 1, Math.max(0, at + rng.int(-4, 4)));
-  const b = ctx.vertical ? ctx.idx(width - 1, bAt) : ctx.idx(bAt, height - 1);
-  const line = cheapestPath(width, height, a, b, (i) => {
+  let b = ctx.vertical ? ctx.idx(width - 1, bAt) : ctx.idx(bAt, height - 1);
+  // Water that's already on the map (a river, lake or sea from the region sketch or the
+  // map's zones, or the layout's own coast): the stream is a tributary of it. It rises at
+  // the side of the map further from that water and runs down into it, instead of crossing
+  // the map on a line of its own.
+  const big: number[] = [];
+  for (let i = 0; i < n; i++) if (ctx.role[i] === Role.Sea) big.push(i);
+  if (big.length) {
+    const toWater = distanceField(width, height, big);
+    if (toWater[b] > toWater[a]) a = b;
+    // It rises well away from the water: of a few spots along the map's sides, the furthest.
+    for (let k = 0; k < 6; k++) {
+      const along = Math.round(span * rng.range(0.08, 0.92));
+      const low = rng.chance(0.5);
+      const c = ctx.vertical ? ctx.idx(low ? 0 : width - 1, along) : ctx.idx(along, low ? 0 : height - 1);
+      if (toWater[c] > toWater[a]) a = c;
+    }
+    // Too close to the water everywhere for a stream worth having.
+    if (toWater[a] < 8) return;
+    const [sx, sy] = ctx.xy(a);
+    b = big.reduce((best, c) => (Math.abs((c % width) - sx) + Math.abs(Math.floor(c / width) - sy) < Math.abs((best % width) - sx) + Math.abs(Math.floor(best / width) - sy) ? c : best), big[0]);
+  }
+  const found = cheapestPath(width, height, a, b, (i) => {
     if (ctx.locks[i]) return Infinity;
     const r = ctx.role[i];
     // Cross paths, never run along them, and keep clear of entrances, HM pockets, cliffs and stairs.
@@ -148,7 +169,10 @@ function addWater(ctx: GenContext, dist: Float64Array) {
     const crossing = r === Role.MainPath || r === Role.Branch || r === Role.GrassRoute || r === Role.Corridor;
     return (crossing ? 30 : 1) + 3 * ctx.noise.fractal(x + 400, y + 400, 6, 2);
   });
-  if (!line) return;
+  if (!found) return;
+  // A tributary ends where it meets the water.
+  const mouth = big.length ? found.findIndex((c) => ctx.role[c] === Role.Sea) : -1;
+  const line = mouth >= 0 ? found.slice(0, mouth + 1) : found;
   for (const c of line) {
     ctx.stamp(c, 2, T.waterDeep, Role.Water, (j) => {
       const r = ctx.role[j];

@@ -319,6 +319,13 @@ If there's nothing to suggest, the panel says why (the land is all one height, s
 - **Neighbours agree.** Two maps that share an edge read the same squares along it, so a hillside that crosses the edge is on both.
 - **Water and biomes** come from the sketch (sea, lakes, rivers and painted biomes).
 - **The sketch is the starting point, and the maps build on it.** A river, a sea or a hillside on the sketch is the one the map uses: a River or Coastal route layout, or a Riverside or Harbour town, follows the sketch's water instead of adding its own. The maps then add the detail: banks, beaches, bridges, ponds, paths and buildings.
+- **A map's own water ties into the region's.**
+  - *Streams* (the **Stream** setting on a route): on a map that already has a river, a lake or the sea, the stream is a tributary. It rises at the side of the map furthest from that water and runs down into it, ending where they meet. Only a map with no water of its own gets a stream that crosses from side to side.
+  - *River layout:* on a map the sketch's river crosses, that river is the route's river; none is added.
+  - *Coastal layout:* on a map with the sketch's sea, that sea is the coast.
+  - *Open water layout:* the sea is where the sketch has it. A map the sketch shows as mostly land isn't flooded; a map that's 85% sea or more is an open-water route with islands, as before.
+- **Entrances keep off the water.** Build puts the entrance between two maps in the middle of their shared edge if that's dry. If the sketch has sea, a lake or a river there, it moves along to the nearest dry stretch. Where two maps meet only across the sea, they're joined by a surf entrance.
+- **A new route that's nearly all sea** starts with the Open water layout.
 - **Soft edges everywhere.** Everything from the sketch (rivers too) is followed loosely, with natural, uneven edges, never as ruler-straight blocks. At the very edge of a map it's followed exactly, easing into the natural edge over the first few cells in, so a river, a shore or a hillside meets its other half on the next map.
 - **A new town's plan suits its land:** on a river it starts as Riverside, by the sea as Harbour, otherwise Market square. Change it freely; building again doesn't change it back.
 - **A new map's starting look.** The first time a map is built, it starts hillier on hills (Elevation 50), highland (70) and peaks (90), and a map mostly on highland or peaks with no biome painted starts **Alpine**. These are starting values only: change them freely, and building again never changes them back.
@@ -755,6 +762,10 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 ---
 
 ## Known limitations
+
+- **Ponds and Surf-gated item pockets are still placed on their own.** They're small and separate on purpose; only streams are tied into the region's water.
+- **A stream needs room.** Where every part of a map's sides is within 8 cells of the water, no tributary is made.
+- **Moved entrances.** Building again may move an entrance that used to sit on a river or lake; the maps either side are then listed to generate again.
 
 - **Fields are drawn with existing terrain:** tilled rows are Mud and Flowers, and there's no crop or well tile. Pick the tiles you want for them in Porymap.
 - **Outskirts are only made on town land.** A hamlet or village fitted into a route, forest or cave still has just its buildings.

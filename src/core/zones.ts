@@ -121,10 +121,29 @@ export function zonedWater(map: Pick<MapBlueprint, "layers">): { river: boolean;
   };
 }
 
-/** The layout to generate, given the water the map's zones already have: no second river, no second sea. */
+/** How much of the map its sea zones cover, 0 … 1. */
+export function seaShare(map: Pick<MapBlueprint, "layers">): number {
+  const zones = map.layers.zones.filter((z) => z.data.generated !== true && ((z.kind === "water" && z.data.water === "ocean") || (z.kind === "edge" && z.data.boundary === "coast")));
+  if (!zones.length) return 0;
+  const n = zones[0].mask.data.length;
+  let wet = 0;
+  for (let i = 0; i < n; i++) if (zones.some((z) => z.mask.data[i])) wet++;
+  return wet / n;
+}
+
+/** A map is open water (crossed by surfing) when the sea covers at least this much of it. */
+export const OPEN_WATER_SHARE = 0.85;
+
+/**
+ * The layout to generate, given the water the map's zones already have: no second river
+ * and no second sea. An Open water layout on a map where the sketch has sea and a good
+ * deal of land keeps that shape too: the sea is where the sketch has it, the rest is land.
+ */
 export function layoutOver<L extends string>(map: Pick<MapBlueprint, "layers">, layout: L): L | "land" {
   const has = zonedWater(map);
-  return (layout === "river" && has.river) || (layout === "coastal" && has.sea) ? "land" : layout;
+  if ((layout === "river" && has.river) || (layout === "coastal" && has.sea)) return "land";
+  if (layout === "water" && has.sea && seaShare(map) < OPEN_WATER_SHARE) return "land";
+  return layout;
 }
 
 export function isBiome(v: unknown): v is Biome {
