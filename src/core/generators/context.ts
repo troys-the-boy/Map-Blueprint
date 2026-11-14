@@ -137,6 +137,8 @@ export class GenContext {
   warps: Warp[] = [];
   /** Town buildings, with their door cells. */
   buildings: TownBuilding[] = [];
+  /** Plain-language notes for the user (a painted building no path could reach, say). */
+  notes: string[] = [];
   /** Forest clearings (their centre cells). */
   clearings: number[] = [];
   /** Forest dead ends without an item (hidden items go there first). */

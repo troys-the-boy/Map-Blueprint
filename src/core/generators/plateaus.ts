@@ -51,6 +51,16 @@ export function addPlateaus(ctx: GenContext): void {
   // Warps placed by hand stay on the ground too, with room round them for the path.
   for (const w of ctx.input.warps)
     for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) if (ctx.inside(w.x + dx, w.y + dy)) nearEntrance[ctx.idx(w.x + dx, w.y + dy)] = 1;
+  // So do buildings painted by hand, with a flat way from each to the valley floor down the
+  // middle of the map: otherwise a hillside closes round the building and no path can reach its door.
+  const middle = Math.floor((crossLength - 1) / 2);
+  for (let i = 0; i < ctx.n; i++) {
+    if (!ctx.locks[i] || ctx.terrain[i] !== T.building) continue;
+    const [x, y] = ctx.xy(i);
+    const [x0, x1] = ctx.vertical ? [Math.min(x, middle) - 2, Math.max(x, middle) + 2] : [x - 2, x + 2];
+    const [y0, y1] = ctx.vertical ? [y - 2, y + 3] : [Math.min(y, middle) - 2, Math.max(y, middle) + 3];
+    for (let yy = y0; yy <= y1; yy++) for (let xx = x0; xx <= x1; xx++) if (ctx.inside(xx, yy)) nearEntrance[ctx.idx(xx, yy)] = 1;
+  }
   // Separate plateaus keep a cell of ground inside the border; terraces run right up to it.
   const eligibleFrom = (edge: number) => (i: number) =>
     !nearEntrance[i] && ctx.role[i] === Role.None && !ctx.locks[i] && ctx.elevation[i] === LEVEL.ground && ctx.edgeDist(i) >= edge;
@@ -148,16 +158,21 @@ function addTerraces(ctx: GenContext, amount: number, eligible: (i: number) => b
     for (let i = 0; i < ctx.n; i++) if (ctx.role[i] !== Role.Sea && ctx.edgeDist(i) >= bt) land++;
     halfOpen = land / alongLength / (ctx.layout === "river" ? 2 : 1);
   }
-  const maxLevel = alpine ? (amount > 0.7 ? 4 : amount > 0.45 ? 3 : amount > 0.2 ? 2 : 1) : amount > 0.75 ? 3 : amount > 0.4 ? 2 : 1;
+  // A town's hillsides are land to build on: each terrace is wide enough for a street with
+  // buildings beside it (a cliff, a yard, a building, a lane: 8 cells), so there are fewer levels.
+  const town = ctx.input.mapType === "town";
+  const TERRACE = 8;
+  const wantLevels = alpine ? (amount > 0.7 ? 4 : amount > 0.45 ? 3 : amount > 0.2 ? 2 : 1) : amount > 0.75 ? 3 : amount > 0.4 ? 2 : 1;
   // Half-width of the valley floor (always room for the path), and the width of each
   // terrace step (a cliff, then a ledge of ground at least 2 wide).
   const floor = Math.max(3, ctx.params.pathWidthMax + (amount > 0.7 ? 0 : 1));
-  const valley = Math.max(floor, halfOpen * (alpine ? 0.6 - 0.35 * amount : 0.7 - 0.35 * amount));
-  const step = Math.max(3, (halfOpen - valley) / maxLevel);
+  const valley = town ? Math.max(floor + 2, halfOpen * (0.5 - 0.2 * amount)) : Math.max(floor, halfOpen * (alpine ? 0.6 - 0.35 * amount : 0.7 - 0.35 * amount));
+  const maxLevel = town ? Math.max(1, Math.min(wantLevels, Math.floor((halfOpen - valley) / TERRACE))) : wantLevels;
+  const step = Math.max(town ? TERRACE : 3, (halfOpen - valley) / maxLevel);
   const centre = (crossLength - 1) / 2;
   // Only some stretches of each side are hills: more of them at higher settings.
   // Alpine mountains run almost the whole route, with a few low gaps at low settings.
-  const cut = (alpine ? 0.5 - 0.6 * amount : 0.85 - 0.75 * amount) - widen;
+  const cut = (alpine ? 0.5 - 0.6 * amount : 0.85 - 0.75 * amount) - widen - (town ? 0.2 : 0);
 
   const height = new Float32Array(ctx.n);
   for (let i = 0; i < ctx.n; i++) {
@@ -168,7 +183,8 @@ function addTerraces(ctx: GenContext, amount: number, eligible: (i: number) => b
     // The valley wanders, and each side rises at its own pace.
     const wander = (ctx.noise.at(along * 0.05 + 6100, 0.5) - 0.5) * valley;
     const offset = fromSea ? fromSea[i] - 1 : Math.abs(across - centre - wander);
-    const bumps = (ctx.noise.fractal(x + 6300 + side * 400, y + 6700, 9, 3) - 0.5) * 1.4;
+    // (A town's terraces are more even, so they keep their width.)
+    const bumps = (ctx.noise.fractal(x + 6300 + side * 400, y + 6700, 9, 3) - 0.5) * (town ? 0.5 : 1.4);
     // Ends of the route (near the entrances) stay lower.
     const ends = Math.min(along, alongLength - 1 - along) < 6 ? -1 : 0;
     const hills = Math.min(0, (ctx.noise.at(along * 0.07 + 7100 + side * 311, side * 7.3) - cut) * 8);

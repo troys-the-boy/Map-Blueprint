@@ -352,6 +352,16 @@ They never replace a path, water, a cliff, a ledge or anything you locked. Build
 
 A **cave place** (made as a Cave, or a cave pin on the sketch) is always generated as a cave, because it's entered through cave mouths and can have several floors. Any other place generated as a cave has one floor and is entered through its entrances on the map edge; set **Exits** above 0 to add cave mouths as well.
 
+### Buildings you paint yourself
+
+Paint a building with the **Building** terrain or the **Building lot** smart stroke, then Generate. On every land style, Generate now leads a path to it:
+
+- **Where the door is:** if you placed a door warp on the building, the path goes to that door. Otherwise Generate puts a door warp in the middle of the building's bottom (south) side, as Gen 3 buildings are drawn. It leads to `MAP_<PLACE>_BUILDING1`, `_BUILDING2`…; change that in the Details tab, which also makes the warp yours, so it's kept.
+- **The path:** from the step in front of the door to the nearest street or path on the same level. It goes over ground, trees or rock, never through a cliff, water, another building or a wall you locked.
+- **When it can't be done:** Generate says so under the Generate button, with the building's position and why (the step in front is blocked, or there's no path on its level to join). Check also reports the door as unreachable.
+
+Generated buildings keep clear of yours and of the paths to them. On hilly maps the hillsides keep clear of your buildings too, leaving flat ground from each one to the valley down the middle of the map, so a cliff never closes round a door.
+
 ## Generate a town (Milestone 5)
 
 Make a map of type **Town** (sizes S 20×20, M 30×30, L 40×40), then press **Generate**. The **Buildings** and **Town** groups in the Generate tab set:
@@ -360,7 +370,7 @@ Make a map of type **Town** (sizes S 20×20, M 30×30, L 40×40), then press **G
 - **Buildings:** Pokémon Center (5×4), Mart (4×4), Gym (7×6), a landmark building (6×5), and houses (4×3, some 5×4). Each sits on a lot beside a street with its door in the middle of its front (south) side, a walk to the street, and a **door warp** to its interior: `MAP_<TOWN>_POKEMON_CENTER_1F`, `_MART`, `_GYM`, `_HOUSE1`… (vanilla's naming). The interiors aren't made: build them in Porymap. Buildings that don't fit are left out, and Generate says so.
 - **People** wandering beside the streets, and **Grass at the edges**: small tall-grass patches near the border that are never in the way (every exit and door can be reached without stepping in grass).
 
-- **Elevation:** hillsides along the sides of the town with cliffs, stairs and ledges, as on routes (0 = flat, the default).
+- **Elevation:** hillsides along the sides of the town with cliffs, stairs and ledges (0 = flat, the default). A town's hillsides are terraces wide enough to build on: each gets a lane from the top of its stairs, and the buildings are shared out between the valley and the terraces by how much land each has. The Gym and the landmark prefer high ground. A terrace needs about 8 cells of width, so a 40-wide town has one level each side; wider towns get more.
 - **Side streets:** streets off the main ones that end in dead ends, with **Side street length** and **Items at dead ends**.
 
 **Drawing your own streets.** Paint the streets you want with Path or Road (locked, as painting is by default), then Generate. It uses your streets instead of making its own: it joins them to the entrances and to each other, and puts the buildings along them. Gen 3 doors face south, so buildings line up on the north side of east–west streets; beside north–south streets they sit a short walk away.
@@ -667,6 +677,8 @@ Whenever you push new code to GitHub, the hosted copy updates (give GitHub a min
 
 ## Known limitations
 
+- **Hill towns need width.** Each buildable terrace takes about 8 cells, so small towns (30×30 and under) have little room on their hillsides and may leave buildings out at high Elevation.
+- **A path to a painted building stays on its level.** It won't add stairs: a building you paint on high ground with no stairs up to it gets a note instead of a path.
 - **Settlements outside towns are plain.** A hamlet or village on a route, in a forest or in a cave gets its buildings, doors, walks and the Pokémon Center's heal location, but no people, fences or flower beds yet (those come with town land).
 - **Caves have less room for buildings.** They stand in the rock beside the floor, so a large settlement in a small cave may lose a building or two (Generate says so).
 - **Changing Generate as keeps the other settings.** A setting two land styles share (such as Elevation) carries over when you switch.

@@ -30,7 +30,7 @@ import { placeEntities } from "./generators/placement";
 import { addSnow } from "./generators/snow";
 import { applyMarsh, applyZones, prepareZones, shiftOpeningsOutOfZones } from "./generators/zones";
 import { ELEVATION_LEVELS } from "./terrain";
-import { addSettlement, buildTown } from "./generators/town";
+import { addSettlement, buildTown, connectBuildings } from "./generators/town";
 import { buildingList, readTownParams } from "./generators/townParams";
 import type { CaveParams } from "./generators/caveParams";
 import { styleOf } from "./model";
@@ -114,6 +114,7 @@ function forestStages(ctx: GenContext) {
   applyZones(ctx); // the user's water, edges and keep-clear ground
   buildForest(ctx);
   addForestLedges(ctx); // with a travel direction: jump back toward the start
+  connectBuildings(ctx); // a path to the door of each building you painted
   addSettlement(ctx); // houses in the woods, each with a walk to a path
   removeWaterLedges(ctx); // no ledge jumps off water or into it
   placeEntities(ctx); // trainers on the main path, items at dead ends, hidden items, the sign
@@ -125,6 +126,7 @@ function caveStages(ctx: GenContext) {
   prepareZones(ctx);
   applyZones(ctx);
   buildCave(ctx);
+  connectBuildings(ctx); // a way to the door of each building you painted
   addSettlement(ctx); // houses built into the rock, their doors onto the cave floor
   closeLedgeTraps(ctx); // platforms' ledges never drop the player somewhere they can't leave
   placeEntities(ctx); // trainers, items at the far ends, hidden items
@@ -159,6 +161,7 @@ function routeStages(ctx: GenContext, geometry: Geometry) {
   addLedgePockets(ctx); // with a travel direction: an item reached by jumping in on the way back
   cleanup(ctx);
   addSnow(ctx); // snow from the highest ground down
+  connectBuildings(ctx); // a path to the door of each building you painted
   addSettlement(ctx); // a hamlet or village beside the path
   closeLedgeTraps(ctx); // no ledge may drop the player somewhere they can't leave
   placeEntities(ctx);
@@ -215,12 +218,12 @@ function finish(map: MapBlueprint, input: GenInput, ctx: GenContext, validate: V
     issues = validateMap(draft, validate);
   }
   renumberClashes(ctx.entities);
-  const notes: string[] = [];
+  const notes: string[] = [...ctx.notes];
   const buildings = input.town ?? input.settlement;
   if (buildings) {
     const wanted = buildingList(buildings).length;
-    if (ctx.buildings.length < wanted)
-      notes.push(`Only ${ctx.buildings.length} of the ${wanted} buildings fit. Make the map bigger (Maps → resize), or ask for fewer houses.`);
+    if (ctx.buildings.filter((b) => !b.painted).length < wanted)
+      notes.push(`Only ${ctx.buildings.filter((b) => !b.painted).length} of the ${wanted} buildings fit. Make the map bigger (Maps → resize), or ask for fewer houses.`);
   }
   return {
     notes,

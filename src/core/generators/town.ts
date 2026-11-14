@@ -21,11 +21,11 @@
 //   5. The town sign, a sign by the Gym, people walking about, hidden items,
 //      and the Pokémon Center's heal location (in front of its door).
 
-import { DIRS, IS_WALKABLE, IS_WALL, T, cheapestPath, distanceField } from "../grid";
+import { DIRS, IS_WALKABLE, IS_WALL, IS_WATER, T, cheapestPath, components, distanceField } from "../grid";
 import type { Warp } from "../model";
 import { MoveGraph, openingCells } from "../reach";
 import type { GenContext } from "./context";
-import { Role } from "./context";
+import { LEVEL, RAISED, Role } from "./context";
 import { carveOpening } from "./routeSkeleton";
 import { addPlateaus, connectStairs } from "./plateaus";
 import type { BuildingKind, TownParams } from "./townParams";
@@ -53,6 +53,8 @@ export function buildTown(ctx: GenContext): void {
   }
   // Hills, like a route's hillsides (only when the Elevation setting is above 0).
   if (ctx.params.elevation > 0) addPlateaus(ctx);
+  // A hilltop is building land like the valley (on routes it's left as open ground).
+  for (let i = 0; i < ctx.n; i++) if (!ctx.locks[i] && ctx.role[i] === Role.Clearing) ctx.role[i] = Role.None;
   const ends = ctx.input.openings.map((o) => ({ o, end: carveOpening(ctx, o) }));
   ctx.openingEnds = ends.filter((e) => e.o.kind === "walk").map((e) => e.end);
 
@@ -149,10 +151,16 @@ export function buildTown(ctx: GenContext): void {
       if (leg) for (const c of leg) pave(c, 2);
     }
   }
+  // Trails up the hillsides' stairs, and a street along each terrace, so there are lots up there too.
+  if (ctx.params.elevation > 0) {
+    connectStairs(ctx);
+    addTerraceStreets(ctx, street, streetOk);
+  }
+  // A walk to the door of each building you painted.
+  connectPaintedBuildings(ctx, street, Role.MainPath);
   ctx.mainLine = [];
   for (let i = 0; i < ctx.n; i++) if (ctx.role[i] === Role.MainPath) ctx.mainLine.push(i);
-  // Trails up the hillsides' stairs, then side streets ending in dead ends.
-  if (ctx.params.elevation > 0) connectStairs(ctx);
+  // Side streets ending in dead ends.
   addSideStreets(ctx, street, streetOk);
 
   // 3. Buildings.
@@ -243,6 +251,149 @@ function addSideStreets(ctx: GenContext, street: number, streetOk: (i: number) =
   }
 }
 
+/**
+ * A street along each terrace of a hillside, from the top of its stairs to its far
+ * end, so buildings have a street to stand beside up there. Without one, every lot
+ * on a hill is too far from a street and the whole town ends up in the valley.
+ */
+function addTerraceStreets(ctx: GenContext, street: number, streetOk: (i: number) => boolean): void {
+  for (const f of ctx.stairs) {
+    if (ctx.terrain[f.cell] !== T.stairs) continue;
+    const level = ctx.elevation[f.back];
+    if (level === LEVEL.ground || level === LEVEL.water) continue;
+    const ok = (i: number) => i === f.back || (streetOk(i) && ctx.elevation[i] === level && ctx.role[i] !== Role.Stairs);
+    const dist = distanceField(ctx.width, ctx.height, [f.back], ok);
+    // The terrace's land. If another flight already gave it a street, join that; otherwise run
+    // a street to its far end, if it's big enough to build on.
+    let size = 0;
+    let far = f.back;
+    let joined = -1;
+    for (let i = 0; i < ctx.n; i++) {
+      if (dist[i] === Infinity) continue;
+      size++;
+      if (dist[i] > dist[far]) far = i;
+      if (ctx.role[i] === Role.MainPath && (joined < 0 || dist[i] < dist[joined])) joined = i;
+    }
+    const target = joined >= 0 ? joined : size >= 30 ? far : -1;
+    if (target < 0) continue;
+    // Doors face south, so the lane keeps to the south side of the terrace where it can
+    // (one cell in from the edge), leaving the land north of it for buildings.
+    const leg = cheapestPath(ctx.width, ctx.height, f.back, target, (i) => {
+      if (!ok(i)) return Infinity;
+      const [x, y] = ctx.xy(i);
+      const south = (k: number) => ctx.inside(x, y + k) && ok(ctx.idx(x, y + k));
+      return south(1) && !south(2) ? 1 : 2.5;
+    });
+    for (const c of leg ?? []) if (c !== f.back) ctx.set(c, street, Role.MainPath);
+  }
+}
+
+/** A path to the door of each building you painted (every land style but a town, which does it with its streets). */
+export function connectBuildings(ctx: GenContext): void {
+  connectPaintedBuildings(ctx, ctx.trail, Role.Branch);
+}
+
+/**
+ * Buildings the user painted (locked building cells) get a door and a walk to it.
+ * The door is a door warp the user placed on the building, or else the middle of
+ * its front (south) face, where Gen 3 tilesets draw doors: a door warp is made
+ * there. The walk runs from the step in front of the door to the nearest path on
+ * the same level. A building no path can reach is left alone, with a note.
+ */
+function connectPaintedBuildings(ctx: GenContext, street: number, role: Role): void {
+  const painted = (i: number) => ctx.locks[i] === 1 && ctx.terrain[i] === T.building;
+  const comp = components(ctx.width, ctx.height, painted);
+  if (!comp.sizes.length) return;
+  const cells: number[][] = comp.sizes.map(() => []);
+  for (let i = 0; i < ctx.n; i++)
+    if (comp.ids[i] >= 0 && painted(i)) {
+      cells[comp.ids[i]].push(i);
+      ctx.role[i] = Role.Building;
+    }
+  const bt = ctx.params.borderThickness;
+  const constant = ctx.input.mapConstant ?? "MAP_TOWN";
+  const joinable = new Set<number>([Role.MainPath, Role.Branch, Role.Opening, Role.Bridge]);
+  let made = 0;
+  cells.forEach((list, id) => {
+    if (!list.length) return;
+    const inThis = (x: number, y: number) => ctx.inside(x, y) && comp.ids[ctx.idx(x, y)] === id && painted(ctx.idx(x, y));
+    // Doors the user placed on it; otherwise the middle of the lowest stretch of its south face.
+    let doors = ctx.input.warps.filter((w) => w.locked && inThis(w.x, w.y)).map((w) => ctx.idx(w.x, w.y));
+    const [x0, y0] = ctx.xy(list[0]);
+    if (!doors.length) {
+      const face = list.filter((i) => {
+        const [x, y] = ctx.xy(i);
+        return y + 1 < ctx.height && !inThis(x, y + 1);
+      });
+      if (!face.length) return void ctx.notes.push(`The building you painted at (${x0}, ${y0}) has no room in front (south) for a door.`);
+      const low = Math.max(...face.map((i) => ctx.xy(i)[1]));
+      const row = face.filter((i) => ctx.xy(i)[1] === low).sort((a, b) => a - b);
+      const door = row[Math.floor((row.length - 1) / 2)];
+      const [dx, dy] = ctx.xy(door);
+      made++;
+      ctx.warps.push({ id: `w${ctx.warps.length + 1}`, kind: "door", x: dx, y: dy, elevation: "ground", destMap: `${constant}_BUILDING${made}`, destWarpId: 0 });
+      doors = [door];
+    }
+    const [bx, by] = ctx.xy(Math.min(...list));
+    const xs = list.map((i) => ctx.xy(i)[0]);
+    const ys = list.map((i) => ctx.xy(i)[1]);
+    ctx.buildings.push({ kind: "house", x: bx, y: by, w: Math.max(...xs) - Math.min(...xs) + 1, h: Math.max(...ys) - by + 1, door: doors[0], painted: true });
+    for (const door of doors) {
+      const [dx, dy] = ctx.xy(door);
+      const fail = (why: string) => void ctx.notes.push(`No path could be drawn to the building you painted at (${dx}, ${dy}): ${why}`);
+      if (dy + 1 >= ctx.height) {
+        fail("its door is on the map's bottom edge.");
+        continue;
+      }
+      const step = ctx.idx(dx, dy + 1);
+      const dry = (i: number) => IS_WALKABLE[ctx.terrain[i]] && !IS_WATER[ctx.terrain[i]];
+      // Where the walk may go: on its own level, over ground, trees or rock, never through a
+      // cliff, water, the border, another building, or a wall you locked.
+      const level = ctx.elevation[step];
+      const passable = (i: number) => {
+        if (ctx.elevation[i] !== level || ctx.edgeDist(i) < bt) return false;
+        if (ctx.locks[i]) return dry(i);
+        const r = ctx.role[i];
+        if (r === Role.Cliff || r === Role.Border || r === Role.Sea || r === Role.Beach || r === Role.Pocket || r === Role.Building || r === Role.Corridor || r === Role.Water) return false;
+        const t = ctx.terrain[i];
+        return t !== T.stairs && (dry(i) || IS_WALL[t]);
+      };
+      if (!passable(step)) {
+        fail("the cell in front of its door (south) is blocked. Clear it, or move the building.");
+        continue;
+      }
+      // Paths to join: streets, paths, entrances, bridges, and the top or foot of a flight of stairs.
+      const sources: number[] = [];
+      for (let i = 0; i < ctx.n; i++)
+        if (ctx.elevation[i] === level && (joinable.has(ctx.role[i]) || (ctx.role[i] === Role.Stairs && ctx.terrain[i] !== T.stairs))) sources.push(i);
+      const isSource = new Set(sources);
+      const dist = distanceField(ctx.width, ctx.height, sources, (i) => passable(i) || isSource.has(i));
+      if (dist[step] === Infinity) {
+        fail("there's no path on its level to join. Paint a path to it, or add stairs up to its level.");
+        continue;
+      }
+      const pave = (c: number) => {
+        if (ctx.locks[c] || joinable.has(ctx.role[c]) || ctx.role[c] === Role.Stairs) return;
+        ctx.set(c, street, role);
+      };
+      pave(step);
+      ctx.keepClear.add(step);
+      for (let c = step; dist[c] > 0; ) {
+        const [x, y] = ctx.xy(c);
+        let next = -1;
+        for (const d of DIRS) {
+          if (!ctx.inside(x + d.dx, y + d.dy)) continue;
+          const j = ctx.idx(x + d.dx, y + d.dy);
+          if (dist[j] < dist[c] && (next < 0 || dist[j] < dist[next])) next = j;
+        }
+        if (next < 0) break;
+        c = next;
+        if (dist[c] > 0) pave(c);
+      }
+    }
+  });
+}
+
 /** Where buildings may go, and how their doors are joined to the streets. */
 interface Site {
   /** May a building stand on this cell? */
@@ -295,6 +446,18 @@ export function addSettlement(ctx: GenContext): void {
 function placeBuildings(ctx: GenContext, street: number, tp: TownParams, site: Site): void {
   const kinds = buildingList(tp);
   const [focusX, focusY] = site.focus === null ? [0, 0] : ctx.xy(site.focus);
+  // How much of the building land is on each level, so a hill town spreads up its slopes
+  // instead of filling the valley first.
+  const landOn = new Map<number, number>();
+  let land = 0;
+  for (let i = 0; i < ctx.n; i++)
+    if (site.build(i)) {
+      landOn.set(ctx.elevation[i], (landOn.get(ctx.elevation[i]) ?? 0) + 1);
+      land++;
+    }
+  const hilly = landOn.size > 1;
+  const builtOn = new Map<number, number>();
+  const crowding = (level: number) => (hilly ? (6 * (builtOn.get(level) ?? 0)) / (((landOn.get(level) ?? 0) / Math.max(1, land)) * kinds.length + 0.5) : 0);
   const fromStreet = distanceField(ctx.width, ctx.height, ctx.mainLine);
   const fromEntrance = distanceField(ctx.width, ctx.height, ctx.openingEnds.length ? ctx.openingEnds : [0]);
   let houseNo = 0;
@@ -337,8 +500,12 @@ function placeBuildings(ctx: GenContext, street: number, tp: TownParams, site: S
         const door = ctx.idx(doorX, y + h - 1);
         // The Center and Mart sit near the entrances on the main street; the Gym and landmark further in; houses anywhere.
         const near = fromEntrance[door];
+        const level = ctx.elevation[door];
         const score =
-          ctx.rng.next() * 6 +
+          ctx.rng.next() * 6 -
+          crowding(level) +
+          // The Gym and the landmark look down on the town from high ground.
+          (hilly && (kind === "gym" || kind === "landmark") ? 3 * (RAISED.indexOf(level) + 1) : 0) +
           (kind === "center" || kind === "mart" ? -near * 0.5 : kind === "gym" || kind === "landmark" ? Math.min(near, 25) * 0.3 : 0) -
           walk.length * 1.5 -
           fromStreet[door] * 0.2 -
@@ -348,6 +515,8 @@ function placeBuildings(ctx: GenContext, street: number, tp: TownParams, site: S
     if (!lots.length) continue;
     lots.sort((a, b) => b.score - a.score);
     const lot = lots[0];
+    const lotLevel = ctx.elevation[ctx.idx(lot.x, lot.y + h - 1)];
+    builtOn.set(lotLevel, (builtOn.get(lotLevel) ?? 0) + 1);
     for (let yy = lot.y; yy < lot.y + h; yy++) for (let xx = lot.x; xx < lot.x + w; xx++) ctx.set(ctx.idx(xx, yy), T.building, Role.Building);
     // A one-cell ring of yard around it stays clear (no trees or fences against the walls).
     if (site.yard)
@@ -599,4 +768,4 @@ function addPeople(ctx: GenContext): void {
 }
 
 /** The kind of a generated building, for later stages. */
-export type TownBuilding = { kind: BuildingKind; x: number; y: number; w: number; h: number; door: number };
+export type TownBuilding = { kind: BuildingKind; x: number; y: number; w: number; h: number; door: number; /** Painted by the user, not placed by Generate. */ painted?: boolean };
